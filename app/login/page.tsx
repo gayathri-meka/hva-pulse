@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase'
 
 export default function LoginPage() {
@@ -19,10 +20,16 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo mark */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-950 shadow-lg">
-            <span className="text-base font-bold tracking-tight text-white">P</span>
+          <div className="mx-auto mb-5 flex justify-center">
+            <Image
+              src="/Icon/Light%20BG.png"
+              alt="HVA"
+              width={391}
+              height={500}
+              className="h-14 w-auto"
+            />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Pulse</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">HVA Pulse</h1>
           <p className="mt-1.5 text-sm text-zinc-500">HVA Operating System</p>
         </div>
 

@@ -61,7 +61,7 @@ export default function AppShell({
               />
             </svg>
           </button>
-          <span className="ml-3 text-base font-semibold">Pulse</span>
+          <span className="ml-3 text-base font-semibold">HVA Pulse</span>
         </header>
 
         {/* Page content — only this scrolls */}

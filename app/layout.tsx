@@ -14,7 +14,7 @@ const geistMono = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'Pulse',
+  title: 'HVA Pulse',
   description: 'Learner management platform',
 }
 

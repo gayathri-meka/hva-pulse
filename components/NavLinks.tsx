@@ -83,12 +83,15 @@ export default function NavLinks({ role }: { role: 'admin' | 'lf' }) {
           <Link
             key={href}
             href={href}
-            className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            className={`relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               active
                 ? 'bg-zinc-800 text-white'
                 : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
             }`}
           >
+            {active && (
+              <span className="absolute left-0 inset-y-2 w-0.5 rounded-full bg-[#5BAE5B]" />
+            )}
             <Icon />
             {label}
           </Link>
