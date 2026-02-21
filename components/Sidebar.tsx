@@ -1,51 +1,67 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import NavLinks from './NavLinks'
 import { signOut } from '@/app/actions'
 
-const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/learners', label: 'Learners' },
-  { href: '/lfs', label: 'LFs' },
-]
+interface Props {
+  role: 'admin' | 'lf'
+  onClose?: () => void
+}
 
-export default function Sidebar() {
-  const pathname = usePathname()
-
-  if (pathname === '/login') return null
-
+export default function Sidebar({ role, onClose }: Props) {
   return (
-    <aside className="flex h-screen w-60 flex-shrink-0 flex-col border-r bg-gray-100">
-      <div className="p-6">
-        <span className="text-lg font-bold tracking-tight">Pulse</span>
+    <aside className="flex h-full w-60 flex-shrink-0 flex-col bg-zinc-950">
+      {/* Logo row */}
+      <div className="flex items-center justify-between px-5 py-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
+            <span className="text-xs font-bold text-zinc-950">P</span>
+          </div>
+          <span className="text-sm font-semibold tracking-tight text-white">Pulse</span>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white lg:hidden"
+            aria-label="Close menu"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="h-4 w-4"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      <nav className="flex flex-col gap-1 px-3">
-        {NAV_LINKS.map(({ href, label }) => {
-          const active = pathname === href
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-white text-black shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200 hover:text-black'
-              }`}
-            >
-              {label}
-            </Link>
-          )
-        })}
-      </nav>
+      <NavLinks role={role} />
 
-      <div className="mt-auto p-4">
+      {/* Sign out */}
+      <div className="mt-auto border-t border-zinc-800 p-3">
         <form action={signOut}>
           <button
             type="submit"
-            className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-200 hover:text-black"
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
           >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="h-4 w-4"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75"
+              />
+            </svg>
             Sign out
           </button>
         </form>

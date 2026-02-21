@@ -31,7 +31,7 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const protectedPrefixes = ['/dashboard', '/learners', '/lfs']
+  const protectedPrefixes = ['/dashboard', '/learners', '/users']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
 
   if (!user && isProtected) {
@@ -46,5 +46,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/learners/:path*', '/lfs/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/learners/:path*', '/users/:path*', '/login'],
 }

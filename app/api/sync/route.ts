@@ -4,9 +4,21 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export async function POST() {
   try {
-    const rows = await getSheetRows()
-
     const supabase = await createServerSupabaseClient()
+
+    // Admin-only
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { data: appUser } = await supabase
+      .from('users')
+      .select('role')
+      .eq('email', user.email!)
+      .single()
+    if (!appUser || appUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const rows = await getSheetRows()
 
     // Build LF name → id lookup
     const { data: lfs } = await supabase.from('lfs').select('id, name')
