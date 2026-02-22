@@ -16,6 +16,9 @@ export default function CompanyAccordion({ company }: Props) {
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
   const [addRoleOpen, setAddRoleOpen]     = useState(false)
 
+  const totalApplicants = company.roles.reduce((s, r) => s + r.applicant_count, 0)
+  const totalHired      = company.roles.reduce((s, r) => s + r.hired_count, 0)
+
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -48,8 +51,19 @@ export default function CompanyAccordion({ company }: Props) {
 
           </button>
 
-          {/* Right-side action buttons (not part of toggle) */}
+          {/* Right-side: stat chips + action buttons */}
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
+            {company.roles.length > 0 && (
+              <>
+                <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                  {totalApplicants} applied
+                </span>
+                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                  {totalHired} hired
+                </span>
+                <div className="mx-1 h-4 w-px bg-zinc-200" />
+              </>
+            )}
             <button
               type="button"
               onClick={() => setEditCompanyOpen(true)}
