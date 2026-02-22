@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { updateUserRole } from './actions'
+import { updateUser } from './actions'
+import { useColumnResize } from '@/hooks/useColumnResize'
 
 type User = { id: string; email: string; name: string | null; role: string; created_at: string }
 
@@ -20,21 +21,41 @@ function Avatar({ name, email }: { name: string | null; email: string }) {
   )
 }
 
+// Initial column widths: Name, Email, Role, Added, Actions
+const INIT_WIDTHS = [220, 260, 110, 120, 100]
+
 export default function UsersTable({ users }: { users: User[] }) {
-  const [editId, setEditId] = useState<string | null>(null)
+  const [editId, setEditId]     = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
   const [editRole, setEditRole] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const { widths, onResizeStart } = useColumnResize(INIT_WIDTHS)
 
   function startEdit(user: User) {
     setEditId(user.id)
+    setEditName(user.name ?? '')
+    setEditEmail(user.email)
     setEditRole(user.role)
+    setSaveError(null)
+  }
+
+  function cancelEdit() {
+    setEditId(null)
+    setSaveError(null)
   }
 
   function save() {
     if (!editId) return
+    setSaveError(null)
     startTransition(async () => {
-      await updateUserRole(editId, editRole)
-      setEditId(null)
+      const result = await updateUser(editId, { name: editName, email: editEmail, role: editRole })
+      if (result.error) {
+        setSaveError(result.error)
+      } else {
+        setEditId(null)
+      }
     })
   }
 
@@ -46,53 +67,77 @@ export default function UsersTable({ users }: { users: User[] }) {
     )
   }
 
+  const inputCls = 'w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900'
+
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+      {saveError && (
+        <div className="border-b border-red-100 bg-red-50 px-6 py-2.5 text-sm text-red-600">
+          {saveError}
+        </div>
+      )}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="border-collapse text-sm" style={{ tableLayout: 'fixed', width: widths.reduce((a, b) => a + b, 0) }}>
+          <colgroup>
+            {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
+          </colgroup>
           <thead>
             <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                Name
-              </th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                Email
-              </th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                Role
-              </th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                Added
-              </th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400" />
+              {['Name', 'Email', 'Role', 'Added', ''].map((label, i) => (
+                <th
+                  key={i}
+                  className="relative px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 select-none"
+                  style={{ width: widths[i] }}
+                >
+                  {label}
+                  {i < widths.length - 1 && (
+                    <div
+                      onMouseDown={(e) => onResizeStart(i, e)}
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-zinc-300"
+                    />
+                  )}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {users.map((user) =>
               editId === user.id ? (
                 <tr key={user.id} className="bg-zinc-50">
-                  <td className="px-6 py-3.5">
+                  <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar name={user.name} email={user.email} />
-                      <span className="font-medium text-zinc-900">{user.name ?? '—'}</span>
+                      <Avatar name={editName || null} email={editEmail || user.email} />
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Full name"
+                        className={inputCls}
+                      />
                     </div>
                   </td>
-                  <td className="px-6 py-3.5 text-zinc-500">{user.email}</td>
-                  <td className="px-6 py-3.5">
+                  <td className="px-6 py-3">
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className={inputCls}
+                    />
+                  </td>
+                  <td className="px-6 py-3">
                     <select
                       value={editRole}
                       onChange={(e) => setEditRole(e.target.value)}
-                      className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                     >
                       <option value="admin">admin</option>
                       <option value="LF">LF</option>
                       <option value="learner">learner</option>
                     </select>
                   </td>
-                  <td className="px-6 py-3.5 text-zinc-400">
-                    {new Date(user.created_at).toLocaleDateString()}
+                  <td className="px-6 py-3 text-zinc-400">
+                    {new Date(user.created_at).toLocaleDateString('en-GB')}
                   </td>
-                  <td className="px-6 py-3.5">
+                  <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={save}
@@ -102,7 +147,7 @@ export default function UsersTable({ users }: { users: User[] }) {
                         {isPending ? 'Saving…' : 'Save'}
                       </button>
                       <button
-                        onClick={() => setEditId(null)}
+                        onClick={cancelEdit}
                         className="text-xs text-zinc-400 hover:text-zinc-700"
                       >
                         Cancel
@@ -115,10 +160,10 @@ export default function UsersTable({ users }: { users: User[] }) {
                   <td className="px-6 py-3.5">
                     <div className="flex items-center gap-3">
                       <Avatar name={user.name} email={user.email} />
-                      <span className="font-medium text-zinc-900">{user.name ?? '—'}</span>
+                      <span className="truncate font-medium text-zinc-900">{user.name ?? '—'}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-3.5 text-zinc-500">{user.email}</td>
+                  <td className="px-6 py-3.5 text-zinc-500 truncate">{user.email}</td>
                   <td className="px-6 py-3.5">
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -129,7 +174,7 @@ export default function UsersTable({ users }: { users: User[] }) {
                     </span>
                   </td>
                   <td className="px-6 py-3.5 text-zinc-400">
-                    {new Date(user.created_at).toLocaleDateString()}
+                    {new Date(user.created_at).toLocaleDateString('en-GB')}
                   </td>
                   <td className="px-6 py-3.5">
                     <button

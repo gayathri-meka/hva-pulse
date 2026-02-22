@@ -29,11 +29,35 @@ export async function addUser(formData: FormData) {
   revalidatePath('/users')
 }
 
-export async function updateUserRole(id: string, role: string) {
+export async function updateUser(
+  id: string,
+  data: { name: string; email: string; role: string },
+): Promise<{ error?: string }> {
   const appUser = await getAppUser()
   if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
 
+  const email = data.email.trim().toLowerCase()
+  const name = data.name.trim() || null
+
   const supabase = await createServerSupabaseClient()
-  await supabase.from('users').update({ role }).eq('id', id)
+
+  // Check email uniqueness against other users
+  const { data: conflict } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .neq('id', id)
+    .maybeSingle()
+
+  if (conflict) return { error: 'Email already in use by another user' }
+
+  const { error } = await supabase
+    .from('users')
+    .update({ name, email, role: data.role })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
   revalidatePath('/users')
+  return {}
 }

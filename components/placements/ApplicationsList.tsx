@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import type { ApplicationWithLearner } from '@/types'
+import { useColumnResize } from '@/hooks/useColumnResize'
 
 const STATUS_OPTIONS = ['applied', 'shortlisted', 'rejected', 'hired'] as const
 const STATUS_BADGE: Record<string, string> = {
@@ -17,12 +18,18 @@ interface Props {
   applications: ApplicationWithLearner[]
 }
 
+// Resizable column widths: Learner, Company/Role, Location, Resume, Status, Applied
+// Checkbox column is fixed (not resizable)
+const INIT_WIDTHS = [200, 200, 140, 80, 120, 110]
+const CHECKBOX_COL = 48
+
 export default function ApplicationsList({ applications }: Props) {
   const [statusMap, setStatusMap] = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [, startTransition] = useTransition()
+  const { widths, onResizeStart } = useColumnResize(INIT_WIDTHS)
 
   const allChecked = applications.length > 0 && applications.every((a) => selected.has(a.id))
 
@@ -65,10 +72,17 @@ export default function ApplicationsList({ applications }: Props) {
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table
+            className="border-collapse text-sm"
+            style={{ tableLayout: 'fixed', width: CHECKBOX_COL + widths.reduce((a, b) => a + b, 0) }}
+          >
+            <colgroup>
+              <col style={{ width: CHECKBOX_COL }} />
+              {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
+            </colgroup>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                <th className="px-4 py-3">
+                <th className="px-4 py-3" style={{ width: CHECKBOX_COL }}>
                   <input
                     type="checkbox"
                     checked={allChecked}
@@ -76,24 +90,21 @@ export default function ApplicationsList({ applications }: Props) {
                     className="rounded border-zinc-300"
                   />
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Learner
-                </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Company / Role
-                </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Location
-                </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Resume
-                </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Applied
-                </th>
+                {['Learner', 'Company / Role', 'Location', 'Resume', 'Status', 'Applied'].map((label, i) => (
+                  <th
+                    key={i}
+                    className="relative px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 select-none"
+                    style={{ width: widths[i] }}
+                  >
+                    {label}
+                    {i < INIT_WIDTHS.length - 1 && (
+                      <div
+                        onMouseDown={(e) => onResizeStart(i, e)}
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-zinc-300"
+                      />
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
@@ -148,7 +159,7 @@ export default function ApplicationsList({ applications }: Props) {
                       </select>
                     </td>
                     <td className="px-4 py-3.5 text-zinc-400">
-                      {new Date(app.created_at).toLocaleDateString()}
+                      {new Date(app.created_at).toLocaleDateString('en-GB')}
                     </td>
                   </tr>
                 )

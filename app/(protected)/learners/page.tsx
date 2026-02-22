@@ -4,16 +4,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 import SyncButton from './SyncButton'
 import LearnersFilters from './LearnersFilters'
+import LearnersTable from '@/components/learners/LearnersTable'
 
 export const dynamic = 'force-dynamic'
-
-const STATUS_BADGE: Record<string, string> = {
-  Ongoing: 'bg-emerald-100 text-emerald-700',
-  Dropout: 'bg-red-100 text-red-700',
-  Discontinued: 'bg-zinc-200 text-zinc-600',
-  'Placed - Self': 'bg-blue-100 text-blue-700',
-  'Placed - HVA': 'bg-violet-100 text-violet-700',
-}
 
 interface Props {
   searchParams: Promise<{ status?: string; batch?: string; viewAll?: string }>
@@ -92,65 +85,7 @@ export default async function LearnersPage({ searchParams }: Props) {
         </Suspense>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Batch
-                </th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  LF
-                </th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Track
-                </th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Joined
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {learners.map((learner) => (
-                <tr key={learner.learner_id} className="hover:bg-zinc-50">
-                  <td className="px-6 py-3.5 font-medium text-zinc-900">{learner.name}</td>
-                  <td className="px-6 py-3.5 text-zinc-400">{learner.email}</td>
-                  <td className="px-6 py-3.5 text-zinc-600">{learner.batch_name}</td>
-                  <td className="px-6 py-3.5">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        STATUS_BADGE[learner.status] ?? 'bg-zinc-100 text-zinc-600'
-                      }`}
-                    >
-                      {learner.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3.5 text-zinc-600">{learner.lf_name}</td>
-                  <td className="px-6 py-3.5 text-zinc-600">{learner.track}</td>
-                  <td className="px-6 py-3.5 text-zinc-400">{learner.join_date ?? '—'}</td>
-                </tr>
-              ))}
-              {learners.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-400">
-                    No learners found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <LearnersTable learners={learners} />
     </div>
   )
 }
