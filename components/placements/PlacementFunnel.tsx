@@ -32,9 +32,11 @@ function Arrow() {
 function ArrowWithRejection({
   rejected,
   total,
+  pctLabel,
 }: {
   rejected: number
   total: number
+  pctLabel: string
 }) {
   return (
     <div className="flex items-center">
@@ -57,7 +59,7 @@ function ArrowWithRejection({
             Rejected
           </p>
           <p className="mt-0.5 text-2xl font-bold tabular-nums text-red-700">{rejected}</p>
-          <p className="mt-0.5 text-xs text-red-400">{pct(rejected, total)} of apps</p>
+          <p className="mt-0.5 text-xs text-red-400">{pct(rejected, total)} {pctLabel}</p>
         </Link>
       </div>
     </div>
@@ -137,8 +139,6 @@ export default function PlacementFunnel({
       <FunnelStage
         label="Applications"
         count={totalApplications}
-        metaLabel="of roles"
-        metaValue="100%"
         href="/placements/applications"
         bg="bg-blue-50"
         border="border-blue-100"
@@ -147,8 +147,12 @@ export default function PlacementFunnel({
         widthClass="w-full"
       />
 
-      {/* Arrow with rejection branch */}
-      <ArrowWithRejection rejected={rejected} total={totalApplications} />
+      {/* Rejection branch 1: Applications → Shortlisted */}
+      <ArrowWithRejection
+        rejected={rejected}
+        total={totalApplications}
+        pctLabel="of applications"
+      />
 
       {/* Shortlisted */}
       <FunnelStage
@@ -164,7 +168,12 @@ export default function PlacementFunnel({
         widthClass="w-[82%]"
       />
 
-      <Arrow />
+      {/* Rejection branch 2: Shortlisted → Hired */}
+      <ArrowWithRejection
+        rejected={rejected}
+        total={shortlisted}
+        pctLabel="of shortlisted"
+      />
 
       {/* Hired */}
       <FunnelStage
