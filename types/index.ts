@@ -16,3 +16,26 @@ export type Learner = {
   track: string
   join_date: string | null
 }
+
+export type Company = { id: string; company_name: string; created_at: string }
+
+export type Role = {
+  id: string; company_id: string; role_title: string; location: string
+  salary_range: string | null; job_description: string
+  status: 'open' | 'closed'; created_at: string
+}
+
+export type RoleWithCounts = Role & { applicant_count: number; hired_count: number }
+
+export type CompanyWithRoles = Company & { roles: RoleWithCounts[] }
+
+export type Application = {
+  id: string; role_id: string; learner_id: string
+  status: 'applied' | 'shortlisted' | 'rejected' | 'hired'
+  resume_url: string | null; created_at: string; updated_at: string
+}
+
+export type ApplicationWithLearner = Application & {
+  learner_name: string; learner_email: string
+  company_name: string; role_title: string; location: string
+}
