@@ -9,7 +9,7 @@ import type { ApplicationWithLearner } from '@/types'
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ company?: string; role?: string }>
+  searchParams: Promise<{ company?: string; role?: string; status?: string }>
 }
 
 export default async function ApplicationsPage({ searchParams }: Props) {
@@ -17,7 +17,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin') redirect('/dashboard')
 
-  const { company: companyFilter, role: roleFilter } = await searchParams
+  const { company: companyFilter, role: roleFilter, status: statusFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -56,9 +56,13 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     allowedRoleIds = new Set(matchingRoleIds)
   }
 
-  const filteredApplications = allowedRoleIds
+  const byRole = allowedRoleIds
     ? (rawApplications ?? []).filter((a) => allowedRoleIds!.has(a.role_id))
     : (rawApplications ?? [])
+
+  const filteredApplications = statusFilter
+    ? byRole.filter((a) => a.status === statusFilter)
+    : byRole
 
   const applications: ApplicationWithLearner[] = filteredApplications.map((a) => {
     const role = roleMap[a.role_id]
@@ -80,12 +84,23 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     }
   })
 
+  const STATUS_LABEL: Record<string, string> = {
+    applied: 'Applied', shortlisted: 'Shortlisted',
+    rejected: 'Rejected', hired: 'Hired',
+  }
+
   return (
     <div>
-      <div className="mb-5">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <Suspense>
           <CompanyFilter companies={companies ?? []} roles={roles ?? []} />
         </Suspense>
+        {statusFilter && STATUS_LABEL[statusFilter] && (
+          <div className="flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600">
+            <span>Status: {STATUS_LABEL[statusFilter]}</span>
+            <a href="/placements/applications" className="text-zinc-400 hover:text-zinc-700" aria-label="Clear status filter">✕</a>
+          </div>
+        )}
       </div>
       <ApplicationsList applications={applications} />
     </div>
