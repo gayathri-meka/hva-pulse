@@ -4,8 +4,8 @@ export type { Session, User }
 
 export type Learner = {
   learner_id: string
-  name: string
-  email: string
+  user_id: string
+  lf_user_id: string | null
   phone_number: string
   category: string
   lf_name: string
@@ -15,6 +15,9 @@ export type Learner = {
   core_skills_mentor_name: string
   track: string
   join_date: string | null
+  // Populated via join with users table:
+  name: string
+  email: string
 }
 
 export type Company = { id: string; company_name: string; created_at: string }

@@ -10,8 +10,8 @@ export async function addUser(formData: FormData) {
   if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
 
   const email = (formData.get('email') as string).trim().toLowerCase()
-  const role = formData.get('role') as string
-  const lfName = ((formData.get('lf_name') as string) ?? '').trim()
+  const name  = (formData.get('name') as string).trim()
+  const role  = formData.get('role') as string
 
   const supabase = await createServerSupabaseClient()
 
@@ -25,28 +25,15 @@ export async function addUser(formData: FormData) {
     redirect('/users?error=User+already+exists')
   }
 
-  await supabase.from('users').insert({ email, role })
-
-  if (role === 'lf') {
-    const { data: existingLF } = await supabase
-      .from('lfs')
-      .select('id')
-      .eq('email', email)
-      .single()
-
-    if (!existingLF) {
-      await supabase.from('lfs').insert({ name: lfName || email, email })
-    }
-  }
-
+  await supabase.from('users').insert({ email, name: name || null, role })
   revalidatePath('/users')
 }
 
-export async function updateUserRole(email: string, role: string) {
+export async function updateUserRole(id: string, role: string) {
   const appUser = await getAppUser()
   if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
 
   const supabase = await createServerSupabaseClient()
-  await supabase.from('users').update({ role }).eq('email', email)
+  await supabase.from('users').update({ role }).eq('id', id)
   revalidatePath('/users')
 }

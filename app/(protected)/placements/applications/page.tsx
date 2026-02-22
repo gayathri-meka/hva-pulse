@@ -21,17 +21,21 @@ export default async function ApplicationsPage({ searchParams }: Props) {
 
   const supabase = await createServerSupabaseClient()
 
-  const [{ data: companies }, { data: roles }, { data: rawApplications }, { data: learners }] =
+  const [{ data: companies }, { data: roles }, { data: rawApplications }, { data: rawLearners }] =
     await Promise.all([
       supabase.from('companies').select('id, company_name, created_at').order('company_name'),
       supabase.from('roles').select('id, company_id, role_title, location'),
       supabase.from('applications').select('*').order('created_at', { ascending: false }),
-      supabase.from('learners').select('learner_id, name, email'),
+      // Join learners with users to get name and email
+      supabase.from('learners').select('learner_id, users!learners_user_id_fkey(name, email)'),
     ])
 
   // Build lookup maps
   const learnerMap = Object.fromEntries(
-    (learners ?? []).map((l) => [l.learner_id, { name: l.name, email: l.email }])
+    (rawLearners ?? []).map((l: Record<string, unknown>) => {
+      const u = l.users as { name: string; email: string } | null
+      return [l.learner_id, { name: u?.name ?? 'Unknown', email: u?.email ?? '' }]
+    })
   )
   const roleMap = Object.fromEntries(
     (roles ?? []).map((r) => [r.id, r])

@@ -10,8 +10,6 @@ const STATUS_CONFIG = [
     label: 'Ongoing',
     cardClass: 'border-emerald-100 bg-emerald-50',
     labelClass: 'text-emerald-600',
-    iconBg: 'bg-emerald-100',
-    iconColor: 'text-emerald-600',
     badgeClass: 'bg-emerald-100 text-emerald-700',
   },
   {
@@ -19,8 +17,6 @@ const STATUS_CONFIG = [
     label: 'Dropout',
     cardClass: 'border-red-100 bg-red-50',
     labelClass: 'text-red-500',
-    iconBg: 'bg-red-100',
-    iconColor: 'text-red-500',
     badgeClass: 'bg-red-100 text-red-700',
   },
   {
@@ -28,8 +24,6 @@ const STATUS_CONFIG = [
     label: 'Discontinued',
     cardClass: 'border-zinc-200 bg-zinc-100',
     labelClass: 'text-zinc-500',
-    iconBg: 'bg-zinc-200',
-    iconColor: 'text-zinc-500',
     badgeClass: 'bg-zinc-200 text-zinc-600',
   },
   {
@@ -37,8 +31,6 @@ const STATUS_CONFIG = [
     label: 'Placed — Self',
     cardClass: 'border-blue-100 bg-blue-50',
     labelClass: 'text-blue-600',
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600',
     badgeClass: 'bg-blue-100 text-blue-700',
   },
   {
@@ -46,8 +38,6 @@ const STATUS_CONFIG = [
     label: 'Placed — HVA',
     cardClass: 'border-violet-100 bg-violet-50',
     labelClass: 'text-violet-600',
-    iconBg: 'bg-violet-100',
-    iconColor: 'text-violet-600',
     badgeClass: 'bg-violet-100 text-violet-700',
   },
 ]
@@ -66,28 +56,29 @@ export default async function DashboardPage() {
 
   const supabase = await createServerSupabaseClient()
 
-  // LF view
-  if (appUser.role === 'lf') {
-    const { data: lf } = await supabase
-      .from('lfs')
-      .select('id')
-      .eq('email', appUser.email)
-      .single()
+  // LF view — filter by lf_user_id = current user's id
+  if (appUser.role === 'LF') {
+    const { data: rawLearners } = await supabase
+      .from('learners')
+      .select('batch_name, status, track, users!learners_user_id_fkey(name)')
+      .eq('lf_user_id', appUser.id)
 
-    const { data: myLearners } = lf
-      ? await supabase
-          .from('learners')
-          .select('name, batch_name, status, track')
-          .eq('lf_id', lf.id)
-          .order('name')
-      : { data: [] }
+    const myLearners = (rawLearners ?? []).map((l: Record<string, unknown>) => {
+      const u = l.users as { name: string } | null
+      return {
+        name: u?.name ?? '',
+        batch_name: l.batch_name as string,
+        status: l.status as string,
+        track: l.track as string,
+      }
+    }).sort((a, b) => a.name.localeCompare(b.name))
 
     return (
       <div>
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-zinc-900">Dashboard</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {myLearners?.length ?? 0} learner{myLearners?.length !== 1 ? 's' : ''} assigned to you
+            {myLearners.length} learner{myLearners.length !== 1 ? 's' : ''} assigned to you
           </p>
         </div>
 
@@ -114,8 +105,8 @@ export default async function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {myLearners?.map((l) => (
-                  <tr key={l.name} className="hover:bg-zinc-50">
+                {myLearners.map((l, i) => (
+                  <tr key={i} className="hover:bg-zinc-50">
                     <td className="px-6 py-3.5 font-medium text-zinc-900">{l.name}</td>
                     <td className="px-6 py-3.5 text-zinc-500">{l.batch_name}</td>
                     <td className="px-6 py-3.5">
@@ -130,7 +121,7 @@ export default async function DashboardPage() {
                     <td className="px-6 py-3.5 text-zinc-500">{l.track}</td>
                   </tr>
                 ))}
-                {(!myLearners || myLearners.length === 0) && (
+                {myLearners.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-sm text-zinc-400">
                       No learners assigned yet.
@@ -161,7 +152,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        {/* Total card */}
         <div className="col-span-2 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:col-span-1 xl:col-span-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Total</p>
           <p className="mt-3 text-4xl font-bold text-zinc-900">{total}</p>

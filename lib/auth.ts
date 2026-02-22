@@ -2,8 +2,10 @@ import { cache } from 'react'
 import { createServerSupabaseClient } from './supabase-server'
 
 export type AppUser = {
+  id: string
   email: string
-  role: 'admin' | 'lf'
+  name: string | null
+  role: 'admin' | 'LF' | 'learner'
 }
 
 export const getAppUser = cache(async (): Promise<AppUser | null> => {
@@ -15,7 +17,7 @@ export const getAppUser = cache(async (): Promise<AppUser | null> => {
 
   const { data } = await supabase
     .from('users')
-    .select('email, role')
+    .select('id, email, name, role')
     .eq('email', user.email)
     .single()
 

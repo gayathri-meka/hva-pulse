@@ -27,22 +27,32 @@ export default async function LearnersPage({ searchParams }: Props) {
 
   const supabase = await createServerSupabaseClient()
 
-  let lfId: number | null = null
-  if (appUser.role === 'lf' && viewAll !== '1') {
-    const { data: lf } = await supabase
-      .from('lfs')
-      .select('id')
-      .eq('email', appUser.email)
-      .single()
-    lfId = lf?.id ?? null
-  }
+  // LF filtering: filter by learners.lf_user_id = current user's id
+  const filterByLF = appUser.role === 'LF' && viewAll !== '1'
 
-  let query = supabase.from('learners').select('*').order('name')
-  if (lfId) query = query.eq('lf_id', lfId)
+  let query = supabase
+    .from('learners')
+    .select('*, users!learners_user_id_fkey(name, email)')
+
+  if (filterByLF) query = query.eq('lf_user_id', appUser.id)
   if (status) query = query.eq('status', status)
   if (batch) query = query.eq('batch_name', batch)
-  const { data: learners } = await query
 
+  const { data: rawLearners } = await query
+
+  // Flatten the nested users join into flat objects, sort by name
+  type RawLearner = {
+    learner_id: string; user_id: string; lf_user_id: string | null
+    phone_number: string; category: string; lf_name: string; status: string
+    batch_name: string; tech_mentor_name: string; core_skills_mentor_name: string
+    track: string; join_date: string | null
+    users: { name: string; email: string } | null
+  }
+  const learners = ((rawLearners ?? []) as RawLearner[])
+    .map((l) => ({ ...l, users: undefined, name: l.users?.name ?? '', email: l.users?.email ?? '' }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // Fetch distinct filter options
   const { data: allLearners } = await supabase
     .from('learners')
     .select('status, batch_name')
@@ -55,7 +65,7 @@ export default async function LearnersPage({ searchParams }: Props) {
     new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))
   ).sort() as string[]
 
-  const title = appUser.role === 'lf' && viewAll !== '1' ? 'My Learners' : 'Learners'
+  const title = appUser.role === 'LF' && viewAll !== '1' ? 'My Learners' : 'Learners'
 
   return (
     <div>
@@ -63,7 +73,7 @@ export default async function LearnersPage({ searchParams }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">{title}</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {learners?.length ?? 0} result{learners?.length !== 1 ? 's' : ''}
+            {learners.length} result{learners.length !== 1 ? 's' : ''}
             {status ? ` · ${status}` : ''}
             {batch ? ` · ${batch}` : ''}
           </p>
@@ -76,7 +86,7 @@ export default async function LearnersPage({ searchParams }: Props) {
           <LearnersFilters
             statuses={statuses}
             batches={batches}
-            isLF={appUser.role === 'lf'}
+            isLF={appUser.role === 'LF'}
             viewAll={viewAll === '1'}
           />
         </Suspense>
@@ -111,8 +121,8 @@ export default async function LearnersPage({ searchParams }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {learners?.map((learner) => (
-                <tr key={learner.email} className="hover:bg-zinc-50">
+              {learners.map((learner) => (
+                <tr key={learner.learner_id} className="hover:bg-zinc-50">
                   <td className="px-6 py-3.5 font-medium text-zinc-900">{learner.name}</td>
                   <td className="px-6 py-3.5 text-zinc-400">{learner.email}</td>
                   <td className="px-6 py-3.5 text-zinc-600">{learner.batch_name}</td>
@@ -130,7 +140,7 @@ export default async function LearnersPage({ searchParams }: Props) {
                   <td className="px-6 py-3.5 text-zinc-400">{learner.join_date ?? '—'}</td>
                 </tr>
               ))}
-              {(!learners || learners.length === 0) && (
+              {learners.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-400">
                     No learners found.
