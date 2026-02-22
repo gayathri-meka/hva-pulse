@@ -65,6 +65,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       id: a.id,
       role_id: a.role_id,
       learner_id: a.learner_id,
+      user_id: a.user_id ?? null,
       status: a.status,
       resume_url: a.resume_url,
       created_at: a.created_at,

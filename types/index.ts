@@ -33,7 +33,7 @@ export type RoleWithCounts = Role & { applicant_count: number; hired_count: numb
 export type CompanyWithRoles = Company & { roles: RoleWithCounts[] }
 
 export type Application = {
-  id: string; role_id: string; learner_id: string
+  id: string; role_id: string; learner_id: string; user_id: string | null
   status: 'applied' | 'shortlisted' | 'rejected' | 'hired'
   resume_url: string | null; created_at: string; updated_at: string
 }
@@ -42,3 +42,16 @@ export type ApplicationWithLearner = Application & {
   learner_name: string; learner_email: string
   company_name: string; role_title: string; location: string
 }
+
+export type Resume = {
+  id: string; user_id: string; file_url: string; version_name: string; created_at: string
+}
+
+export type RolePreference = {
+  id: string; user_id: string; role_id: string
+  preference: 'not_interested'; created_at: string
+}
+
+export type MyStatus =
+  | 'applied' | 'shortlisted' | 'rejected' | 'hired'
+  | 'not_interested' | 'not_applied'
