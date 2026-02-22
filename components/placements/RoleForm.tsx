@@ -26,7 +26,7 @@ export default function RoleForm({ role, companyId, onClose }: Props) {
     })
   }
 
-  const inputCls = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1'
+  const inputCls = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900'
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
@@ -76,7 +76,7 @@ export default function RoleForm({ role, companyId, onClose }: Props) {
             name="job_description"
             defaultValue={role?.job_description ?? ''}
             required
-            className="min-h-0 flex-1 resize-none rounded-lg border border-zinc-200 px-3 py-2 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+            className="min-h-0 flex-1 resize-none rounded-lg border border-zinc-200 px-3 py-2 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
             placeholder="Describe the role, responsibilities, requirements..."
           />
         </div>

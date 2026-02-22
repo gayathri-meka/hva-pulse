@@ -16,10 +16,6 @@ export default function CompanyAccordion({ company }: Props) {
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
   const [addRoleOpen, setAddRoleOpen]     = useState(false)
 
-  const totalApplicants    = company.roles.reduce((s, r) => s + r.applicant_count, 0)
-  const totalHired         = company.roles.reduce((s, r) => s + r.hired_count, 0)
-  const totalNotInterested = company.roles.reduce((s, r) => s + r.not_interested_count, 0)
-
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -50,22 +46,6 @@ export default function CompanyAccordion({ company }: Props) {
               </span>
             </div>
 
-            {/* Stat chips — always visible */}
-            {company.roles.length > 0 && (
-              <div className="ml-6 mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                  {totalApplicants} applied
-                </span>
-                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                  {totalHired} hired
-                </span>
-                {totalNotInterested > 0 && (
-                  <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
-                    {totalNotInterested} not interested
-                  </span>
-                )}
-              </div>
-            )}
           </button>
 
           {/* Right-side action buttons (not part of toggle) */}
