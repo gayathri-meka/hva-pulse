@@ -33,7 +33,7 @@ export default function RoleForm({ role, companyId, onClose }: Props) {
       <input type="hidden" name="company_id" value={companyId} />
 
       {/* Two-column body: short fields left, JD right */}
-      <div className="flex flex-1 gap-6 overflow-hidden">
+      <div className="flex flex-1 gap-6 overflow-hidden p-1">
         {/* Left column */}
         <div className="w-64 shrink-0 space-y-4 overflow-y-auto py-1 pr-2">
           <div>

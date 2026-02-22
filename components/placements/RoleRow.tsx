@@ -48,8 +48,20 @@ export default function RoleRow({ role, companyName }: Props) {
             </p>
           </div>
 
-          {/* Actions */}
+          {/* Stat chips + Actions */}
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+              {role.applicant_count} applied
+            </span>
+            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              {role.hired_count} hired
+            </span>
+            {role.not_interested_count > 0 && (
+              <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
+                {role.not_interested_count} not interested
+              </span>
+            )}
+            <div className="mx-1 h-4 w-px bg-zinc-200" />
             <button
               onClick={() => setEditOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
@@ -91,20 +103,6 @@ export default function RoleRow({ role, companyName }: Props) {
           </div>
         </div>
 
-        {/* Stat chips */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-            {role.applicant_count} applied
-          </span>
-          <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-            {role.hired_count} hired
-          </span>
-          {role.not_interested_count > 0 && (
-            <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
-              {role.not_interested_count} not interested
-            </span>
-          )}
-        </div>
       </div>
 
       {/* Fullscreen edit modal */}
