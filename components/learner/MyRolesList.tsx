@@ -14,32 +14,36 @@ type ApplicationRow = {
   company_name: string
 }
 
-type FilterKey = 'all' | 'shortlisted' | 'rejected' | 'hired'
+type FilterKey = 'all' | 'shortlisted' | 'rejected' | 'hired' | 'not_interested'
 
 const FILTER_LABELS: Record<FilterKey, string> = {
-  all:         'All',
-  shortlisted: 'In Process',
-  rejected:    'Rejected',
-  hired:       'Hired',
+  all:            'All',
+  shortlisted:    'In Process',
+  rejected:       'Rejected',
+  hired:          'Hired',
+  not_interested: 'Not Interested',
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  applied:     'bg-blue-100 text-blue-700',
-  shortlisted: 'bg-amber-100 text-amber-700',
-  rejected:    'bg-red-100 text-red-700',
-  hired:       'bg-emerald-100 text-emerald-700',
+  applied:        'bg-blue-100 text-blue-700',
+  shortlisted:    'bg-amber-100 text-amber-700',
+  rejected:       'bg-red-100 text-red-700',
+  hired:          'bg-emerald-100 text-emerald-700',
+  not_interested: 'bg-zinc-100 text-zinc-500',
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  applied:     'Applied',
-  shortlisted: 'In Process',
-  rejected:    'Rejected',
-  hired:       'Hired',
+  applied:        'Applied',
+  shortlisted:    'In Process',
+  rejected:       'Rejected',
+  hired:          'Hired',
+  not_interested: 'Not Interested',
 }
 
 export default function MyRolesList({ applications }: { applications: ApplicationRow[] }) {
   const [filter, setFilter] = useState<FilterKey>('all')
 
+  // 'all' shows everything; specific filters match by status
   const filtered =
     filter === 'all'
       ? applications
@@ -64,19 +68,23 @@ export default function MyRolesList({ applications }: { applications: Applicatio
         ))}
       </div>
 
-      {/* Application cards — same visual treatment as home page RoleCards */}
+      {/* Application cards */}
       <div className="space-y-3">
         {filtered.map((app) => (
-          <Link key={app.id} href={`/learner/roles/${app.role_id}`} className="block overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+          <Link
+            key={app.id}
+            href={`/learner/roles/${app.role_id}`}
+            className="block overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+          >
             <div className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+                  <p className="text-base font-bold leading-snug text-zinc-900">
                     {app.company_name}
                   </p>
-                  <h3 className="mt-1 text-lg font-bold leading-snug text-zinc-900">
+                  <p className="mt-0.5 text-sm text-zinc-500">
                     {app.role_title}
-                  </h3>
+                  </p>
                 </div>
                 <span
                   className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -109,7 +117,8 @@ export default function MyRolesList({ applications }: { applications: Applicatio
 
             <div className="border-t border-zinc-100 px-4 py-2">
               <p className="text-xs text-zinc-400">
-                Applied {new Date(app.created_at).toLocaleDateString('en-GB')}
+                {app.status === 'not_interested' ? 'Marked' : 'Applied'}{' '}
+                {new Date(app.created_at).toLocaleDateString('en-GB')}
               </p>
             </div>
           </Link>

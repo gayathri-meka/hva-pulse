@@ -62,12 +62,12 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
         {/* Top row: company + status badges */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+            <p className="text-base font-bold leading-snug text-zinc-900">
               {role.company_name}
             </p>
-            <h2 className="mt-1 text-lg font-bold leading-snug text-zinc-900">
+            <p className="mt-0.5 text-sm text-zinc-500">
               {role.role_title}
-            </h2>
+            </p>
           </div>
 
           {/* Right: role status + my status stacked */}

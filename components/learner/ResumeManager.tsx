@@ -56,23 +56,24 @@ export default function ResumeManager({ resumes }: { resumes: Resume[] }) {
           className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900"
         />
 
-        <input
-          name="file"
-          type="file"
-          accept="application/pdf"
-          required
-          className="w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            name="file"
+            type="file"
+            accept="application/pdf"
+            required
+            className="min-w-0 flex-1 text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
+          />
+          <button
+            type="submit"
+            disabled={isPending}
+            className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {isPending ? 'Uploading…' : 'Upload'}
+          </button>
+        </div>
 
         {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
-
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
-        >
-          {isPending ? 'Uploading…' : 'Upload'}
-        </button>
       </form>
 
       {/* Resume list */}

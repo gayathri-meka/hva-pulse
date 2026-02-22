@@ -43,29 +43,31 @@ export default async function LearnerHomePage() {
     (preferences ?? []).map((p) => [p.role_id, p.preference]),
   )
 
-  const roleList = (roles ?? []).map((role) => {
-    const app = appMap[role.id]
-    const pref = prefMap[role.id]
+  const roleList = (roles ?? [])
+    .filter((role) => role.status === 'open')
+    .map((role) => {
+      const app = appMap[role.id]
+      const pref = prefMap[role.id]
 
-    let myStatus: MyStatus
-    if (app) {
-      myStatus = app.status as MyStatus
-    } else if (pref === 'not_interested') {
-      myStatus = 'not_interested'
-    } else {
-      myStatus = 'not_applied'
-    }
+      let myStatus: MyStatus
+      if (app) {
+        myStatus = app.status as MyStatus
+      } else if (pref === 'not_interested') {
+        myStatus = 'not_interested'
+      } else {
+        myStatus = 'not_applied'
+      }
 
-    return {
-      id: role.id,
-      company_name: companyMap[role.company_id] ?? '',
-      role_title: role.role_title,
-      location: role.location,
-      salary_range: role.salary_range as string | null,
-      status: role.status as 'open' | 'closed',
-      my_status: myStatus,
-    }
-  })
+      return {
+        id: role.id,
+        company_name: companyMap[role.company_id] ?? '',
+        role_title: role.role_title,
+        location: role.location,
+        salary_range: role.salary_range as string | null,
+        status: role.status as 'open' | 'closed',
+        my_status: myStatus,
+      }
+    })
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
@@ -74,7 +76,9 @@ export default async function LearnerHomePage() {
           Hey, {appUser.name?.split(' ')[0] ?? 'there'}!
         </h1>
         <p className="mt-0.5 text-sm text-zinc-500">
-          There {roleList.length === 1 ? 'is' : 'are'} {roleList.length} role{roleList.length !== 1 ? 's' : ''} available
+          {roleList.length === 0
+            ? 'No open roles right now.'
+            : `There ${roleList.length === 1 ? 'is' : 'are'} ${roleList.length} open role${roleList.length !== 1 ? 's' : ''} available`}
         </p>
       </div>
 
