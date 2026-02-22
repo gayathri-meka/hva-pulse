@@ -14,11 +14,18 @@ export default async function CompaniesPage() {
 
   const supabase = await createServerSupabaseClient()
 
-  const [{ data: companies }, { data: roles }, { data: applications }] = await Promise.all([
+  const [{ data: companies }, { data: roles }, { data: applications }, { data: notInterested }] = await Promise.all([
     supabase.from('companies').select('*').order('created_at', { ascending: false }),
     supabase.from('roles').select('*').order('created_at', { ascending: false }),
     supabase.from('applications').select('role_id, status'),
+    supabase.from('role_preferences').select('role_id').eq('preference', 'not_interested'),
   ])
+
+  // Build a count map of not-interested per role
+  const niMap: Record<string, number> = {}
+  for (const p of notInterested ?? []) {
+    niMap[p.role_id] = (niMap[p.role_id] ?? 0) + 1
+  }
 
   const companiesWithRoles: CompanyWithRoles[] = (companies ?? []).map((c) => {
     const companyRoles: RoleWithCounts[] = (roles ?? [])
@@ -29,6 +36,7 @@ export default async function CompaniesPage() {
           ...r,
           applicant_count: roleApps.length,
           hired_count: roleApps.filter((a) => a.status === 'hired').length,
+          not_interested_count: niMap[r.id] ?? 0,
         }
       })
     return { ...c, roles: companyRoles }

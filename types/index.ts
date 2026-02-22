@@ -28,7 +28,7 @@ export type Role = {
   status: 'open' | 'closed'; created_at: string
 }
 
-export type RoleWithCounts = Role & { applicant_count: number; hired_count: number }
+export type RoleWithCounts = Role & { applicant_count: number; hired_count: number; not_interested_count: number }
 
 export type CompanyWithRoles = Company & { roles: RoleWithCounts[] }
 

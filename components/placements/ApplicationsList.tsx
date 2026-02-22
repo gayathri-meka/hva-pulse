@@ -1,106 +1,207 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  createColumnHelper,
+  type SortingState,
+  type RowSelectionState,
+} from '@tanstack/react-table'
 import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import type { ApplicationWithLearner } from '@/types'
-import { useColumnResize } from '@/hooks/useColumnResize'
 
 const STATUS_OPTIONS = ['applied', 'shortlisted', 'rejected', 'hired'] as const
 const STATUS_BADGE: Record<string, string> = {
-  applied: 'bg-blue-100 text-blue-700',
+  applied:     'bg-blue-100 text-blue-700',
   shortlisted: 'bg-amber-100 text-amber-700',
-  rejected: 'bg-red-100 text-red-700',
-  hired: 'bg-emerald-100 text-emerald-700',
+  rejected:    'bg-red-100 text-red-700',
+  hired:       'bg-emerald-100 text-emerald-700',
 }
+
+const col = createColumnHelper<ApplicationWithLearner>()
 
 interface Props {
   applications: ApplicationWithLearner[]
 }
 
-// Resizable column widths: Learner, Company/Role, Location, Resume, Status, Applied
-// Checkbox column is fixed (not resizable)
-const INIT_WIDTHS = [200, 200, 140, 80, 120, 110]
-const CHECKBOX_COL = 48
-
 export default function ApplicationsList({ applications }: Props) {
-  const [statusMap, setStatusMap] = useState<Record<string, string>>(() =>
+  const [sorting, setSorting]           = useState<SortingState>([])
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [statusMap, setStatusMap]       = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [, startTransition] = useTransition()
-  const { widths, onResizeStart } = useColumnResize(INIT_WIDTHS)
-
-  const allChecked = applications.length > 0 && applications.every((a) => selected.has(a.id))
-
-  function toggleAll() {
-    if (allChecked) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(applications.map((a) => a.id)))
-    }
-  }
-
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
 
   function handleStatusChange(id: string, newStatus: string) {
     setStatusMap((prev) => ({ ...prev, [id]: newStatus }))
     startTransition(() => updateApplicationStatus(id, newStatus))
   }
 
-  const selectedApplications = applications.filter((a) => selected.has(a.id))
+  const columns = [
+    col.display({
+      id: 'select',
+      size: 48,
+      enableResizing: false,
+      enableSorting: false,
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllRowsSelected()}
+          onChange={table.getToggleAllRowsSelectedHandler()}
+          className="rounded border-zinc-300"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          className="rounded border-zinc-300"
+        />
+      ),
+    }),
+    col.accessor('learner_name', {
+      header: 'Learner',
+      size: 200,
+      cell: (info) => (
+        <div>
+          <p className="font-medium text-zinc-900">{info.getValue()}</p>
+          <p className="text-xs text-zinc-400">{info.row.original.learner_email}</p>
+        </div>
+      ),
+    }),
+    col.accessor('company_name', {
+      header: 'Company / Role',
+      size: 200,
+      cell: (info) => (
+        <div>
+          <p className="font-medium text-zinc-900">{info.getValue()}</p>
+          <p className="text-xs text-zinc-400">{info.row.original.role_title}</p>
+        </div>
+      ),
+    }),
+    col.accessor('location', {
+      header: 'Location',
+      size: 140,
+      cell: (info) => <span className="text-xs text-zinc-500">{info.getValue()}</span>,
+    }),
+    col.accessor('resume_url', {
+      header: 'Resume',
+      size: 80,
+      enableSorting: false,
+      cell: (info) =>
+        info.getValue() ? (
+          <a
+            href={info.getValue()!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-[#5BAE5B] hover:underline"
+          >
+            View
+          </a>
+        ) : (
+          <span className="text-xs text-zinc-400">—</span>
+        ),
+    }),
+    col.accessor('status', {
+      header: 'Status',
+      size: 140,
+      enableSorting: false,
+      cell: (info) => {
+        const id            = info.row.original.id
+        const currentStatus = statusMap[id] ?? info.getValue()
+        return (
+          <div className="relative inline-flex">
+            <select
+              value={currentStatus}
+              onChange={(e) => handleStatusChange(id, e.target.value)}
+              className={`appearance-none cursor-pointer rounded-full border-0 pl-2.5 pr-6 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
+                STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
+              }`}
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
+        )
+      },
+    }),
+    col.accessor('created_at', {
+      header: 'Applied',
+      size: 110,
+      cell: (info) => (
+        <span className="text-xs text-zinc-400">
+          {new Date(info.getValue()).toLocaleDateString('en-GB')}
+        </span>
+      ),
+    }),
+  ]
+
+  const table = useReactTable({
+    data: applications,
+    columns,
+    state: { sorting, rowSelection },
+    onSortingChange: setSorting,
+    onRowSelectionChange: setRowSelection,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    columnResizeMode: 'onChange',
+    getRowId: (row) => row.id,
+    enableRowSelection: true,
+  })
+
+  const selectedApplications = applications.filter((a) => rowSelection[a.id])
+  const selectedCount        = Object.keys(rowSelection).length
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
         <p className="text-sm text-zinc-500">
           {applications.length} application{applications.length !== 1 ? 's' : ''}
-          {selected.size > 0 && ` · ${selected.size} selected`}
+          {selectedCount > 0 && ` · ${selectedCount} selected`}
         </p>
-        <ExportButton applications={selectedApplications} disabled={selected.size === 0} />
+        <ExportButton applications={selectedApplications} disabled={selectedCount === 0} />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table
             className="border-collapse text-sm"
-            style={{ tableLayout: 'fixed', width: CHECKBOX_COL + widths.reduce((a, b) => a + b, 0) }}
+            style={{ width: table.getCenterTotalSize() }}
           >
-            <colgroup>
-              <col style={{ width: CHECKBOX_COL }} />
-              {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
-            </colgroup>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                <th className="px-4 py-3" style={{ width: CHECKBOX_COL }}>
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={toggleAll}
-                    className="rounded border-zinc-300"
-                  />
-                </th>
-                {['Learner', 'Company / Role', 'Location', 'Resume', 'Status', 'Applied'].map((label, i) => (
+                {table.getFlatHeaders().map((header) => (
                   <th
-                    key={i}
-                    className="relative px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 select-none"
-                    style={{ width: widths[i] }}
+                    key={header.id}
+                    style={{ width: header.getSize() }}
+                    className="relative select-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                   >
-                    {label}
-                    {i < INIT_WIDTHS.length - 1 && (
+                    <div
+                      className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.column.getIsSorted() === 'asc' && <span>↑</span>}
+                      {header.column.getIsSorted() === 'desc' && <span>↓</span>}
+                    </div>
+                    {header.column.getCanResize() && (
                       <div
-                        onMouseDown={(e) => onResizeStart(i, e)}
-                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-zinc-300"
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
                       />
                     )}
                   </th>
@@ -108,72 +209,25 @@ export default function ApplicationsList({ applications }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {applications.map((app) => {
-                const currentStatus = statusMap[app.id] ?? app.status
-                return (
-                  <tr key={app.id} className={selected.has(app.id) ? 'bg-zinc-50' : 'hover:bg-zinc-50'}>
-                    <td className="px-4 py-3.5">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(app.id)}
-                        onChange={() => toggleOne(app.id)}
-                        className="rounded border-zinc-300"
-                      />
+              {table.getRowModel().rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className={row.getIsSelected() ? 'bg-zinc-50' : 'hover:bg-zinc-50'}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      style={{ width: cell.column.getSize() }}
+                      className="px-4 py-3.5"
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-zinc-900">{app.learner_name}</p>
-                      <p className="text-xs text-zinc-400">{app.learner_email}</p>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-zinc-900">{app.company_name}</p>
-                      <p className="text-xs text-zinc-400">{app.role_title}</p>
-                    </td>
-                    <td className="px-4 py-3.5 text-zinc-500 text-xs">{app.location}</td>
-                    <td className="px-4 py-3.5">
-                      {app.resume_url ? (
-                        <a
-                          href={app.resume_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-medium text-[#5BAE5B] hover:underline"
-                        >
-                          View
-                        </a>
-                      ) : (
-                        <span className="text-xs text-zinc-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="relative inline-flex">
-                        <select
-                          value={currentStatus}
-                          onChange={(e) => handleStatusChange(app.id, e.target.value)}
-                          className={`appearance-none rounded-full pl-2.5 pr-6 py-0.5 text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
-                            STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
-                          }`}
-                        >
-                          {STATUS_OPTIONS.map((s) => (
-                            <option key={s} value={s}>
-                              {s.charAt(0).toUpperCase() + s.slice(1)}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
-                            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-zinc-400">
-                      {new Date(app.created_at).toLocaleDateString('en-GB')}
-                    </td>
-                  </tr>
-                )
-              })}
+                  ))}
+                </tr>
+              ))}
               {applications.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-400">
+                  <td colSpan={columns.length} className="px-6 py-12 text-center text-sm text-zinc-400">
                     No applications found.
                   </td>
                 </tr>

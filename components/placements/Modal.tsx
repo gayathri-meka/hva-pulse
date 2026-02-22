@@ -7,9 +7,10 @@ interface Props {
   onClose: () => void
   children: React.ReactNode
   wide?: boolean
+  full?: boolean
 }
 
-export default function Modal({ title, onClose, children, wide }: Props) {
+export default function Modal({ title, onClose, children, wide, full }: Props) {
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -17,6 +18,12 @@ export default function Modal({ title, onClose, children, wide }: Props) {
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [onClose])
+
+  const panelClass = full
+    ? 'h-[95vh] w-[95vw] max-w-none'
+    : wide
+    ? 'max-w-4xl w-full'
+    : 'max-w-lg w-full'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -27,8 +34,8 @@ export default function Modal({ title, onClose, children, wide }: Props) {
         aria-hidden="true"
       />
       {/* Panel */}
-      <div className={`relative w-full rounded-xl bg-white shadow-xl ${wide ? 'max-w-4xl' : 'max-w-lg'}`}>
-        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
+      <div className={`relative flex flex-col rounded-xl bg-white shadow-xl ${panelClass}`}>
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-100 px-6 py-4">
           <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
           <button
             onClick={onClose}
@@ -40,7 +47,9 @@ export default function Modal({ title, onClose, children, wide }: Props) {
             </svg>
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className={full ? 'flex flex-1 flex-col overflow-hidden p-6' : 'p-6'}>
+          {children}
+        </div>
       </div>
     </div>
   )

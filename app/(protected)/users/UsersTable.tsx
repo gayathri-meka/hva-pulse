@@ -1,8 +1,15 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  createColumnHelper,
+  type SortingState,
+} from '@tanstack/react-table'
 import { updateUser } from './actions'
-import { useColumnResize } from '@/hooks/useColumnResize'
 
 type User = { id: string; email: string; name: string | null; role: string; created_at: string }
 
@@ -21,17 +28,18 @@ function Avatar({ name, email }: { name: string | null; email: string }) {
   )
 }
 
-// Initial column widths: Name, Email, Role, Added, Actions
-const INIT_WIDTHS = [220, 260, 110, 120, 100]
+const col = createColumnHelper<User>()
+
+const inputCls = 'w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900'
 
 export default function UsersTable({ users }: { users: User[] }) {
-  const [editId, setEditId]     = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
+  const [sorting, setSorting]     = useState<SortingState>([])
+  const [editId, setEditId]       = useState<string | null>(null)
+  const [editName, setEditName]   = useState('')
   const [editEmail, setEditEmail] = useState('')
-  const [editRole, setEditRole] = useState('')
+  const [editRole, setEditRole]   = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
-  const { widths, onResizeStart } = useColumnResize(INIT_WIDTHS)
 
   function startEdit(user: User) {
     setEditId(user.id)
@@ -59,6 +67,139 @@ export default function UsersTable({ users }: { users: User[] }) {
     })
   }
 
+  const columns = [
+    col.accessor('name', {
+      header: 'Name',
+      size: 220,
+      cell: (info) => {
+        const user = info.row.original
+        if (editId === user.id) {
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar name={editName || null} email={editEmail || user.email} />
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Full name"
+                className={inputCls}
+              />
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar name={user.name} email={user.email} />
+            <span className="truncate font-medium text-zinc-900">{user.name ?? '—'}</span>
+          </div>
+        )
+      },
+    }),
+    col.accessor('email', {
+      header: 'Email',
+      size: 260,
+      cell: (info) => {
+        const user = info.row.original
+        if (editId === user.id) {
+          return (
+            <input
+              type="email"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              className={inputCls}
+            />
+          )
+        }
+        return <span className="truncate text-zinc-500">{user.email}</span>
+      },
+    }),
+    col.accessor('role', {
+      header: 'Role',
+      size: 110,
+      cell: (info) => {
+        const user = info.row.original
+        if (editId === user.id) {
+          return (
+            <select
+              value={editRole}
+              onChange={(e) => setEditRole(e.target.value)}
+              className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            >
+              <option value="admin">admin</option>
+              <option value="LF">LF</option>
+              <option value="learner">learner</option>
+            </select>
+          )
+        }
+        return (
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              ROLE_BADGE[user.role] ?? 'bg-zinc-100 text-zinc-600'
+            }`}
+          >
+            {user.role}
+          </span>
+        )
+      },
+    }),
+    col.accessor('created_at', {
+      header: 'Added',
+      size: 120,
+      cell: (info) => (
+        <span className="text-zinc-400">
+          {new Date(info.getValue()).toLocaleDateString('en-GB')}
+        </span>
+      ),
+    }),
+    col.display({
+      id: 'actions',
+      size: 100,
+      enableSorting: false,
+      enableResizing: false,
+      header: () => null,
+      cell: (info) => {
+        const user = info.row.original
+        if (editId === user.id) {
+          return (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={save}
+                disabled={isPending}
+                className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {isPending ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={cancelEdit}
+                className="text-xs text-zinc-400 hover:text-zinc-700"
+              >
+                Cancel
+              </button>
+            </div>
+          )
+        }
+        return (
+          <button
+            onClick={() => startEdit(user)}
+            className="text-xs text-zinc-400 transition-colors hover:text-zinc-900"
+          >
+            Edit
+          </button>
+        )
+      },
+    }),
+  ]
+
+  const table = useReactTable({
+    data: users,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    columnResizeMode: 'onChange',
+    getRowId: (row) => row.id,
+  })
+
   if (users.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-white py-16 text-center shadow-sm">
@@ -66,8 +207,6 @@ export default function UsersTable({ users }: { users: User[] }) {
       </div>
     )
   }
-
-  const inputCls = 'w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900'
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -77,23 +216,31 @@ export default function UsersTable({ users }: { users: User[] }) {
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="border-collapse text-sm" style={{ tableLayout: 'fixed', width: widths.reduce((a, b) => a + b, 0) }}>
-          <colgroup>
-            {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
-          </colgroup>
+        <table
+          className="border-collapse text-sm"
+          style={{ width: table.getCenterTotalSize() }}
+        >
           <thead>
             <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-              {['Name', 'Email', 'Role', 'Added', ''].map((label, i) => (
+              {table.getFlatHeaders().map((header) => (
                 <th
-                  key={i}
-                  className="relative px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 select-none"
-                  style={{ width: widths[i] }}
+                  key={header.id}
+                  style={{ width: header.getSize() }}
+                  className="relative select-none px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                 >
-                  {label}
-                  {i < widths.length - 1 && (
+                  <div
+                    className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
+                    onClick={header.column.getToggleSortingHandler()}
+                  >
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
+                    {header.column.getIsSorted() === 'desc' && <span>↓</span>}
+                  </div>
+                  {header.column.getCanResize() && (
                     <div
-                      onMouseDown={(e) => onResizeStart(i, e)}
-                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-zinc-300"
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
                     />
                   )}
                 </th>
@@ -101,92 +248,22 @@ export default function UsersTable({ users }: { users: User[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {users.map((user) =>
-              editId === user.id ? (
-                <tr key={user.id} className="bg-zinc-50">
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={editName || null} email={editEmail || user.email} />
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Full name"
-                        className={inputCls}
-                      />
-                    </div>
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                key={row.id}
+                className={editId === row.id ? 'bg-zinc-50' : 'hover:bg-zinc-50'}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td
+                    key={cell.id}
+                    style={{ width: cell.column.getSize() }}
+                    className={editId === row.id ? 'px-6 py-3' : 'px-6 py-3.5'}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
-                  <td className="px-6 py-3">
-                    <input
-                      type="email"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      className={inputCls}
-                    />
-                  </td>
-                  <td className="px-6 py-3">
-                    <select
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value)}
-                      className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                    >
-                      <option value="admin">admin</option>
-                      <option value="LF">LF</option>
-                      <option value="learner">learner</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-3 text-zinc-400">
-                    {new Date(user.created_at).toLocaleDateString('en-GB')}
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={save}
-                        disabled={isPending}
-                        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
-                      >
-                        {isPending ? 'Saving…' : 'Save'}
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="text-xs text-zinc-400 hover:text-zinc-700"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={user.id} className="hover:bg-zinc-50">
-                  <td className="px-6 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={user.name} email={user.email} />
-                      <span className="truncate font-medium text-zinc-900">{user.name ?? '—'}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3.5 text-zinc-500 truncate">{user.email}</td>
-                  <td className="px-6 py-3.5">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        ROLE_BADGE[user.role] ?? 'bg-zinc-100 text-zinc-600'
-                      }`}
-                    >
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3.5 text-zinc-400">
-                    {new Date(user.created_at).toLocaleDateString('en-GB')}
-                  </td>
-                  <td className="px-6 py-3.5">
-                    <button
-                      onClick={() => startEdit(user)}
-                      className="text-xs text-zinc-400 hover:text-zinc-900 transition-colors"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              )
-            )}
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
