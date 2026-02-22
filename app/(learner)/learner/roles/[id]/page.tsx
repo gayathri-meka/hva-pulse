@@ -2,18 +2,16 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import RoleDetailTabs from '@/components/learner/RoleDetailTabs'
+import ApplyForm from '@/components/learner/ApplyForm'
 
 export const dynamic = 'force-dynamic'
 
 interface Props {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ tab?: string }>
 }
 
-export default async function RoleDetailPage({ params, searchParams }: Props) {
+export default async function RoleDetailPage({ params }: Props) {
   const { id } = await params
-  const { tab } = await searchParams
 
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
@@ -43,61 +41,83 @@ export default async function RoleDetailPage({ params, searchParams }: Props) {
 
   type Companies = { company_name: string } | null
   const company = role.companies as unknown as Companies
-
-  const initialTab =
-    tab === 'apply' ? 'apply' : tab === 'jd' ? 'jd' : 'overview'
+  const companyName = company?.company_name ?? ''
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
+      {/* Back */}
       <Link
         href="/learner"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
+        className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
-          className="h-4 w-4"
-        >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
         </svg>
-        Back
+        Back to roles
       </Link>
 
-      <div className="mb-1">
-        <p className="text-xs font-medium text-zinc-500">{company?.company_name}</p>
-        <h1 className="text-xl font-bold text-zinc-900">{role.role_title}</h1>
-        <p className="mt-0.5 text-sm text-zinc-400">
-          {role.location}
-          {role.salary_range ? ` · ${role.salary_range}` : ''}
+      {/* Header */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">
+          {companyName}
+        </p>
+        <h1 className="mt-1 text-2xl font-bold text-zinc-900">{role.role_title}</h1>
+
+        {/* Location + Salary */}
+        <div className="mt-3 flex flex-wrap gap-4">
+          <span className="flex items-center gap-1.5 text-base font-semibold text-zinc-800">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+              <path fillRule="evenodd" d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .976.544l.062.029.018.008.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
+            </svg>
+            {role.location}
+          </span>
+
+          {role.salary_range && (
+            <span className="flex items-center gap-1.5 text-base font-semibold text-zinc-800">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                <path d="M10.75 10.818v2.614A3.13 3.13 0 0 0 11.888 13c.482-.315.612-.648.612-.875 0-.227-.13-.56-.612-.875a3.13 3.13 0 0 0-1.138-.432ZM8.33 8.62c.053.055.115.11.184.164.208.16.46.284.736.363V6.603a2.45 2.45 0 0 0-.35.13c-.14.065-.27.143-.386.233-.377.292-.514.627-.514.909 0 .184.058.39.33.615Z" />
+                <path fillRule="evenodd" d="M9.75 17.25a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15Zm.75-12.75a.75.75 0 0 0-1.5 0v.538a3.135 3.135 0 0 0-1.976 1.377c-.39.584-.574 1.257-.574 1.96 0 .974.38 1.818 1.07 2.395.543.455 1.215.736 1.98.893v2.633a2.515 2.515 0 0 1-.802-.418.75.75 0 0 0-.93 1.175A4.022 4.022 0 0 0 9 15.304v.446a.75.75 0 0 0 1.5 0v-.468a3.614 3.614 0 0 0 1.96-1.383c.404-.6.59-1.28.59-1.899 0-.962-.37-1.801-1.044-2.382-.524-.448-1.186-.733-1.956-.899V6.603c.247.064.471.17.682.324a.75.75 0 0 0 .878-1.217 3.18 3.18 0 0 0-1.06-.532V4.5Z" clipRule="evenodd" />
+              </svg>
+              {role.salary_range}
+            </span>
+          )}
+        </div>
+
+        {/* Status */}
+        <div className="mt-3">
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+              role.status === 'open'
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-zinc-100 text-zinc-500'
+            }`}
+          >
+            {role.status === 'open' ? 'Open for applications' : 'Closed'}
+          </span>
+        </div>
+      </div>
+
+      {/* Job Description */}
+      <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-400">
+          Job Description
+        </h2>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
+          {role.job_description}
         </p>
       </div>
 
-      <RoleDetailTabs
-        role={{
-          id: role.id,
-          role_title: role.role_title,
-          location: role.location,
-          salary_range: role.salary_range as string | null,
-          job_description: role.job_description,
-          status: role.status as 'open' | 'closed',
-          company_name: company?.company_name ?? '',
-        }}
-        application={
-          application
-            ? {
-                id: application.id,
-                status: application.status,
-                resume_url: application.resume_url,
-                created_at: application.created_at,
-              }
-            : null
-        }
-        resumes={resumes ?? []}
-        initialTab={initialTab as 'overview' | 'jd' | 'apply'}
-      />
+      {/* Apply section */}
+      <div className="mt-4">
+        <ApplyForm
+          roleId={role.id}
+          roleStatus={role.status as 'open' | 'closed'}
+          location={role.location}
+          salaryRange={role.salary_range as string | null}
+          application={application ?? null}
+          resumes={resumes ?? []}
+        />
+      </div>
     </div>
   )
 }

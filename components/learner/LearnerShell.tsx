@@ -1,19 +1,19 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const NAV_ITEMS = [
-  { href: '/learner', label: 'Home' },
+  { href: '/learner',          label: 'Home' },
   { href: '/learner/my-roles', label: 'My Roles' },
-  { href: '/learner/profile', label: 'Profile' },
+  { href: '/learner/profile',  label: 'Profile' },
 ]
 
 function isActive(href: string, pathname: string) {
   return href === '/learner' ? pathname === '/learner' : pathname.startsWith(href)
 }
 
-// SVG icons
 function HomeIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -45,25 +45,39 @@ export default function LearnerShell({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      {/* Top header */}
-      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white">
+      {/* Top header — dark, matching admin sidebar branding */}
+      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
-          <span className="text-sm font-semibold text-zinc-900">HVA Pulse</span>
-          {/* Desktop nav — hidden on mobile */}
+          {/* Brand */}
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/Icon/Dark%20BG.png"
+              alt="HVA"
+              width={391}
+              height={500}
+              className="h-5 w-auto"
+            />
+            <span className="text-sm font-semibold tracking-tight text-white">Pulse</span>
+          </div>
+
+          {/* Desktop nav — hidden on mobile (bottom nav takes over) */}
           <nav className="hidden gap-1 md:flex">
-            {NAV_ITEMS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isActive(href, pathname)
-                    ? 'bg-zinc-100 text-zinc-900'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
+            {NAV_ITEMS.map(({ href, label }) => {
+              const active = isActive(href, pathname)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-zinc-800 text-white'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </Link>
+              )
+            })}
           </nav>
         </div>
       </header>

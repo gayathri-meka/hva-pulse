@@ -11,10 +11,18 @@ type Application = { id: string; status: string; resume_url: string | null; crea
 interface Props {
   roleId: string
   roleStatus: 'open' | 'closed'
+  location: string
+  salaryRange: string | null
   application: Application | null
   resumes: Resume[]
 }
 
+const STATUS_BADGE: Record<string, string> = {
+  applied:     'bg-blue-100 text-blue-700',
+  shortlisted: 'bg-amber-100 text-amber-700',
+  rejected:    'bg-red-100 text-red-700',
+  hired:       'bg-emerald-100 text-emerald-700',
+}
 const STATUS_LABEL: Record<string, string> = {
   applied:     'Applied',
   shortlisted: 'In Process',
@@ -22,36 +30,46 @@ const STATUS_LABEL: Record<string, string> = {
   hired:       'Hired',
 }
 
-export default function ApplyForm({ roleId, roleStatus, application, resumes }: Props) {
+export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes }: Props) {
   const router = useRouter()
   const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id ?? '')
-  const [confirmed, setConfirmed] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [submitted, setSubmitted] = useState(false)
+  const [readJD, setReadJD]         = useState(false)
+  const [okLocation, setOkLocation] = useState(false)
+  const [okSalary, setOkSalary]     = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [submitted, setSubmitted]   = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  // Already applied
+  // Show already-applied state
   if (application || submitted) {
     const status = application?.status ?? 'applied'
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 space-y-2">
-        <p className="text-sm font-medium text-zinc-700">You have applied to this role.</p>
-        <p className="text-xs text-zinc-400">
-          Status:{' '}
-          <span className="font-medium text-zinc-700">
-            {STATUS_LABEL[status] ?? status}
-          </span>
-        </p>
-        {application?.resume_url && (
-          <a
-            href={application.resume_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block text-xs font-medium text-emerald-600 hover:underline"
-          >
-            View submitted resume
-          </a>
-        )}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 text-emerald-600">
+              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">Application submitted</p>
+            <div className="mt-0.5 flex items-center gap-2">
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[status] ?? 'bg-zinc-100 text-zinc-600'}`}>
+                {STATUS_LABEL[status] ?? status}
+              </span>
+              {application?.resume_url && (
+                <a
+                  href={application.resume_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-emerald-600 hover:underline"
+                >
+                  View resume →
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -59,17 +77,16 @@ export default function ApplyForm({ roleId, roleStatus, application, resumes }: 
   // Role closed
   if (roleStatus === 'closed') {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-5">
-        <p className="text-sm text-zinc-500">Applications for this role are closed.</p>
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-medium text-zinc-500">This role is no longer accepting applications.</p>
       </div>
     )
   }
 
+  const allChecked = readJD && okLocation && (salaryRange ? okSalary : true)
+
   function handleSubmit() {
-    if (!confirmed) {
-      setError('Please confirm you want to apply.')
-      return
-    }
+    if (!allChecked) return
     setError(null)
     const selectedResume = resumes.find((r) => r.id === selectedResumeId)
     startTransition(async () => {
@@ -84,57 +101,120 @@ export default function ApplyForm({ roleId, roleStatus, application, resumes }: 
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-5 space-y-4">
+    <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-zinc-400">
+        Apply for this role
+      </h2>
+
       {resumes.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          You haven&apos;t uploaded a resume yet.{' '}
-          <Link href="/learner/profile" className="font-medium text-zinc-900 hover:underline">
-            Upload one in your profile
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-800">No resume uploaded yet.</p>
+          <p className="mt-1 text-xs text-amber-600">
+            You need to upload a resume before you can apply.
+          </p>
+          <Link
+            href="/learner/profile"
+            className="mt-3 inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-700 transition-colors"
+          >
+            Upload resume →
           </Link>
-          .
-        </p>
+        </div>
       ) : (
-        <>
+        <div className="space-y-5">
+          {/* Resume select */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">
-              Select resume
+            <label className="mb-1.5 block text-xs font-semibold text-zinc-600">
+              Select resume version
             </label>
             <select
               value={selectedResumeId}
               onChange={(e) => setSelectedResumeId(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900"
             >
               {resumes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.version_name}
-                </option>
+                <option key={r.id} value={r.id}>{r.version_name}</option>
               ))}
             </select>
           </div>
 
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-              className="mt-0.5 rounded border-zinc-300"
-            />
-            <span className="text-sm text-zinc-600">
-              I confirm I want to apply to this role.
-            </span>
-          </label>
+          {/* Confirmation checkboxes */}
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              Before you apply — confirm all of the following:
+            </p>
+            <div className="space-y-3 rounded-lg border border-zinc-200 p-4">
+              <Checkbox
+                checked={readJD}
+                onChange={setReadJD}
+                label="I have read the full job description above"
+              />
+              <Checkbox
+                checked={okLocation}
+                onChange={setOkLocation}
+                label={<>I am comfortable with the location: <strong className="text-zinc-900">{location}</strong></>}
+              />
+              {salaryRange && (
+                <Checkbox
+                  checked={okSalary}
+                  onChange={setOkSalary}
+                  label={<>I am comfortable with the salary range: <strong className="text-zinc-900">{salaryRange}</strong></>}
+                />
+              )}
+            </div>
+          </div>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+              {error}
+            </p>
+          )}
 
           <button
             onClick={handleSubmit}
-            disabled={isPending}
-            className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
+            disabled={!allChecked || isPending}
+            className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isPending ? 'Submitting…' : 'Submit Application'}
           </button>
-        </>
+
+          {!allChecked && (
+            <p className="text-center text-xs text-zinc-400">
+              Check all boxes above to enable the submit button.
+            </p>
+          )}
+        </div>
       )}
     </div>
+  )
+}
+
+function Checkbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: React.ReactNode
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+        checked ? 'border-zinc-900 bg-zinc-900' : 'border-zinc-300 bg-white'
+      }`}>
+        {checked && (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="none" className="h-3 w-3">
+            <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only"
+      />
+      <span className="text-sm leading-snug text-zinc-600">{label}</span>
+    </label>
   )
 }
