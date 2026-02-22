@@ -144,19 +144,26 @@ export default function ApplicationsList({ applications }: Props) {
                       )}
                     </td>
                     <td className="px-4 py-3.5">
-                      <select
-                        value={currentStatus}
-                        onChange={(e) => handleStatusChange(app.id, e.target.value)}
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
-                          STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
-                        }`}
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
-                            {s.charAt(0).toUpperCase() + s.slice(1)}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative inline-flex">
+                        <select
+                          value={currentStatus}
+                          onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                          className={`appearance-none rounded-full pl-2.5 pr-6 py-0.5 text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
+                            STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
+                          }`}
+                        >
+                          {STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s}>
+                              {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-zinc-400">
                       {new Date(app.created_at).toLocaleDateString('en-GB')}

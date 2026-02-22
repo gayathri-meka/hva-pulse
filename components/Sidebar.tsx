@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import NavLinks from './NavLinks'
 import { signOut } from '@/app/actions'
 
@@ -14,7 +15,7 @@ export default function Sidebar({ role, onClose }: Props) {
     <aside className="flex h-full w-60 flex-shrink-0 flex-col bg-zinc-950">
       {/* Logo row */}
       <div className="flex items-center justify-between px-5 py-5">
-        <div className="flex items-center gap-2.5">
+        <Link href="/dashboard" className="flex items-center gap-2.5">
           <Image
             src="/Icon/Dark%20BG.png"
             alt="HVA"
@@ -23,7 +24,7 @@ export default function Sidebar({ role, onClose }: Props) {
             className="h-6 w-auto"
           />
           <span className="text-sm font-semibold tracking-tight text-white">Pulse</span>
-        </div>
+        </Link>
         {onClose && (
           <button
             onClick={onClose}

@@ -69,6 +69,23 @@ export async function closeRole(id: string) {
   revalidatePath('/placements/analytics')
 }
 
+export async function reopenRole(id: string) {
+  await requireAdmin()
+
+  const supabase = await createServerSupabaseClient()
+  await supabase.from('roles').update({ status: 'open' }).eq('id', id)
+  revalidatePath('/placements/companies')
+  revalidatePath('/placements/analytics')
+}
+
+export async function updateJobDescription(id: string, jobDescription: string) {
+  await requireAdmin()
+
+  const supabase = await createServerSupabaseClient()
+  await supabase.from('roles').update({ job_description: jobDescription }).eq('id', id)
+  revalidatePath('/placements/companies')
+}
+
 export async function createApplication(formData: FormData) {
   await requireAdmin()
 

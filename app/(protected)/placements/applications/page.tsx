@@ -21,21 +21,22 @@ export default async function ApplicationsPage({ searchParams }: Props) {
 
   const supabase = await createServerSupabaseClient()
 
-  const [{ data: companies }, { data: roles }, { data: rawApplications }, { data: rawLearners }] =
-    await Promise.all([
-      supabase.from('companies').select('id, company_name, created_at').order('company_name'),
-      supabase.from('roles').select('id, company_id, role_title, location'),
-      supabase.from('applications').select('*').order('created_at', { ascending: false }),
-      // Join learners with users to get name and email
-      supabase.from('learners').select('learner_id, users!learners_user_id_fkey(name, email)'),
-    ])
+  const [
+    { data: companies },
+    { data: roles },
+    { data: rawApplications },
+    { data: rawUsers },
+  ] = await Promise.all([
+    supabase.from('companies').select('id, company_name, created_at').order('company_name'),
+    supabase.from('roles').select('id, company_id, role_title, location'),
+    supabase.from('applications').select('*').order('created_at', { ascending: false }),
+    // Look up learner names directly from users table by user_id
+    supabase.from('users').select('id, name, email'),
+  ])
 
   // Build lookup maps
-  const learnerMap = Object.fromEntries(
-    (rawLearners ?? []).map((l: Record<string, unknown>) => {
-      const u = l.users as { name: string; email: string } | null
-      return [l.learner_id, { name: u?.name ?? 'Unknown', email: u?.email ?? '' }]
-    })
+  const userMap = Object.fromEntries(
+    (rawUsers ?? []).map((u) => [u.id, { name: u.name ?? '', email: u.email ?? '' }])
   )
   const roleMap = Object.fromEntries(
     (roles ?? []).map((r) => [r.id, r])
@@ -61,6 +62,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
 
   const applications: ApplicationWithLearner[] = filteredApplications.map((a) => {
     const role = roleMap[a.role_id]
+    const user = userMap[a.user_id ?? '']
     return {
       id: a.id,
       role_id: a.role_id,
@@ -70,8 +72,8 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       resume_url: a.resume_url,
       created_at: a.created_at,
       updated_at: a.updated_at,
-      learner_name: learnerMap[a.learner_id]?.name ?? 'Unknown',
-      learner_email: learnerMap[a.learner_id]?.email ?? '',
+      learner_name: user?.name || 'Unknown',
+      learner_email: user?.email || '',
       company_name: companyMap[role?.company_id ?? ''] ?? 'Unknown',
       role_title: role?.role_title ?? 'Unknown',
       location: role?.location ?? '',
@@ -82,7 +84,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     <div>
       <div className="mb-5">
         <Suspense>
-          <CompanyFilter companies={companies ?? []} />
+          <CompanyFilter companies={companies ?? []} roles={roles ?? []} />
         </Suspense>
       </div>
       <ApplicationsList applications={applications} />

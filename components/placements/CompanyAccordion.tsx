@@ -16,6 +16,9 @@ export default function CompanyAccordion({ company }: Props) {
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
   const [addRoleOpen, setAddRoleOpen] = useState(false)
 
+  const totalApplicants = company.roles.reduce((s, r) => s + r.applicant_count, 0)
+  const totalHired      = company.roles.reduce((s, r) => s + r.hired_count, 0)
+
   return (
     <>
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
@@ -47,6 +50,14 @@ export default function CompanyAccordion({ company }: Props) {
           <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-500">
             {company.roles.length} role{company.roles.length !== 1 ? 's' : ''}
           </span>
+
+          {/* Company totals */}
+          {company.roles.length > 0 && (
+            <span className="text-xs text-zinc-400">
+              {totalApplicants} applicant{totalApplicants !== 1 ? 's' : ''} ·{' '}
+              <span className="font-medium text-[#5BAE5B]">{totalHired} hired</span>
+            </span>
+          )}
 
           {/* Edit company */}
           <button

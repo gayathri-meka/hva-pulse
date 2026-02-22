@@ -54,6 +54,7 @@ export default async function DashboardPage() {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
 
+  const firstName = appUser.name?.split(' ')[0] ?? appUser.email.split('@')[0]
   const supabase = await createServerSupabaseClient()
 
   // LF view — filter by lf_user_id = current user's id
@@ -76,7 +77,7 @@ export default async function DashboardPage() {
     return (
       <div>
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-zinc-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Hi, {firstName}!</h1>
           <p className="mt-1 text-sm text-zinc-500">
             {myLearners.length} learner{myLearners.length !== 1 ? 's' : ''} assigned to you
           </p>
@@ -147,7 +148,7 @@ export default async function DashboardPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-zinc-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-zinc-900">Hi, {firstName}!</h1>
         <p className="mt-1 text-sm text-zinc-500">Overview of all learners</p>
       </div>
 

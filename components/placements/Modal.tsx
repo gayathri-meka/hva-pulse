@@ -6,9 +6,10 @@ interface Props {
   title: string
   onClose: () => void
   children: React.ReactNode
+  wide?: boolean
 }
 
-export default function Modal({ title, onClose, children }: Props) {
+export default function Modal({ title, onClose, children, wide }: Props) {
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -26,7 +27,7 @@ export default function Modal({ title, onClose, children }: Props) {
         aria-hidden="true"
       />
       {/* Panel */}
-      <div className="relative w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div className={`relative w-full rounded-xl bg-white shadow-xl ${wide ? 'max-w-4xl' : 'max-w-lg'}`}>
         <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
           <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
           <button
