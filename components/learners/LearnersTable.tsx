@@ -8,7 +8,14 @@ import {
   flexRender,
   createColumnHelper,
   type SortingState,
+  type ColumnSizingState,
 } from '@tanstack/react-table'
+
+const SIZING_KEY = 'hva-col-learners'
+function loadSizing(): ColumnSizingState {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
+}
 
 const STATUS_BADGE: Record<string, string> = {
   Ongoing:        'bg-emerald-100 text-emerald-700',
@@ -78,13 +85,21 @@ const columns = [
 ]
 
 export default function LearnersTable({ learners }: { learners: LearnerRow[] }) {
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [sorting, setSorting]           = useState<SortingState>([])
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
 
   const table = useReactTable({
     data: learners,
     columns,
-    state: { sorting },
+    state: { sorting, columnSizing },
     onSortingChange: setSorting,
+    onColumnSizingChange: (updater) => {
+      setColumnSizing((old) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        localStorage.setItem(SIZING_KEY, JSON.stringify(next))
+        return next
+      })
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     columnResizeMode: 'onChange',
@@ -96,7 +111,7 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
       <div className="overflow-x-auto">
         <table
           className="border-collapse text-sm"
-          style={{ width: table.getCenterTotalSize() }}
+          style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
         >
           <thead>
             <tr className="border-b border-zinc-100 bg-zinc-50 text-left">

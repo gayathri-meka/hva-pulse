@@ -9,7 +9,14 @@ import {
   createColumnHelper,
   type SortingState,
   type RowSelectionState,
+  type ColumnSizingState,
 } from '@tanstack/react-table'
+
+const SIZING_KEY = 'hva-col-applications'
+function loadSizing(): ColumnSizingState {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
+}
 import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import type { ApplicationWithLearner } from '@/types'
@@ -31,6 +38,7 @@ interface Props {
 export default function ApplicationsList({ applications }: Props) {
   const [sorting, setSorting]           = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
   const [statusMap, setStatusMap]       = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
@@ -152,9 +160,16 @@ export default function ApplicationsList({ applications }: Props) {
   const table = useReactTable({
     data: applications,
     columns,
-    state: { sorting, rowSelection },
+    state: { sorting, rowSelection, columnSizing },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
+    onColumnSizingChange: (updater) => {
+      setColumnSizing((old) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        localStorage.setItem(SIZING_KEY, JSON.stringify(next))
+        return next
+      })
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     columnResizeMode: 'onChange',
@@ -179,7 +194,7 @@ export default function ApplicationsList({ applications }: Props) {
         <div className="overflow-x-auto">
           <table
             className="border-collapse text-sm"
-            style={{ width: table.getCenterTotalSize() }}
+            style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
           >
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">

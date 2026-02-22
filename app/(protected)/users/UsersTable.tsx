@@ -8,7 +8,14 @@ import {
   flexRender,
   createColumnHelper,
   type SortingState,
+  type ColumnSizingState,
 } from '@tanstack/react-table'
+
+const SIZING_KEY = 'hva-col-users'
+function loadSizing(): ColumnSizingState {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
+}
 import { updateUser } from './actions'
 
 type User = { id: string; email: string; name: string | null; role: string; created_at: string }
@@ -33,7 +40,8 @@ const col = createColumnHelper<User>()
 const inputCls = 'w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900'
 
 export default function UsersTable({ users }: { users: User[] }) {
-  const [sorting, setSorting]     = useState<SortingState>([])
+  const [sorting, setSorting]           = useState<SortingState>([])
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
   const [editId, setEditId]       = useState<string | null>(null)
   const [editName, setEditName]   = useState('')
   const [editEmail, setEditEmail] = useState('')
@@ -192,8 +200,15 @@ export default function UsersTable({ users }: { users: User[] }) {
   const table = useReactTable({
     data: users,
     columns,
-    state: { sorting },
+    state: { sorting, columnSizing },
     onSortingChange: setSorting,
+    onColumnSizingChange: (updater) => {
+      setColumnSizing((old) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        localStorage.setItem(SIZING_KEY, JSON.stringify(next))
+        return next
+      })
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     columnResizeMode: 'onChange',
@@ -218,7 +233,7 @@ export default function UsersTable({ users }: { users: User[] }) {
       <div className="overflow-x-auto">
         <table
           className="border-collapse text-sm"
-          style={{ width: table.getCenterTotalSize() }}
+          style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
         >
           <thead>
             <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
