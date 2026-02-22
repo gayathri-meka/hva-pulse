@@ -70,9 +70,11 @@ export default async function LearnerHomePage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       <div className="mb-5">
-        <h1 className="text-xl font-bold text-zinc-900">Roles</h1>
+        <h1 className="text-xl font-bold text-zinc-900">
+          Hey, {appUser.name?.split(' ')[0] ?? 'there'}!
+        </h1>
         <p className="mt-0.5 text-sm text-zinc-500">
-          {roleList.length} role{roleList.length !== 1 ? 's' : ''}
+          There {roleList.length === 1 ? 'is' : 'are'} {roleList.length} role{roleList.length !== 1 ? 's' : ''} available
         </p>
       </div>
 

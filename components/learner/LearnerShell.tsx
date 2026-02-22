@@ -49,16 +49,15 @@ export default function LearnerShell({ children }: { children: React.ReactNode }
       <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           {/* Brand */}
-          <div className="flex items-center gap-2.5">
+          <Link href="/learner">
             <Image
-              src="/Icon/Dark%20BG.png"
+              src="/Dark%20BG/Dark.png"
               alt="HVA"
-              width={391}
-              height={500}
-              className="h-5 w-auto"
+              width={800}
+              height={200}
+              className="h-6 w-auto"
             />
-            <span className="text-sm font-semibold tracking-tight text-white">Pulse</span>
-          </div>
+          </Link>
 
           {/* Desktop nav — hidden on mobile (bottom nav takes over) */}
           <nav className="hidden gap-1 md:flex">

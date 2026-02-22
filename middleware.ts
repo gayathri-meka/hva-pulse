@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -31,7 +31,7 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const protectedPrefixes = ['/dashboard', '/learners', '/users']
+  const protectedPrefixes = ['/dashboard', '/learners', '/users', '/placements', '/learner']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
 
   if (!user && isProtected) {
@@ -46,5 +46,12 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/learners/:path*', '/users/:path*', '/login'],
+  matcher: [
+    '/dashboard/:path*',
+    '/learners/:path*',
+    '/users/:path*',
+    '/placements/:path*',
+    '/learner/:path*',
+    '/login',
+  ],
 }
