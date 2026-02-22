@@ -126,15 +126,22 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
             <label className="mb-1.5 block text-xs font-semibold text-zinc-600">
               Select resume version
             </label>
-            <select
-              value={selectedResumeId}
-              onChange={(e) => setSelectedResumeId(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            >
-              {resumes.map((r) => (
-                <option key={r.id} value={r.id}>{r.version_name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedResumeId}
+                onChange={(e) => setSelectedResumeId(e.target.value)}
+                className="w-full appearance-none rounded-lg border border-zinc-200 bg-white px-3 py-2.5 pr-9 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              >
+                {resumes.map((r) => (
+                  <option key={r.id} value={r.id}>{r.version_name}</option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
           </div>
 
           {/* Confirmation checkboxes */}
