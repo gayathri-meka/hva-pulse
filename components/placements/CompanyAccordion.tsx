@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Modal from './Modal'
 import CompanyForm from './CompanyForm'
 import RoleForm from './RoleForm'
 import RoleRow from './RoleRow'
+import { deleteCompany } from '@/app/(protected)/placements/actions'
 import type { CompanyWithRoles } from '@/types'
 
 interface Props {
@@ -15,7 +16,13 @@ interface Props {
 
 export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
-  const [addRoleOpen, setAddRoleOpen]     = useState(false)
+  const [addRoleOpen, setAddRoleOpen]         = useState(false)
+  const [confirmDelete, setConfirmDelete]     = useState(false)
+  const [isPending, startTransition]          = useTransition()
+
+  function handleDelete() {
+    startTransition(() => deleteCompany(company.id))
+  }
 
   const totalApplicants = company.roles.reduce((s, r) => s + r.applicant_count, 0)
   const totalHired      = company.roles.reduce((s, r) => s + r.hired_count, 0)
@@ -65,16 +72,48 @@ export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
                 <div className="mx-1 h-4 w-px bg-zinc-200" />
               </>
             )}
-            <button
-              type="button"
-              onClick={() => setEditCompanyOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
-                <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L5 13H3v-2L11.5 2.5z" strokeLinejoin="round" />
-              </svg>
-              Edit
-            </button>
+            {confirmDelete ? (
+              <>
+                <span className="text-xs text-zinc-500">Delete company?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-zinc-400 hover:text-zinc-700"
+                >
+                  No
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditCompanyOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+                    <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L5 13H3v-2L11.5 2.5z" strokeLinejoin="round" />
+                  </svg>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={isPending}
+                  title="Delete company"
+                  className="inline-flex items-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                    <path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => setAddRoleOpen(true)}

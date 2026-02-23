@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { closeRole, reopenRole } from '@/app/(protected)/placements/actions'
+import { closeRole, reopenRole, deleteRole } from '@/app/(protected)/placements/actions'
 import Modal from './Modal'
 import RoleForm from './RoleForm'
 import type { RoleWithCounts } from '@/types'
@@ -13,8 +13,9 @@ interface Props {
 }
 
 export default function RoleRow({ role, companyName }: Props) {
-  const [editOpen, setEditOpen] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [editOpen, setEditOpen]       = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [isPending, startTransition]  = useTransition()
 
   function handleClose() {
     startTransition(() => closeRole(role.id))
@@ -22,6 +23,10 @@ export default function RoleRow({ role, companyName }: Props) {
 
   function handleReopen() {
     startTransition(() => reopenRole(role.id))
+  }
+
+  function handleDelete() {
+    startTransition(() => deleteRole(role.id))
   }
 
   return (
@@ -100,6 +105,37 @@ export default function RoleRow({ role, companyName }: Props) {
             >
               Applications →
             </Link>
+
+            {/* Delete role */}
+            {confirmDelete ? (
+              <>
+                <span className="text-xs text-zinc-500">Delete?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-zinc-400 hover:text-zinc-700"
+                >
+                  No
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                disabled={isPending}
+                title="Delete role"
+                className="inline-flex items-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                  <path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 

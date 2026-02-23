@@ -128,6 +128,26 @@ export async function deleteApplication(id: string) {
   revalidatePath('/placements/analytics')
 }
 
+export async function deleteRole(id: string) {
+  await requireAdmin()
+
+  const supabase = await createServerSupabaseClient()
+  await supabase.from('roles').delete().eq('id', id)
+  revalidatePath('/placements/companies')
+  revalidatePath('/placements/applications')
+  revalidatePath('/placements/analytics')
+}
+
+export async function deleteCompany(id: string) {
+  await requireAdmin()
+
+  const supabase = await createServerSupabaseClient()
+  await supabase.from('companies').delete().eq('id', id)
+  revalidatePath('/placements/companies')
+  revalidatePath('/placements/applications')
+  revalidatePath('/placements/analytics')
+}
+
 export async function reorderCompanies(orderedIds: string[]) {
   await requireAdmin()
 
