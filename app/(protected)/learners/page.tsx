@@ -9,11 +9,11 @@ import LearnersTable from '@/components/learners/LearnersTable'
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ status?: string; batch?: string; viewAll?: string }>
+  searchParams: Promise<{ status?: string; batch?: string; lf?: string; viewAll?: string }>
 }
 
 export default async function LearnersPage({ searchParams }: Props) {
-  const { status, batch, viewAll } = await searchParams
+  const { status, batch, lf, viewAll } = await searchParams
 
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
@@ -29,7 +29,8 @@ export default async function LearnersPage({ searchParams }: Props) {
 
   if (filterByLF) query = query.eq('lf_user_id', appUser.id)
   if (status) query = query.eq('status', status)
-  if (batch) query = query.eq('batch_name', batch)
+  if (batch)  query = query.eq('batch_name', batch)
+  if (lf)     query = query.eq('lf_name', lf)
 
   const { data: rawLearners } = await query
 
@@ -48,7 +49,7 @@ export default async function LearnersPage({ searchParams }: Props) {
   // Fetch distinct filter options
   const { data: allLearners } = await supabase
     .from('learners')
-    .select('status, batch_name')
+    .select('status, batch_name, lf_name')
 
   const statuses = Array.from(
     new Set(allLearners?.map((l) => l.status).filter(Boolean))
@@ -56,6 +57,10 @@ export default async function LearnersPage({ searchParams }: Props) {
 
   const batches = Array.from(
     new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))
+  ).sort() as string[]
+
+  const lfs = Array.from(
+    new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))
   ).sort() as string[]
 
   const title = appUser.role === 'LF' && viewAll !== '1' ? 'My Learners' : 'Learners'
@@ -69,6 +74,7 @@ export default async function LearnersPage({ searchParams }: Props) {
             {learners.length} result{learners.length !== 1 ? 's' : ''}
             {status ? ` · ${status}` : ''}
             {batch ? ` · ${batch}` : ''}
+            {lf ? ` · ${lf}` : ''}
           </p>
         </div>
         {appUser.role === 'admin' && <SyncButton />}
@@ -79,6 +85,7 @@ export default async function LearnersPage({ searchParams }: Props) {
           <LearnersFilters
             statuses={statuses}
             batches={batches}
+            lfs={lfs}
             isLF={appUser.role === 'LF'}
             viewAll={viewAll === '1'}
           />

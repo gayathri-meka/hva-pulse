@@ -127,15 +127,22 @@ export default function UsersTable({ users }: { users: User[] }) {
         const user = info.row.original
         if (editId === user.id) {
           return (
-            <select
-              value={editRole}
-              onChange={(e) => setEditRole(e.target.value)}
-              className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            >
-              <option value="admin">admin</option>
-              <option value="LF">LF</option>
-              <option value="learner">learner</option>
-            </select>
+            <div className="relative">
+              <select
+                value={editRole}
+                onChange={(e) => setEditRole(e.target.value)}
+                className="w-full appearance-none rounded-md border border-zinc-200 bg-white py-1.5 pl-2.5 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="admin">admin</option>
+                <option value="LF">LF</option>
+                <option value="learner">learner</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
           )
         }
         return (
