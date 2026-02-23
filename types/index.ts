@@ -25,6 +25,7 @@ export type Company = { id: string; company_name: string; sort_order?: number | 
 export type Role = {
   id: string; company_id: string; role_title: string; location: string
   salary_range: string | null; job_description: string
+  jd_attachment_url?: string | null
   status: 'open' | 'closed'; created_at: string
 }
 

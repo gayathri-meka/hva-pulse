@@ -67,6 +67,30 @@ export default function RoleForm({ role, companyId, onClose }: Props) {
               placeholder="e.g. ₹4–6 LPA"
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-700">
+              JD attachment <span className="text-zinc-400">(optional)</span>
+            </label>
+            {role?.jd_attachment_url && (
+              <a
+                href={role.jd_attachment_url}
+                target="_blank"
+                rel="noreferrer"
+                className="mb-2 flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                  <path fillRule="evenodd" d="M4 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.414A2 2 0 0 0 13.414 5L11 2.586A2 2 0 0 0 9.586 2H4Zm5 1.5v2A1.5 1.5 0 0 0 10.5 7H13v5a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 12V4a.5.5 0 0 1 .5-.5h5Z" clipRule="evenodd" />
+                </svg>
+                Current attachment
+              </a>
+            )}
+            <input
+              type="file"
+              name="jd_attachment"
+              accept=".pdf,.doc,.docx"
+              className="w-full text-xs text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
+            />
+          </div>
         </div>
 
         {/* Right column — JD fills remaining height */}

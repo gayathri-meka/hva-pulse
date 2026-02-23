@@ -24,8 +24,9 @@ export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
     startTransition(() => deleteCompany(company.id))
   }
 
-  const totalApplicants = company.roles.reduce((s, r) => s + r.applicant_count, 0)
-  const totalHired      = company.roles.reduce((s, r) => s + r.hired_count, 0)
+  const totalApplicants   = company.roles.reduce((s, r) => s + r.applicant_count, 0)
+  const totalHired        = company.roles.reduce((s, r) => s + r.hired_count, 0)
+  const totalNI           = company.roles.reduce((s, r) => s + r.not_interested_count, 0)
 
   return (
     <>
@@ -69,6 +70,11 @@ export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
                 <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                   {totalHired} hired
                 </span>
+                {totalNI > 0 && (
+                  <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
+                    {totalNI} not interested
+                  </span>
+                )}
                 <div className="mx-1 h-4 w-px bg-zinc-200" />
               </>
             )}

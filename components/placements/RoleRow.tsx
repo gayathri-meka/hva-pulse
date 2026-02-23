@@ -66,6 +66,20 @@ export default function RoleRow({ role, companyName }: Props) {
                 {role.not_interested_count} not interested
               </span>
             )}
+            {role.jd_attachment_url && (
+              <a
+                href={role.jd_attachment_url}
+                target="_blank"
+                rel="noreferrer"
+                title="Download JD"
+                className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500 hover:bg-zinc-200"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                  <path fillRule="evenodd" d="M4 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.414A2 2 0 0 0 13.414 5L11 2.586A2 2 0 0 0 9.586 2H4Zm5 1.5v2A1.5 1.5 0 0 0 10.5 7H13v5a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 12V4a.5.5 0 0 1 .5-.5h5Z" clipRule="evenodd" />
+                </svg>
+                JD
+              </a>
+            )}
             <div className="mx-1 h-4 w-px bg-zinc-200" />
             <button
               onClick={() => setEditOpen(true)}

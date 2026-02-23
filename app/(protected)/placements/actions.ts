@@ -2,8 +2,24 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
+
+async function uploadJdAttachment(file: File, roleId: string): Promise<string | null> {
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+  const ext  = file.name.split('.').pop() ?? 'pdf'
+  const path = `${roleId}.${ext}`
+  const { error } = await admin.storage
+    .from('jd-files')
+    .upload(path, file, { upsert: true, contentType: file.type })
+  if (error) { console.error('JD upload error:', error.message); return null }
+  const { data } = admin.storage.from('jd-files').getPublicUrl(path)
+  return data.publicUrl
+}
 
 async function requireAdmin() {
   const appUser = await getAppUser()
@@ -45,14 +61,25 @@ export async function updateCompany(id: string, formData: FormData) {
 export async function createRole(formData: FormData) {
   await requireAdmin()
 
-  const company_id = (formData.get('company_id') as string).trim()
-  const role_title = (formData.get('role_title') as string).trim()
-  const location = (formData.get('location') as string).trim()
-  const salary_range = ((formData.get('salary_range') as string) ?? '').trim() || null
+  const company_id      = (formData.get('company_id') as string).trim()
+  const role_title      = (formData.get('role_title') as string).trim()
+  const location        = (formData.get('location') as string).trim()
+  const salary_range    = ((formData.get('salary_range') as string) ?? '').trim() || null
   const job_description = (formData.get('job_description') as string).trim()
+  const jdFile          = formData.get('jd_attachment') as File | null
 
   const supabase = await createServerSupabaseClient()
-  await supabase.from('roles').insert({ company_id, role_title, location, salary_range, job_description })
+  const { data: newRole } = await supabase
+    .from('roles')
+    .insert({ company_id, role_title, location, salary_range, job_description })
+    .select('id')
+    .single()
+
+  if (newRole && jdFile && jdFile.size > 0) {
+    const url = await uploadJdAttachment(jdFile, newRole.id)
+    if (url) await supabase.from('roles').update({ jd_attachment_url: url }).eq('id', newRole.id)
+  }
+
   revalidatePath('/placements/companies')
   revalidatePath('/placements/applications')
 }
@@ -60,13 +87,21 @@ export async function createRole(formData: FormData) {
 export async function updateRole(id: string, formData: FormData) {
   await requireAdmin()
 
-  const role_title = (formData.get('role_title') as string).trim()
-  const location = (formData.get('location') as string).trim()
-  const salary_range = ((formData.get('salary_range') as string) ?? '').trim() || null
+  const role_title      = (formData.get('role_title') as string).trim()
+  const location        = (formData.get('location') as string).trim()
+  const salary_range    = ((formData.get('salary_range') as string) ?? '').trim() || null
   const job_description = (formData.get('job_description') as string).trim()
+  const jdFile          = formData.get('jd_attachment') as File | null
+
+  const updates: Record<string, unknown> = { role_title, location, salary_range, job_description }
+
+  if (jdFile && jdFile.size > 0) {
+    const url = await uploadJdAttachment(jdFile, id)
+    if (url) updates.jd_attachment_url = url
+  }
 
   const supabase = await createServerSupabaseClient()
-  await supabase.from('roles').update({ role_title, location, salary_range, job_description }).eq('id', id)
+  await supabase.from('roles').update(updates).eq('id', id)
   revalidatePath('/placements/companies')
   revalidatePath('/placements/applications')
 }
