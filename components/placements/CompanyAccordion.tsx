@@ -117,7 +117,7 @@ export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
 
       {/* Add role modal — fullscreen */}
       {addRoleOpen && (
-        <Modal title="Add role" onClose={() => setAddRoleOpen(false)} full>
+        <Modal title={`Add role — ${company.company_name}`} onClose={() => setAddRoleOpen(false)} full>
           <RoleForm companyId={company.id} onClose={() => setAddRoleOpen(false)} />
         </Modal>
       )}

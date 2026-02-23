@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -79,10 +79,38 @@ export default function CompaniesListClient({
 }: {
   companies: CompanyWithRoles[]
 }) {
-  const [companies, setCompanies] = useState(initial)
-  const [openIds, setOpenIds]     = useState<Set<string>>(
+  // orderedIds drives display order; initial is the source of truth for data
+  const [orderedIds, setOrderedIds] = useState<string[]>(() => initial.map((c) => c.id))
+  const [openIds, setOpenIds]       = useState<Set<string>>(
     () => new Set(initial.map((c) => c.id))
   )
+
+  // Sync when server re-renders (new company added, role updated, etc.)
+  useEffect(() => {
+    setOrderedIds((prev) => {
+      const currentIds = new Set(initial.map((c) => c.id))
+      const prevSet    = new Set(prev)
+      // Remove deleted, keep existing order
+      const filtered = prev.filter((id) => currentIds.has(id))
+      // Prepend new companies (they'll be at top per server sort_order)
+      const newIds = initial.map((c) => c.id).filter((id) => !prevSet.has(id))
+      return [...newIds, ...filtered]
+    })
+    // Auto-expand newly added companies
+    setOpenIds((prev) => {
+      const prevSet = new Set(prev)
+      const newIds  = initial.map((c) => c.id).filter((id) => !prevSet.has(id))
+      if (newIds.length === 0) return prev
+      const next = new Set(prev)
+      newIds.forEach((id) => next.add(id))
+      return next
+    })
+  }, [initial])
+
+  // Derive ordered, fresh company data
+  const companies = orderedIds
+    .map((id) => initial.find((c) => c.id === id))
+    .filter((c): c is CompanyWithRoles => c != null)
 
   const allOpen = openIds.size === companies.length
 
@@ -107,11 +135,11 @@ export default function CompaniesListClient({
     const { active, over } = event
     if (!over || active.id === over.id) return
 
-    setCompanies((prev) => {
-      const oldIndex  = prev.findIndex((c) => c.id === active.id)
-      const newIndex  = prev.findIndex((c) => c.id === over.id)
+    setOrderedIds((prev) => {
+      const oldIndex  = prev.indexOf(active.id as string)
+      const newIndex  = prev.indexOf(over.id as string)
       const reordered = arrayMove(prev, oldIndex, newIndex)
-      reorderCompanies(reordered.map((c) => c.id))
+      reorderCompanies(reordered)
       return reordered
     })
   }

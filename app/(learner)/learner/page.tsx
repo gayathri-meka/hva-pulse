@@ -22,7 +22,7 @@ export default async function LearnerHomePage() {
       .from('roles')
       .select('id, company_id, role_title, location, salary_range, status')
       .order('created_at', { ascending: false }),
-    supabase.from('companies').select('id, company_name'),
+    supabase.from('companies').select('id, company_name, sort_order'),
     supabase
       .from('applications')
       .select('id, role_id, status')
@@ -36,6 +36,9 @@ export default async function LearnerHomePage() {
   const companyMap = Object.fromEntries(
     (companies ?? []).map((c) => [c.id, c.company_name]),
   )
+  const companySortMap = Object.fromEntries(
+    (companies ?? []).map((c) => [c.id, c.sort_order ?? 9999]),
+  )
   const appMap = Object.fromEntries(
     (applications ?? []).map((a) => [a.role_id, { id: a.id, status: a.status }]),
   )
@@ -43,7 +46,9 @@ export default async function LearnerHomePage() {
     (preferences ?? []).map((p) => [p.role_id, p.preference]),
   )
 
-  const roleList = (roles ?? []).map((role) => {
+  const roleList = [...(roles ?? [])].sort((a, b) =>
+    (companySortMap[a.company_id] ?? 9999) - (companySortMap[b.company_id] ?? 9999)
+  ).map((role) => {
     const app = appMap[role.id]
     const pref = prefMap[role.id]
 

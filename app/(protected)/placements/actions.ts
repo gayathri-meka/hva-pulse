@@ -17,7 +17,18 @@ export async function createCompany(formData: FormData) {
   const company_name = (formData.get('company_name') as string).trim()
 
   const supabase = await createServerSupabaseClient()
-  await supabase.from('companies').insert({ company_name })
+
+  // Shift all existing companies down to make room at position 0
+  const { data: existing } = await supabase.from('companies').select('id, sort_order')
+  if (existing && existing.length > 0) {
+    await Promise.all(
+      existing.map((c) =>
+        supabase.from('companies').update({ sort_order: (c.sort_order ?? 0) + 1 }).eq('id', c.id)
+      )
+    )
+  }
+
+  await supabase.from('companies').insert({ company_name, sort_order: 0 })
   revalidatePath('/placements/companies')
 }
 
