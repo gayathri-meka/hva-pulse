@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -22,6 +22,7 @@ export type MatchingRow = {
   lf:         string
   prs_score:  number | null
   status:     MatchingStatus
+  reasons:    string[]
 }
 
 const STATUS_BADGE: Record<MatchingStatus, string> = {
@@ -40,6 +41,52 @@ const STATUS_LABEL: Record<MatchingStatus, string> = {
   hired:          'Hired',
   not_applied:    'Not Applied',
   not_interested: 'Not Interested',
+}
+
+function ReasonsPopover({ reasons }: { reasons: string[] }) {
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos]   = useState({ top: 0, left: 0 })
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setOpen((v) => !v)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        title="View reasons"
+        className="ml-1.5 inline-flex items-center text-zinc-400 hover:text-zinc-600"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path fillRule="evenodd" d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0ZM9 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM6.75 8a.75.75 0 0 0 0 1.5h.75v1.75a.75.75 0 0 0 1.5 0V8a.75.75 0 0 0-.75-.75h-1.5Z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-50 w-56 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            <p className="mb-2 text-xs font-semibold text-zinc-700">Not interested because:</p>
+            <ul className="space-y-1">
+              {reasons.map((r) => (
+                <li key={r} className="text-xs text-zinc-500">• {r}</li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
+    </>
+  )
 }
 
 const col = createColumnHelper<MatchingRow>()
@@ -71,12 +118,18 @@ const columns = [
   }),
   col.accessor('status', {
     header: 'Status',
-    size: 140,
+    size: 160,
     cell: (info) => {
-      const s = info.getValue()
+      const s       = info.getValue()
+      const reasons = info.row.original.reasons
       return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[s]}`}>
-          {STATUS_LABEL[s]}
+        <span className="inline-flex items-center">
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[s]}`}>
+            {STATUS_LABEL[s]}
+          </span>
+          {s === 'not_interested' && reasons.length > 0 && (
+            <ReasonsPopover reasons={reasons} />
+          )}
         </span>
       )
     },

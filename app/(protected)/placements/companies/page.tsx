@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import AddCompanyButton from '@/components/placements/AddCompanyButton'
-import CompanyAccordion from '@/components/placements/CompanyAccordion'
+import CompaniesListClient from '@/components/placements/CompaniesListClient'
 import type { CompanyWithRoles, RoleWithCounts } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -15,8 +15,10 @@ export default async function CompaniesPage() {
   const supabase = await createServerSupabaseClient()
 
   const [{ data: companies }, { data: roles }, { data: applications }, { data: notInterested }] = await Promise.all([
-    supabase.from('companies').select('*').order('created_at', { ascending: false }),
-    supabase.from('roles').select('*').order('created_at', { ascending: false }),
+    supabase.from('companies').select('*')
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true }),
+    supabase.from('roles').select('*').order('created_at', { ascending: true }),
     supabase.from('applications').select('role_id, status'),
     supabase.from('role_preferences').select('role_id').eq('preference', 'not_interested'),
   ])
@@ -34,19 +36,23 @@ export default async function CompaniesPage() {
         const roleApps = (applications ?? []).filter((a) => a.role_id === r.id)
         return {
           ...r,
-          applicant_count: roleApps.length,
-          hired_count: roleApps.filter((a) => a.status === 'hired').length,
+          applicant_count:      roleApps.length,
+          hired_count:          roleApps.filter((a) => a.status === 'hired').length,
           not_interested_count: niMap[r.id] ?? 0,
         }
       })
     return { ...c, roles: companyRoles }
   })
 
+  const totalRoles = companiesWithRoles.reduce((s, c) => s + c.roles.length, 0)
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between gap-4">
         <p className="text-sm text-zinc-500">
           {companiesWithRoles.length} compan{companiesWithRoles.length !== 1 ? 'ies' : 'y'}
+          {' · '}
+          {totalRoles} role{totalRoles !== 1 ? 's' : ''}
         </p>
         <AddCompanyButton />
       </div>
@@ -56,11 +62,7 @@ export default async function CompaniesPage() {
           <p className="text-sm text-zinc-400">No companies yet. Add your first one above.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {companiesWithRoles.map((company) => (
-            <CompanyAccordion key={company.id} company={company} />
-          ))}
-        </div>
+        <CompaniesListClient companies={companiesWithRoles} />
       )}
     </div>
   )

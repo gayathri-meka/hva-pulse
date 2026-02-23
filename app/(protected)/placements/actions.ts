@@ -116,3 +116,15 @@ export async function deleteApplication(id: string) {
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
 }
+
+export async function reorderCompanies(orderedIds: string[]) {
+  await requireAdmin()
+
+  const supabase = await createServerSupabaseClient()
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase.from('companies').update({ sort_order: index }).eq('id', id)
+    )
+  )
+  revalidatePath('/placements/companies')
+}

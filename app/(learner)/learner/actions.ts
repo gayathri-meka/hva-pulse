@@ -56,12 +56,12 @@ export async function applyToRole(
   return {}
 }
 
-export async function markNotInterested(roleId: string): Promise<{ error?: string }> {
+export async function markNotInterested(roleId: string, reasons: string[] = []): Promise<{ error?: string }> {
   const appUser = await requireLearner()
   const supabase = await createServerSupabaseClient()
 
   const { error } = await supabase.from('role_preferences').upsert(
-    { user_id: appUser.id, role_id: roleId, preference: 'not_interested' },
+    { user_id: appUser.id, role_id: roleId, preference: 'not_interested', reasons },
     { onConflict: 'user_id,role_id' },
   )
 

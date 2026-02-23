@@ -8,11 +8,12 @@ import RoleRow from './RoleRow'
 import type { CompanyWithRoles } from '@/types'
 
 interface Props {
-  company: CompanyWithRoles
+  company:  CompanyWithRoles
+  isOpen:   boolean
+  onToggle: () => void
 }
 
-export default function CompanyAccordion({ company }: Props) {
-  const [expanded, setExpanded]           = useState(true)
+export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
   const [addRoleOpen, setAddRoleOpen]     = useState(false)
 
@@ -27,9 +28,9 @@ export default function CompanyAccordion({ company }: Props) {
           {/* Toggle button: chevron + name + role count + stats */}
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
+            onClick={onToggle}
             className="flex-1 text-left"
-            aria-expanded={expanded}
+            aria-expanded={isOpen}
           >
             <div className="flex items-center gap-2.5">
               <svg
@@ -39,7 +40,7 @@ export default function CompanyAccordion({ company }: Props) {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className={`shrink-0 transition-transform text-zinc-400 ${expanded ? 'rotate-0' : '-rotate-90'}`}
+                className={`shrink-0 transition-transform text-zinc-400 ${isOpen ? 'rotate-0' : '-rotate-90'}`}
               >
                 <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -85,7 +86,7 @@ export default function CompanyAccordion({ company }: Props) {
         </div>
 
         {/* Role list */}
-        {expanded && (
+        {isOpen && (
           <div className="border-t border-zinc-100 px-5 py-3 space-y-2">
             {company.roles.length === 0 ? (
               <p className="py-4 text-center text-sm text-zinc-400">

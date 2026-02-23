@@ -36,7 +36,7 @@ export default async function MatchingPage({ searchParams }: Props) {
       ? supabase.from('applications').select('user_id, status').eq('role_id', roleId)
       : Promise.resolve({ data: null, error: null }),
     roleId
-      ? supabase.from('role_preferences').select('user_id').eq('role_id', roleId).eq('preference', 'not_interested')
+      ? supabase.from('role_preferences').select('user_id, reasons').eq('role_id', roleId).eq('preference', 'not_interested')
       : Promise.resolve({ data: null, error: null }),
   ])
 
@@ -86,9 +86,14 @@ export default async function MatchingPage({ searchParams }: Props) {
       .filter((a) => a.user_id)
       .map((a) => [a.user_id!, a.status as MatchingStatus])
   )
-  // Set of user_ids who marked not_interested
+  // Set of user_ids who marked not_interested + their reasons
   const notInterestedSet = new Set(
     (rawPreferences ?? []).map((p) => p.user_id).filter(Boolean)
+  )
+  const reasonsMap = Object.fromEntries(
+    (rawPreferences ?? [])
+      .filter((p) => p.user_id)
+      .map((p) => [p.user_id!, (p.reasons as string[]) ?? []])
   )
 
   const rows: MatchingRow[] = !roleId ? [] : filtered.map((l) => {
@@ -107,6 +112,7 @@ export default async function MatchingPage({ searchParams }: Props) {
       lf:         l.lf,
       prs_score:  null, // synced from Google Sheet later
       status,
+      reasons:    status === 'not_interested' && l.user_id ? (reasonsMap[l.user_id] ?? []) : [],
     }
   })
 

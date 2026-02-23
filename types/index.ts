@@ -20,7 +20,7 @@ export type Learner = {
   email: string
 }
 
-export type Company = { id: string; company_name: string; created_at: string }
+export type Company = { id: string; company_name: string; sort_order?: number | null; created_at: string }
 
 export type Role = {
   id: string; company_id: string; role_title: string; location: string
@@ -49,7 +49,7 @@ export type Resume = {
 
 export type RolePreference = {
   id: string; user_id: string; role_id: string
-  preference: 'not_interested'; created_at: string
+  preference: 'not_interested'; reasons: string[]; created_at: string
 }
 
 export type MyStatus =
