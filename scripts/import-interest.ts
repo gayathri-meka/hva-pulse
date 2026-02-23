@@ -193,11 +193,28 @@ async function main() {
   console.log('\n=== INSERTING ===')
 
   if (applications.length > 0) {
-    const { error } = await supabase
+    // No unique constraint on (role_id, user_id), so fetch existing and skip dupes
+    const { data: existing } = await supabase
       .from('applications')
-      .upsert(applications, { onConflict: 'role_id,user_id' })
-    if (error) console.error(`  ✗ applications: ${error.message}`)
-    else       console.log(`  ✓ Upserted ${applications.length} applications`)
+      .select('role_id, user_id')
+
+    const existingSet = new Set(
+      (existing ?? []).map((r) => `${r.role_id}::${r.user_id}`)
+    )
+
+    const toInsert = applications.filter(
+      (a) => !existingSet.has(`${a.role_id}::${a.user_id}`)
+    )
+    const dupeCount = applications.length - toInsert.length
+    if (dupeCount > 0) console.log(`  ℹ Skipping ${dupeCount} already-existing applications`)
+
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from('applications').insert(toInsert)
+      if (error) console.error(`  ✗ applications: ${error.message}`)
+      else       console.log(`  ✓ Inserted ${toInsert.length} applications`)
+    } else {
+      console.log('  ℹ No new applications to insert')
+    }
   }
 
   if (preferences.length > 0) {
