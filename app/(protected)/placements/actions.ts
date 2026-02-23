@@ -7,18 +7,26 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 
 async function uploadJdAttachment(file: File, roleId: string): Promise<string | null> {
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-  const ext  = file.name.split('.').pop() ?? 'pdf'
-  const path = `${roleId}.${ext}`
-  const { error } = await admin.storage
-    .from('jd-files')
-    .upload(path, file, { upsert: true, contentType: file.type })
-  if (error) { console.error('JD upload error:', error.message); return null }
-  const { data } = admin.storage.from('jd-files').getPublicUrl(path)
-  return data.publicUrl
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  if (!url || !key) {
+    console.error('JD upload skipped: SUPABASE_SERVICE_ROLE_KEY not set')
+    return null
+  }
+  try {
+    const admin = createClient(url, key)
+    const ext   = file.name.split('.').pop() ?? 'pdf'
+    const path  = `${roleId}.${ext}`
+    const { error } = await admin.storage
+      .from('jd-files')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (error) { console.error('JD upload error:', error.message); return null }
+    const { data } = admin.storage.from('jd-files').getPublicUrl(path)
+    return data.publicUrl
+  } catch (err) {
+    console.error('JD upload exception:', err)
+    return null
+  }
 }
 
 async function requireAdmin() {
