@@ -34,15 +34,22 @@ export default function UserForm({ error }: { error?: string }) {
 
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-zinc-500">Role</label>
-          <select
-            name="role"
-            defaultValue="admin"
-            className="rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
-          >
-            <option value="admin">Admin</option>
-            <option value="LF">LF</option>
-            <option value="learner">Learner</option>
-          </select>
+          <div className="relative">
+            <select
+              name="role"
+              defaultValue="admin"
+              className="appearance-none rounded-lg border border-zinc-200 py-2 pl-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+            >
+              <option value="admin">Admin</option>
+              <option value="LF">LF</option>
+              <option value="learner">Learner</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
 
         <button

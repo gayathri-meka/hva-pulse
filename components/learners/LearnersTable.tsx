@@ -39,15 +39,15 @@ type LearnerRow = {
 const col = createColumnHelper<LearnerRow>()
 
 const columns = [
-  col.accessor('name', {
-    header: 'Name',
-    size: 200,
-    cell: (info) => <span className="font-medium text-zinc-900">{info.getValue()}</span>,
-  }),
   col.accessor('learner_id', {
     header: 'ID',
     size: 90,
     cell: (info) => <span className="font-mono text-xs text-zinc-400">{info.getValue()}</span>,
+  }),
+  col.accessor('name', {
+    header: 'Name',
+    size: 200,
+    cell: (info) => <span className="font-medium text-zinc-900">{info.getValue()}</span>,
   }),
   col.accessor('email', {
     header: 'Email',
