@@ -51,7 +51,6 @@ export async function applyToRole(
   if (error) return { error: error.message }
 
   revalidatePath('/learner')
-  revalidatePath('/learner/my-roles')
   revalidatePath(`/learner/roles/${roleId}`)
   return {}
 }
