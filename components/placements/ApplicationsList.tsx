@@ -36,6 +36,11 @@ const STATUS_BADGE: Record<string, string> = {
   rejected:        'bg-red-100 text-red-700',
   hired:           'bg-emerald-100 text-emerald-700',
 }
+const STATUS_SORT_ORDER: Record<string, number> = {
+  applied: 0, shortlisted: 1, hired: 2, not_shortlisted: 3, rejected: 4,
+}
+
+type PendingChange = { id: string; newStatus: 'not_shortlisted' | 'rejected' } | null
 
 const col = createColumnHelper<ApplicationWithLearner>()
 
@@ -50,11 +55,36 @@ export default function ApplicationsList({ applications }: Props) {
   const [statusMap, setStatusMap]       = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
+  const [pendingChange, setPendingChange] = useState<PendingChange>(null)
+  const [noteText, setNoteText]           = useState('')
+  const [noteError, setNoteError]         = useState(false)
   const [, startTransition] = useTransition()
 
   function handleStatusChange(id: string, newStatus: string) {
+    if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
+      setPendingChange({ id, newStatus })
+      setNoteText('')
+      setNoteError(false)
+      return
+    }
     setStatusMap((prev) => ({ ...prev, [id]: newStatus }))
     startTransition(() => updateApplicationStatus(id, newStatus))
+  }
+
+  function handleModalConfirm() {
+    if (!noteText.trim()) { setNoteError(true); return }
+    const { id, newStatus } = pendingChange!
+    setStatusMap((prev) => ({ ...prev, [id]: newStatus }))
+    startTransition(() => updateApplicationStatus(id, newStatus, noteText.trim()))
+    setPendingChange(null)
+    setNoteText('')
+    setNoteError(false)
+  }
+
+  function handleModalCancel() {
+    setPendingChange(null)
+    setNoteText('')
+    setNoteError(false)
   }
 
   const columns = [
@@ -125,31 +155,51 @@ export default function ApplicationsList({ applications }: Props) {
     }),
     col.accessor('status', {
       header: 'Status',
-      size: 140,
-      enableSorting: false,
+      size: 160,
+      sortingFn: (rowA, rowB) => {
+        const a = STATUS_SORT_ORDER[statusMap[rowA.original.id] ?? rowA.original.status] ?? 99
+        const b = STATUS_SORT_ORDER[statusMap[rowB.original.id] ?? rowB.original.status] ?? 99
+        return a - b
+      },
       cell: (info) => {
         const id            = info.row.original.id
-        const currentStatus = statusMap[id] ?? info.getValue()
+        const currentStatus =
+          pendingChange?.id === id
+            ? pendingChange.newStatus
+            : (statusMap[id] ?? info.getValue())
+        const note =
+          currentStatus === 'not_shortlisted'
+            ? info.row.original.not_shortlisted_reason
+            : currentStatus === 'rejected'
+              ? info.row.original.rejection_feedback
+              : null
         return (
-          <div className="relative inline-flex">
-            <select
-              value={currentStatus}
-              onChange={(e) => handleStatusChange(id, e.target.value)}
-              className={`appearance-none cursor-pointer rounded-full border-0 pl-2.5 pr-6 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
-                STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
-              }`}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABEL[s] ?? s}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
-                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
-              </svg>
+          <div>
+            <div className="relative inline-flex">
+              <select
+                value={currentStatus}
+                onChange={(e) => handleStatusChange(id, e.target.value)}
+                className={`appearance-none cursor-pointer rounded-full border-0 pl-2.5 pr-6 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
+                  STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
+                }`}
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABEL[s] ?? s}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                </svg>
+              </div>
             </div>
+            {note && (
+              <p className="mt-1 max-w-[140px] truncate text-xs text-zinc-400" title={note}>
+                {note}
+              </p>
+            )}
           </div>
         )
       },
@@ -217,7 +267,7 @@ export default function ApplicationsList({ applications }: Props) {
                       onClick={header.column.getToggleSortingHandler()}
                     >
                       {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === 'asc' && <span>↑</span>}
+                      {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
                       {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                     </div>
                     {header.column.getCanResize() && (
@@ -259,6 +309,55 @@ export default function ApplicationsList({ applications }: Props) {
           </table>
         </div>
       </div>
+
+      {/* Reason / feedback modal */}
+      {pendingChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={handleModalCancel} />
+          <div className="relative w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
+            <h3 className="mb-1 text-base font-semibold text-zinc-900">
+              {pendingChange.newStatus === 'not_shortlisted' ? 'Not Shortlisted' : 'Rejected'}
+            </h3>
+            <p className="mb-4 text-sm text-zinc-500">
+              {pendingChange.newStatus === 'not_shortlisted'
+                ? 'Why wasn\'t this candidate shortlisted?'
+                : 'What feedback did the company provide?'}
+            </p>
+
+            <textarea
+              value={noteText}
+              onChange={(e) => { setNoteText(e.target.value); setNoteError(false) }}
+              rows={3}
+              placeholder={
+                pendingChange.newStatus === 'not_shortlisted'
+                  ? 'e.g. Stronger candidates were selected for this round'
+                  : 'e.g. Good communication but needs more technical depth'
+              }
+              className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900 ${
+                noteError ? 'border-red-300 bg-red-50' : 'border-zinc-200'
+              }`}
+            />
+            {noteError && (
+              <p className="mt-1 text-xs text-red-600">This field is required.</p>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={handleModalCancel}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleModalConfirm}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -74,6 +74,8 @@ function SortableItem({
   )
 }
 
+type RoleFilter = 'all' | 'open' | 'closed'
+
 export default function CompaniesListClient({
   companies: initial,
 }: {
@@ -82,6 +84,7 @@ export default function CompaniesListClient({
   // orderedIds drives display order; initial is the source of truth for data
   const [orderedIds, setOrderedIds] = useState<string[]>(() => initial.map((c) => c.id))
   const [openIds, setOpenIds]       = useState<Set<string>>(() => new Set())
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
 
   // Track which IDs we've already seen so we only auto-expand genuinely new companies,
   // not the ones present on the initial render.
@@ -112,9 +115,17 @@ export default function CompaniesListClient({
   }, [initial])
 
   // Derive ordered, fresh company data
-  const companies = orderedIds
+  const allCompanies = orderedIds
     .map((id) => initial.find((c) => c.id === id))
     .filter((c): c is CompanyWithRoles => c != null)
+
+  // Apply open/closed filter
+  const companies =
+    roleFilter === 'open'
+      ? allCompanies.filter((c) => c.roles.some((r) => r.status === 'open'))
+      : roleFilter === 'closed'
+        ? allCompanies.filter((c) => c.roles.every((r) => r.status === 'closed') || c.roles.length === 0)
+        : allCompanies
 
   const allOpen = openIds.size === companies.length
 
@@ -148,12 +159,28 @@ export default function CompaniesListClient({
     })
   }
 
-  const showHandles = companies.length > 1
+  // Hide drag handles when a filter is active (reordering a subset is misleading)
+  const showHandles = allCompanies.length > 1 && roleFilter === 'all'
 
   return (
     <div>
-      {/* Expand / Collapse all */}
-      <div className="mb-3 flex justify-end">
+      {/* Filter + Expand/Collapse row */}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex gap-2">
+          {(['all', 'open', 'closed'] as RoleFilter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setRoleFilter(f)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                roleFilter === f
+                  ? 'bg-zinc-900 text-white'
+                  : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'open' ? 'Has Open Roles' : 'All Closed'}
+            </button>
+          ))}
+        </div>
         <button
           onClick={toggleAll}
           className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-700"

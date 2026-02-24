@@ -153,11 +153,24 @@ export async function createApplication(formData: FormData) {
   revalidatePath('/placements/analytics')
 }
 
-export async function updateApplicationStatus(id: string, status: string) {
+export async function updateApplicationStatus(id: string, status: string, note?: string) {
   await requireAdmin()
 
   const supabase = await createServerSupabaseClient()
-  await supabase.from('applications').update({ status }).eq('id', id)
+
+  const updates: Record<string, unknown> = { status }
+  if (status === 'not_shortlisted') {
+    updates.not_shortlisted_reason = note ?? null
+    updates.rejection_feedback     = null
+  } else if (status === 'rejected') {
+    updates.rejection_feedback     = note ?? null
+    updates.not_shortlisted_reason = null
+  } else {
+    updates.not_shortlisted_reason = null
+    updates.rejection_feedback     = null
+  }
+
+  await supabase.from('applications').update(updates).eq('id', id)
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
 }

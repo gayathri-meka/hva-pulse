@@ -76,6 +76,8 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       resume_url: a.resume_url,
       created_at: a.created_at,
       updated_at: a.updated_at,
+      not_shortlisted_reason: a.not_shortlisted_reason ?? null,
+      rejection_feedback:     a.rejection_feedback ?? null,
       learner_name: user?.name || 'Unknown',
       learner_email: user?.email || '',
       company_name: companyMap[role?.company_id ?? ''] ?? 'Unknown',

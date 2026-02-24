@@ -26,7 +26,7 @@ export default async function RoleDetailPage({ params }: Props) {
       .single(),
     supabase
       .from('applications')
-      .select('id, status, resume_url, created_at')
+      .select('id, status, resume_url, created_at, not_shortlisted_reason, rejection_feedback')
       .eq('role_id', id)
       .eq('user_id', appUser.id)
       .maybeSingle(),

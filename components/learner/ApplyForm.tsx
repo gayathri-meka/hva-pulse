@@ -6,7 +6,14 @@ import { useRouter } from 'next/navigation'
 import { applyToRole } from '@/app/(learner)/learner/actions'
 
 type Resume = { id: string; version_name: string; file_url: string }
-type Application = { id: string; status: string; resume_url: string | null; created_at: string }
+type Application = {
+  id: string
+  status: string
+  resume_url: string | null
+  created_at: string
+  not_shortlisted_reason: string | null
+  rejection_feedback: string | null
+}
 
 interface Props {
   roleId: string
@@ -45,6 +52,10 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
   // Show already-applied state
   if (application || submitted) {
     const status = application?.status ?? 'applied'
+    const note =
+      status === 'not_shortlisted' ? application?.not_shortlisted_reason
+      : status === 'rejected'      ? application?.rejection_feedback
+      : null
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3">
@@ -72,6 +83,15 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
             </div>
           </div>
         </div>
+
+        {note && (
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              {status === 'not_shortlisted' ? 'Reason' : 'Feedback'}
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-700">{note}</p>
+          </div>
+        )}
       </div>
     )
   }

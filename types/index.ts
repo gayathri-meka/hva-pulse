@@ -37,6 +37,8 @@ export type Application = {
   id: string; role_id: string; learner_id: string; user_id: string | null
   status: 'applied' | 'shortlisted' | 'not_shortlisted' | 'rejected' | 'hired'
   resume_url: string | null; created_at: string; updated_at: string
+  not_shortlisted_reason: string | null
+  rejection_feedback: string | null
 }
 
 export type ApplicationWithLearner = Application & {
