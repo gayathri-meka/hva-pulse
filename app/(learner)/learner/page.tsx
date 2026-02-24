@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import LearnerDashboard from '@/components/learner/LearnerDashboard'
+import { computeSnapshot } from '@/lib/snapshot'
 import type { MyStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -87,32 +88,11 @@ export default async function LearnerDashboardPage() {
     ...roleList.filter((r) => r.status === 'closed'),
   ]
 
-  // Snapshot stats
-  const appList = applications ?? []
-  const niList = (preferences ?? []).filter((p) => p.preference === 'not_interested')
+  const snapshot = computeSnapshot(roleList.length, applications ?? [], preferences ?? [])
 
-  const total            = roleList.length
-  const appliedCount     = appList.length
-  const notInterestedCount = niList.length
-  const ignoredCount     = total - appliedCount - notInterestedCount
   const ignoredOpenCount = sortedRoles.filter(
     (r) => r.status === 'open' && r.my_status === 'not_applied',
   ).length
-
-  const shortlistedCount    = appList.filter((a) => a.status === 'shortlisted').length
-  const notShortlistedCount = appList.filter((a) => a.status === 'not_shortlisted').length
-  const rejectedCount       = appList.filter((a) => a.status === 'rejected').length
-  const hiredCount          = appList.filter((a) => a.status === 'hired').length
-  const pendingCount        = appList.filter((a) => a.status === 'applied').length
-
-  const applicationRate = total > 0 ? Math.round((appliedCount / total) * 100) : 0
-
-  // Aggregate not-interested reasons for the expand breakdown
-  const allReasons = niList.flatMap((p) => (p as { reasons?: string[] }).reasons ?? [])
-  const reasonCounts: Record<string, number> = {}
-  allReasons.forEach((r) => {
-    reasonCounts[r] = (reasonCounts[r] ?? 0) + 1
-  })
 
   const firstName = appUser.name?.split(' ')[0] ?? 'there'
 
@@ -120,19 +100,7 @@ export default async function LearnerDashboardPage() {
     <div className="mx-auto max-w-2xl px-4 py-6">
       <LearnerDashboard
         firstName={firstName}
-        snapshot={{
-          total,
-          applied:        appliedCount,
-          notInterested:  notInterestedCount,
-          ignored:        ignoredCount,
-          shortlisted:    shortlistedCount,
-          notShortlisted: notShortlistedCount,
-          rejected:       rejectedCount,
-          hired:          hiredCount,
-          pending:        pendingCount,
-          applicationRate,
-          reasonCounts,
-        }}
+        snapshot={snapshot}
         ignoredOpenCount={ignoredOpenCount}
         roles={sortedRoles}
       />
