@@ -34,7 +34,7 @@ GOOGLE_SHEET_ID
 Two top-level route groups with separate layouts and auth contexts:
 
 - **`app/(protected)/`** — Admin and LF users: dashboard, learners, users, placements. Layout at `app/(protected)/layout.tsx` checks `getAppUser()` and redirects learners to `/learner`.
-- **`app/(learner)/learner/`** — Learner-facing placement surface: role feed, role detail, my-roles, profile/resume. Layout at `app/(learner)/learner/layout.tsx`.
+- **`app/(learner)/learner/`** — Learner-facing placement surface: single Dashboard (role feed + filter pills + PlacementSnapshot), role detail, profile/resume. Layout at `app/(learner)/learner/layout.tsx`.
 
 Middleware (`middleware.ts`) enforces authentication on all protected paths and redirects authenticated users away from `/login`.
 
@@ -81,6 +81,8 @@ Admin-facing (`app/(protected)/placements/`) and learner-facing (`app/(learner)/
 Application status progression: `applied → shortlisted → hired` with two dropout statuses:
 - `not_shortlisted` — company did not select for interview (pre-shortlist dropout)
 - `rejected` — rejected after interview (post-shortlist dropout)
+
+`applications` also stores `not_shortlisted_reason` and `rejection_feedback` (nullable TEXT). Admin sets these via a required modal when changing to those statuses; they are displayed to the learner on the role detail page.
 
 Company display order is managed via `sort_order` column, with drag-to-reorder in `CompaniesListClient.tsx` (dnd-kit).
 
