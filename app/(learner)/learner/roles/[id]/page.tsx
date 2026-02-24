@@ -92,6 +92,20 @@ export default async function RoleDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {/* Application status — shown above JD when the learner has already applied */}
+      {application && (
+        <div className="mt-4">
+          <ApplyForm
+            roleId={role.id}
+            roleStatus={role.status as 'open' | 'closed'}
+            location={role.location}
+            salaryRange={role.salary_range as string | null}
+            application={application}
+            resumes={resumes ?? []}
+          />
+        </div>
+      )}
+
       {/* Job Description */}
       <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-400">
@@ -102,7 +116,7 @@ export default async function RoleDetailPage({ params }: Props) {
         </p>
       </div>
 
-      {/* JD attachment card — shown above the apply form when a file is attached */}
+      {/* JD attachment card */}
       {role.jd_attachment_url && (
         <a
           href={role.jd_attachment_url}
@@ -126,17 +140,19 @@ export default async function RoleDetailPage({ params }: Props) {
         </a>
       )}
 
-      {/* Apply section */}
-      <div className="mt-4">
-        <ApplyForm
-          roleId={role.id}
-          roleStatus={role.status as 'open' | 'closed'}
-          location={role.location}
-          salaryRange={role.salary_range as string | null}
-          application={application ?? null}
-          resumes={resumes ?? []}
-        />
-      </div>
+      {/* Apply form — only shown when the learner hasn't applied yet */}
+      {!application && (
+        <div className="mt-4">
+          <ApplyForm
+            roleId={role.id}
+            roleStatus={role.status as 'open' | 'closed'}
+            location={role.location}
+            salaryRange={role.salary_range as string | null}
+            application={null}
+            resumes={resumes ?? []}
+          />
+        </div>
+      )}
     </div>
   )
 }
