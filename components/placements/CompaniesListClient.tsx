@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -83,26 +83,32 @@ export default function CompaniesListClient({
   const [orderedIds, setOrderedIds] = useState<string[]>(() => initial.map((c) => c.id))
   const [openIds, setOpenIds]       = useState<Set<string>>(() => new Set())
 
+  // Track which IDs we've already seen so we only auto-expand genuinely new companies,
+  // not the ones present on the initial render.
+  const seenIdsRef = useRef(new Set(initial.map((c) => c.id)))
+
   // Sync when server re-renders (new company added, role updated, etc.)
   useEffect(() => {
+    const currentIds = new Set(initial.map((c) => c.id))
+    // IDs not seen before this render are genuinely new
+    const newIds = initial.map((c) => c.id).filter((id) => !seenIdsRef.current.has(id))
+    seenIdsRef.current = currentIds
+
     setOrderedIds((prev) => {
-      const currentIds = new Set(initial.map((c) => c.id))
-      const prevSet    = new Set(prev)
-      // Remove deleted, keep existing order
+      const prevSet  = new Set(prev)
       const filtered = prev.filter((id) => currentIds.has(id))
-      // Prepend new companies (they'll be at top per server sort_order)
-      const newIds = initial.map((c) => c.id).filter((id) => !prevSet.has(id))
-      return [...newIds, ...filtered]
+      const added    = initial.map((c) => c.id).filter((id) => !prevSet.has(id))
+      return [...added, ...filtered]
     })
-    // Auto-expand newly added companies
-    setOpenIds((prev) => {
-      const prevSet = new Set(prev)
-      const newIds  = initial.map((c) => c.id).filter((id) => !prevSet.has(id))
-      if (newIds.length === 0) return prev
-      const next = new Set(prev)
-      newIds.forEach((id) => next.add(id))
-      return next
-    })
+
+    // Auto-expand only genuinely new companies
+    if (newIds.length > 0) {
+      setOpenIds((prev) => {
+        const next = new Set(prev)
+        newIds.forEach((id) => next.add(id))
+        return next
+      })
+    }
   }, [initial])
 
   // Derive ordered, fresh company data

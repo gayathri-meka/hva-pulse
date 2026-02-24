@@ -21,7 +21,7 @@ export default async function RoleDetailPage({ params }: Props) {
   const [{ data: role }, { data: application }, { data: resumes }] = await Promise.all([
     supabase
       .from('roles')
-      .select('id, role_title, location, salary_range, job_description, status, company_id, companies(company_name)')
+      .select('id, role_title, location, salary_range, job_description, jd_attachment_url, status, company_id, companies(company_name)')
       .eq('id', id)
       .single(),
     supabase
@@ -94,9 +94,24 @@ export default async function RoleDetailPage({ params }: Props) {
 
       {/* Job Description */}
       <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-400">
-          Job Description
-        </h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-400">
+            Job Description
+          </h2>
+          {role.jd_attachment_url && (
+            <a
+              href={role.jd_attachment_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+                <path fillRule="evenodd" d="M4 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.414A2 2 0 0 0 13.414 5L11 2.586A2 2 0 0 0 9.586 2H4Zm5 1.5v2A1.5 1.5 0 0 0 10.5 7H13v5a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 12V4a.5.5 0 0 1 .5-.5h5Z" clipRule="evenodd" />
+              </svg>
+              Download JD
+            </a>
+          )}
+        </div>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
           {role.job_description}
         </p>
