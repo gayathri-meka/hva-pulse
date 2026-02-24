@@ -74,7 +74,7 @@ export default async function UsersPage({ searchParams }: Props) {
         <UserForm error={error} />
       </div>
 
-      <UsersTable users={filtered} />
+      <UsersTable users={filtered} currentUserId={appUser.id} />
     </div>
   )
 }

@@ -61,3 +61,18 @@ export async function updateUser(
   revalidatePath('/users')
   return {}
 }
+
+export async function deleteUser(id: string): Promise<{ error?: string }> {
+  const appUser = await getAppUser()
+  if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
+
+  if (appUser.id === id) return { error: 'You cannot delete your own account.' }
+
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase.from('users').delete().eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/users')
+  return {}
+}

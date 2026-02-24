@@ -16,7 +16,7 @@ function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
-import { updateUser } from './actions'
+import { updateUser, deleteUser } from './actions'
 
 type User = { id: string; email: string; name: string | null; role: string; created_at: string }
 
@@ -39,15 +39,17 @@ const col = createColumnHelper<User>()
 
 const inputCls = 'w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900'
 
-export default function UsersTable({ users }: { users: User[] }) {
+export default function UsersTable({ users, currentUserId }: { users: User[]; currentUserId: string }) {
   const [sorting, setSorting]           = useState<SortingState>([])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
-  const [editId, setEditId]       = useState<string | null>(null)
-  const [editName, setEditName]   = useState('')
-  const [editEmail, setEditEmail] = useState('')
-  const [editRole, setEditRole]   = useState('')
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [editId, setEditId]             = useState<string | null>(null)
+  const [editName, setEditName]         = useState('')
+  const [editEmail, setEditEmail]       = useState('')
+  const [editRole, setEditRole]         = useState('')
+  const [saveError, setSaveError]       = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteError, setDeleteError]   = useState<string | null>(null)
+  const [isPending, startTransition]    = useTransition()
 
   function startEdit(user: User) {
     setEditId(user.id)
@@ -60,6 +62,19 @@ export default function UsersTable({ users }: { users: User[] }) {
   function cancelEdit() {
     setEditId(null)
     setSaveError(null)
+  }
+
+  function handleDelete(id: string) {
+    setDeleteError(null)
+    startTransition(async () => {
+      const result = await deleteUser(id)
+      if (result.error) {
+        setDeleteError(result.error)
+        setDeleteConfirmId(null)
+      } else {
+        setDeleteConfirmId(null)
+      }
+    })
   }
 
   function save() {
@@ -167,7 +182,7 @@ export default function UsersTable({ users }: { users: User[] }) {
     }),
     col.display({
       id: 'actions',
-      size: 100,
+      size: 140,
       enableSorting: false,
       enableResizing: false,
       header: () => null,
@@ -192,13 +207,43 @@ export default function UsersTable({ users }: { users: User[] }) {
             </div>
           )
         }
+        if (deleteConfirmId === user.id) {
+          return (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-500">Delete?</span>
+              <button
+                onClick={() => handleDelete(user.id)}
+                disabled={isPending}
+                className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="text-xs text-zinc-400 hover:text-zinc-700"
+              >
+                No
+              </button>
+            </div>
+          )
+        }
         return (
-          <button
-            onClick={() => startEdit(user)}
-            className="text-xs text-zinc-400 transition-colors hover:text-zinc-900"
-          >
-            Edit
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => startEdit(user)}
+              className="text-xs text-zinc-400 transition-colors hover:text-zinc-900"
+            >
+              Edit
+            </button>
+            {user.id !== currentUserId && (
+              <button
+                onClick={() => { setDeleteConfirmId(user.id); setDeleteError(null) }}
+                className="text-xs text-zinc-300 transition-colors hover:text-red-500"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         )
       },
     }),
@@ -232,9 +277,9 @@ export default function UsersTable({ users }: { users: User[] }) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-      {saveError && (
+      {(saveError || deleteError) && (
         <div className="border-b border-red-100 bg-red-50 px-6 py-2.5 text-sm text-red-600">
-          {saveError}
+          {saveError ?? deleteError}
         </div>
       )}
       <div className="overflow-x-auto">
