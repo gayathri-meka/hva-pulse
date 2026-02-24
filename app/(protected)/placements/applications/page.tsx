@@ -86,6 +86,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
 
   const STATUS_LABEL: Record<string, string> = {
     applied: 'Applied', shortlisted: 'Shortlisted',
+    not_shortlisted: 'Not Shortlisted',
     rejected: 'Rejected', hired: 'Hired',
   }
 

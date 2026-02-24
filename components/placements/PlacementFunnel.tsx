@@ -8,6 +8,7 @@ interface Props {
   shortlisted:       number
   hired:             number
   rejected:          number
+  not_shortlisted:   number
 }
 
 function pct(num: number, denom: number): string {
@@ -28,15 +29,31 @@ function Arrow() {
   )
 }
 
-// ─── Arrow with rejection branch to the right ────────────────────────────────
-function ArrowWithRejection({
-  rejected,
+// ─── Arrow with dropout branch to the right ──────────────────────────────────
+function ArrowWithDropout({
+  count,
   total,
   pctLabel,
+  label,
+  href,
+  cardBg,
+  cardBorder,
+  labelCls,
+  countCls,
+  metaCls,
+  dividerCls,
 }: {
-  rejected: number
-  total: number
-  pctLabel: string
+  count:       number
+  total:       number
+  pctLabel:    string
+  label:       string
+  href:        string
+  cardBg:      string
+  cardBorder:  string
+  labelCls:    string
+  countCls:    string
+  metaCls:     string
+  dividerCls:  string
 }) {
   return (
     <div className="flex items-center">
@@ -48,18 +65,18 @@ function ArrowWithRejection({
         <Arrow />
       </div>
 
-      {/* Right: rejection branch */}
+      {/* Right: dropout branch */}
       <div className="flex flex-1 items-center gap-3 py-1">
-        <div className="h-px w-8 shrink-0 bg-red-200" />
+        <div className={`h-px w-8 shrink-0 ${dividerCls}`} />
         <Link
-          href="/placements/applications?status=rejected"
-          className="block rounded-xl border border-red-100 bg-red-50 px-4 py-3 transition-opacity hover:opacity-75"
+          href={href}
+          className={`block rounded-xl border ${cardBorder} ${cardBg} px-4 py-3 transition-opacity hover:opacity-75`}
         >
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-red-400">
-            Rejected
+          <p className={`text-[10px] font-semibold uppercase tracking-widest ${labelCls}`}>
+            {label}
           </p>
-          <p className="mt-0.5 text-2xl font-bold tabular-nums text-red-700">{rejected}</p>
-          <p className="mt-0.5 text-xs text-red-400">{pct(rejected, total)} {pctLabel}</p>
+          <p className={`mt-0.5 text-2xl font-bold tabular-nums ${countCls}`}>{count}</p>
+          <p className={`mt-0.5 text-xs ${metaCls}`}>{pct(count, total)} {pctLabel}</p>
         </Link>
       </div>
     </div>
@@ -114,6 +131,7 @@ export default function PlacementFunnel({
   shortlisted,
   hired,
   rejected,
+  not_shortlisted,
 }: Props) {
   const shortlistRate = pct(shortlisted, totalApplications)
   const hireRate      = pct(hired, shortlisted)
@@ -147,11 +165,19 @@ export default function PlacementFunnel({
         widthClass="w-full"
       />
 
-      {/* Rejection branch 1: Applications → Shortlisted */}
-      <ArrowWithRejection
-        rejected={rejected}
+      {/* Dropout branch 1: Not shortlisted (Applications → Shortlisted) */}
+      <ArrowWithDropout
+        count={not_shortlisted}
         total={totalApplications}
         pctLabel="of applications"
+        label="Not Shortlisted"
+        href="/placements/applications?status=not_shortlisted"
+        cardBg="bg-zinc-50"
+        cardBorder="border-zinc-200"
+        labelCls="text-zinc-400"
+        countCls="text-zinc-700"
+        metaCls="text-zinc-400"
+        dividerCls="bg-zinc-200"
       />
 
       {/* Shortlisted */}
@@ -168,11 +194,19 @@ export default function PlacementFunnel({
         widthClass="w-[82%]"
       />
 
-      {/* Rejection branch 2: Shortlisted → Hired */}
-      <ArrowWithRejection
-        rejected={rejected}
+      {/* Dropout branch 2: Rejected (Shortlisted → Hired) */}
+      <ArrowWithDropout
+        count={rejected}
         total={shortlisted}
         pctLabel="of shortlisted"
+        label="Rejected"
+        href="/placements/applications?status=rejected"
+        cardBg="bg-red-50"
+        cardBorder="border-red-100"
+        labelCls="text-red-400"
+        countCls="text-red-700"
+        metaCls="text-red-400"
+        dividerCls="bg-red-200"
       />
 
       {/* Hired */}

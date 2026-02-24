@@ -16,20 +16,22 @@ type RoleCardData = {
 }
 
 const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
-  applied:        'bg-blue-100 text-blue-700',
-  shortlisted:    'bg-amber-100 text-amber-700',
-  rejected:       'bg-red-100 text-red-700',
-  hired:          'bg-emerald-100 text-emerald-700',
-  not_interested: 'bg-zinc-100 text-zinc-500',
+  applied:         'bg-blue-100 text-blue-700',
+  shortlisted:     'bg-amber-100 text-amber-700',
+  not_shortlisted: 'bg-zinc-100 text-zinc-600',
+  rejected:        'bg-red-100 text-red-700',
+  hired:           'bg-emerald-100 text-emerald-700',
+  not_interested:  'bg-zinc-100 text-zinc-500',
 }
 
 const MY_STATUS_LABEL: Record<MyStatus, string> = {
-  applied:        'Applied',
-  shortlisted:    'In Process',
-  rejected:       'Rejected',
-  hired:          'Hired',
-  not_interested: 'Not Interested',
-  not_applied:    '',
+  applied:         'Applied',
+  shortlisted:     'In Process',
+  not_shortlisted: 'Not Shortlisted',
+  rejected:        'Rejected',
+  hired:           'Hired',
+  not_interested:  'Not Interested',
+  not_applied:     '',
 }
 
 const NI_REASONS = [

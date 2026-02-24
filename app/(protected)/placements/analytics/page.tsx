@@ -17,13 +17,14 @@ export default async function AnalyticsPage() {
     supabase.from('applications').select('status'),
   ])
 
-  const allApps          = applications ?? []
-  const totalRoles       = roles?.length ?? 0
-  const openRoles        = roles?.filter((r) => r.status === 'open').length ?? 0
+  const allApps           = applications ?? []
+  const totalRoles        = roles?.length ?? 0
+  const openRoles         = roles?.filter((r) => r.status === 'open').length ?? 0
   const totalApplications = allApps.length
-  const shortlisted      = allApps.filter((a) => a.status === 'shortlisted').length
-  const hired            = allApps.filter((a) => a.status === 'hired').length
-  const rejected         = allApps.filter((a) => a.status === 'rejected').length
+  const shortlisted       = allApps.filter((a) => a.status === 'shortlisted').length
+  const not_shortlisted   = allApps.filter((a) => a.status === 'not_shortlisted').length
+  const hired             = allApps.filter((a) => a.status === 'hired').length
+  const rejected          = allApps.filter((a) => a.status === 'rejected').length
 
   return (
     <div>
@@ -31,6 +32,7 @@ export default async function AnalyticsPage() {
           totalRoles={totalRoles}
           totalApplications={totalApplications}
           shortlisted={shortlisted}
+          not_shortlisted={not_shortlisted}
           hired={hired}
           rejected={rejected}
         />
