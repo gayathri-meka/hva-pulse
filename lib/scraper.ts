@@ -30,6 +30,8 @@ export type ScrapeResult = {
 export type ScrapeOutcome = {
   inserted: number
   skipped: number
+  fetched?: number
+  filteredByTitle?: number
   error?: string
 }
 
@@ -43,14 +45,24 @@ async function fetchJoobleJobs(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ keywords, location, resultonpage: 20 }),
   })
-  if (!res.ok) return []
+  if (!res.ok) {
+    console.error(`Jooble API error: ${res.status} ${res.statusText}`)
+    return []
+  }
   const data = await res.json()
   return (data?.jobs ?? []) as JoobleJob[]
 }
 
 function countTitleMatches(title: string, targetTitles: string[]): { count: number; matched: string[] } {
   const lower = title.toLowerCase()
-  const matched = targetTitles.filter((t) => lower.includes(t.toLowerCase()))
+  // Split each target title into individual words and check if any word matches
+  const matched = targetTitles.filter((t) => {
+    const titleLower = t.toLowerCase()
+    // First try exact phrase match
+    if (lower.includes(titleLower)) return true
+    // Then try any individual word from the target title (min 4 chars to avoid noise)
+    return titleLower.split(/\s+/).some((word) => word.length >= 4 && lower.includes(word))
+  })
   return { count: matched.length, matched }
 }
 
@@ -119,9 +131,10 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
     return { inserted: 0, skipped: 0, error: 'No active personas found.' }
   }
 
-  // Collect all jobs with their best-matching persona
   type CandidateJob = ScrapeResult & { matchScore: number }
   const candidates: CandidateJob[] = []
+  let totalFetched = 0
+  let filteredByTitle = 0
 
   for (const persona of activePersonas) {
     const keywords = persona.target_job_titles.join(' ')
@@ -132,30 +145,34 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
       try {
         jobs = await fetchJoobleJobs(keywords, location, apiKey)
       } catch {
-        // silently skip failed API calls
         continue
       }
+
+      totalFetched += jobs.length
 
       for (const job of jobs) {
         const description = job.snippet ?? ''
         const title = job.title ?? ''
 
+        // Title filter: must match at least one target title keyword
         const { count: titleCount, matched: titleMatched } = countTitleMatches(
           title,
           persona.target_job_titles
         )
-        if (titleCount === 0) continue
+        if (titleCount === 0) {
+          filteredByTitle++
+          continue
+        }
 
-        const { count: skillCount, matched: skillsMatched } = countSkillMatches(
-          description,
-          persona.required_skills
-        )
-        if (skillCount === 0 && persona.required_skills.length > 0) continue
+        // Skills: soft filter only — used for scoring + reasoning, not hard rejection
+        // (Jooble snippets are short and rarely contain all skill keywords)
+        const { matched: skillsMatched } = countSkillMatches(description, persona.required_skills)
 
+        // Experience: best-effort, pass through if can't determine
         const expOk = checkExperienceMatch(description, persona.experience_min, persona.experience_max)
         if (!expOk) continue
 
-        const matchScore = titleCount * 2 + skillCount
+        const matchScore = titleCount * 2 + skillsMatched.length
         const matchReasoning = buildMatchReasoning(titleMatched, skillsMatched, job.location ?? location)
 
         candidates.push({
@@ -176,5 +193,11 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
     }
   }
 
-  return { inserted: candidates.length, skipped: 0, candidates } as ScrapeOutcome & { candidates: CandidateJob[] }
+  return {
+    inserted: candidates.length,
+    skipped: 0,
+    fetched: totalFetched,
+    filteredByTitle,
+    candidates,
+  } as ScrapeOutcome & { candidates: CandidateJob[] }
 }

@@ -40,12 +40,17 @@ export async function POST() {
   const result = await scrapeJobsForPersonas((personas ?? []) as JobPersona[])
 
   if (result.error && !(result as { candidates?: unknown[] }).candidates) {
-    return NextResponse.json(result, { status: 200 })
+    return NextResponse.json({ error: result.error, inserted: 0, skipped: 0, fetched: 0, filteredByTitle: 0 }, { status: 200 })
   }
 
   const candidates = (result as { candidates?: Array<Record<string, unknown>> }).candidates ?? []
   if (candidates.length === 0) {
-    return NextResponse.json({ inserted: 0, skipped: 0 })
+    return NextResponse.json({
+      inserted: 0,
+      skipped: 0,
+      fetched: result.fetched ?? 0,
+      filteredByTitle: result.filteredByTitle ?? 0,
+    })
   }
 
   let inserted = 0
@@ -67,5 +72,10 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ inserted, skipped })
+  return NextResponse.json({
+    inserted,
+    skipped,
+    fetched: result.fetched ?? candidates.length,
+    filteredByTitle: result.filteredByTitle ?? 0,
+  })
 }
