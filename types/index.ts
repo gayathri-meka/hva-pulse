@@ -58,3 +58,24 @@ export type RolePreference = {
 export type MyStatus =
   | 'applied' | 'shortlisted' | 'not_shortlisted' | 'rejected' | 'hired'
   | 'not_interested' | 'not_applied'
+
+export type JobPersona = {
+  id: string; name: string
+  target_job_titles: string[]; required_skills: string[]
+  experience_min: number | null; experience_max: number | null
+  preferred_locations: string[]; remote_allowed: boolean
+  platforms: string[]; active: boolean
+  created_by: string | null; created_at: string; updated_at: string
+}
+
+export type JobOpportunity = {
+  id: string; persona_id: string | null
+  job_title: string; company_name: string; location: string | null
+  source_platform: string; date_posted: string | null
+  job_description: string | null; match_reasoning: string | null
+  original_url: string | null; external_id: string | null
+  status: 'discovered' | 'reviewed' | 'approved' | 'rejected'
+  notes: string | null; created_at: string; updated_at: string
+}
+
+export type JobOpportunityWithPersona = JobOpportunity & { persona_name: string | null }
