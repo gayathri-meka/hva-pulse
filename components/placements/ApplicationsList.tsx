@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, Suspense } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -19,6 +19,7 @@ function loadSizing(): ColumnSizingState {
 }
 import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
+import StatusFilter from './StatusFilter'
 import type { ApplicationWithLearner } from '@/types'
 
 const STATUS_OPTIONS = ['applied', 'shortlisted', 'on_hold', 'not_shortlisted', 'rejected', 'hired'] as const
@@ -48,9 +49,11 @@ const col = createColumnHelper<ApplicationWithLearner>()
 
 interface Props {
   applications: ApplicationWithLearner[]
+  statusCounts: Record<string, number>
+  total: number
 }
 
-export default function ApplicationsList({ applications }: Props) {
+export default function ApplicationsList({ applications, statusCounts, total }: Props) {
   const [sorting, setSorting]           = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
@@ -242,7 +245,10 @@ export default function ApplicationsList({ applications }: Props) {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Suspense>
+          <StatusFilter statusCounts={statusCounts} total={total} />
+        </Suspense>
         <ExportButton applications={selectedApplications} disabled={selectedCount === 0} />
       </div>
 

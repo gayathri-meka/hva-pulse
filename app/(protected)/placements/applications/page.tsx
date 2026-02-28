@@ -3,7 +3,6 @@ import { Suspense } from 'react'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import CompanyFilter from '@/components/placements/CompanyFilter'
-import StatusFilter from '@/components/placements/StatusFilter'
 import ApplicationsList from '@/components/placements/ApplicationsList'
 import type { ApplicationWithLearner } from '@/types'
 
@@ -94,15 +93,12 @@ export default async function ApplicationsPage({ searchParams }: Props) {
 
   return (
     <div>
-      <div className="mb-5 space-y-3">
+      <div className="mb-5">
         <Suspense>
           <CompanyFilter companies={companies ?? []} roles={roles ?? []} />
         </Suspense>
-        <Suspense>
-          <StatusFilter statusCounts={statusCounts} total={byRole.length} />
-        </Suspense>
       </div>
-      <ApplicationsList applications={applications} />
+      <ApplicationsList applications={applications} statusCounts={statusCounts} total={byRole.length} />
     </div>
   )
 }

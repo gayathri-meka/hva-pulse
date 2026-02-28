@@ -7,6 +7,7 @@ vi.mock('@/app/(protected)/placements/actions', () => ({
 
 vi.mock('./ExportButton', () => ({ default: () => null }))
 vi.mock('@/components/placements/ExportButton', () => ({ default: () => null }))
+vi.mock('@/components/placements/StatusFilter', () => ({ default: () => null }))
 
 import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ApplicationsList from '@/components/placements/ApplicationsList'
@@ -31,22 +32,24 @@ const makeApp = (overrides: Partial<ApplicationWithLearner> = {}): ApplicationWi
   ...overrides,
 })
 
+const defaultProps = { statusCounts: {}, total: 0 }
+
 describe('ApplicationsList', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   test('renders learner name and company', () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     expect(screen.getByText('Priya Sharma')).toBeInTheDocument()
     expect(screen.getByText('Acme Corp')).toBeInTheDocument()
   })
 
   test('shows empty state when no applications', () => {
-    render(<ApplicationsList applications={[]} />)
+    render(<ApplicationsList applications={[]} {...defaultProps} />)
     expect(screen.getByText('No applications found.')).toBeInTheDocument()
   })
 
   test('changing to a non-terminal status calls updateApplicationStatus directly', async () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     const select = screen.getByRole('combobox')
     fireEvent.change(select, { target: { value: 'shortlisted' } })
     await waitFor(() => {
@@ -55,19 +58,19 @@ describe('ApplicationsList', () => {
   })
 
   test('changing to not_shortlisted opens the reason modal', () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'not_shortlisted' } })
     expect(screen.getByText("Why wasn't this candidate shortlisted?")).toBeInTheDocument()
   })
 
   test('changing to rejected opens the feedback modal', () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'rejected' } })
     expect(screen.getByText('What feedback did the company provide?')).toBeInTheDocument()
   })
 
   test('modal cancel closes without updating status', async () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'not_shortlisted' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByText("Why wasn't this candidate shortlisted?")).not.toBeInTheDocument()
@@ -75,7 +78,7 @@ describe('ApplicationsList', () => {
   })
 
   test('modal confirm with empty note shows validation error', () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'not_shortlisted' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(screen.getByText('This field is required.')).toBeInTheDocument()
@@ -83,7 +86,7 @@ describe('ApplicationsList', () => {
   })
 
   test('modal confirm with a note calls updateApplicationStatus and closes modal', async () => {
-    render(<ApplicationsList applications={[makeApp()]} />)
+    render(<ApplicationsList applications={[makeApp()]} {...defaultProps} />)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'not_shortlisted' } })
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Stronger candidates applied' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
@@ -97,12 +100,12 @@ describe('ApplicationsList', () => {
   })
 
   test('existing not_shortlisted_reason is shown below status badge', () => {
-    render(<ApplicationsList applications={[makeApp({ status: 'not_shortlisted', not_shortlisted_reason: 'Too competitive' })]} />)
+    render(<ApplicationsList applications={[makeApp({ status: 'not_shortlisted', not_shortlisted_reason: 'Too competitive' })]} {...defaultProps} />)
     expect(screen.getByTitle('Too competitive')).toBeInTheDocument()
   })
 
   test('existing rejection_feedback is shown below status badge', () => {
-    render(<ApplicationsList applications={[makeApp({ status: 'rejected', rejection_feedback: 'Needs more depth' })]} />)
+    render(<ApplicationsList applications={[makeApp({ status: 'rejected', rejection_feedback: 'Needs more depth' })]} {...defaultProps} />)
     expect(screen.getByTitle('Needs more depth')).toBeInTheDocument()
   })
 })
