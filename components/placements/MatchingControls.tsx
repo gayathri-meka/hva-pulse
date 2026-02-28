@@ -38,6 +38,8 @@ export default function MatchingControls({ roles, batches, lfs }: Props) {
     const params = new URLSearchParams(searchParams.toString())
     if (value) params.set(key, value)
     else params.delete(key)
+    // Changing the role resets the status filter (counts belong to that role)
+    if (key === 'role') params.delete('status')
     router.push(`${pathname}?${params.toString()}`)
   }
 

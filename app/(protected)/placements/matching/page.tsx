@@ -3,12 +3,13 @@ import { Suspense } from 'react'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import MatchingControls from '@/components/placements/MatchingControls'
+import MatchingStatusFilter from '@/components/placements/MatchingStatusFilter'
 import MatchingTable, { type MatchingRow, type MatchingStatus } from '@/components/placements/MatchingTable'
 
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ role?: string; batch?: string; lf?: string }>
+  searchParams: Promise<{ role?: string; batch?: string; lf?: string; status?: string }>
 }
 
 export default async function MatchingPage({ searchParams }: Props) {
@@ -16,7 +17,7 @@ export default async function MatchingPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin') redirect('/dashboard')
 
-  const { role: roleId, batch: batchFilter, lf: lfFilter } = await searchParams
+  const { role: roleId, batch: batchFilter, lf: lfFilter, status: statusFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -116,28 +117,15 @@ export default async function MatchingPage({ searchParams }: Props) {
     }
   })
 
-  // ── Summary counts ────────────────────────────────────────────────────────
-  const counts = {
-    total:           rows.length,
-    applied:         rows.filter((r) => r.status === 'applied').length,
-    shortlisted:     rows.filter((r) => r.status === 'shortlisted').length,
-    not_shortlisted: rows.filter((r) => r.status === 'not_shortlisted').length,
-    hired:           rows.filter((r) => r.status === 'hired').length,
-    rejected:        rows.filter((r) => r.status === 'rejected').length,
-    not_applied:     rows.filter((r) => r.status === 'not_applied').length,
-    not_interested:  rows.filter((r) => r.status === 'not_interested').length,
-  }
+  // ── Status counts (before status filter, for pill labels) ────────────────
+  const statusCounts = rows.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1
+    return acc
+  }, {} as Record<string, number>)
 
-  const summary = [
-    { label: 'Total',           value: counts.total,           cls: 'bg-zinc-100 text-zinc-700' },
-    { label: 'Applied',         value: counts.applied,         cls: 'bg-blue-100 text-blue-700' },
-    { label: 'Shortlisted',     value: counts.shortlisted,     cls: 'bg-amber-100 text-amber-700' },
-    { label: 'Not Shortlisted', value: counts.not_shortlisted, cls: 'bg-zinc-100 text-zinc-600' },
-    { label: 'Hired',           value: counts.hired,           cls: 'bg-emerald-100 text-emerald-700' },
-    { label: 'Rejected',        value: counts.rejected,        cls: 'bg-red-100 text-red-700' },
-    { label: 'Not Applied',     value: counts.not_applied,     cls: 'bg-zinc-100 text-zinc-500' },
-    { label: 'Not Interested',  value: counts.not_interested,  cls: 'bg-zinc-100 text-zinc-400' },
-  ]
+  const filteredRows = statusFilter
+    ? rows.filter((r) => r.status === statusFilter)
+    : rows
 
   return (
     <div className="space-y-6">
@@ -157,24 +145,14 @@ export default async function MatchingPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Role selected: summary + table */}
+      {/* Role selected: filter pills + table */}
       {roleId && (
         <>
-          {/* Summary chips */}
-          <div className="flex flex-wrap gap-2">
-            {summary.map(({ label, value, cls }) => (
-              <div
-                key={label}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${cls}`}
-              >
-                <span>{value}</span>
-                <span className="font-normal opacity-75">{label}</span>
-              </div>
-            ))}
-          </div>
+          <Suspense>
+            <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
+          </Suspense>
 
-          {/* Table */}
-          <MatchingTable rows={rows} />
+          <MatchingTable rows={filteredRows} />
         </>
       )}
 

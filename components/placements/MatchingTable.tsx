@@ -12,7 +12,7 @@ import {
 } from '@tanstack/react-table'
 
 export type MatchingStatus =
-  | 'applied' | 'shortlisted' | 'not_shortlisted' | 'rejected' | 'hired'
+  | 'applied' | 'shortlisted' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
   | 'not_applied' | 'not_interested'
 
 export type MatchingRow = {
@@ -28,6 +28,7 @@ export type MatchingRow = {
 const STATUS_BADGE: Record<MatchingStatus, string> = {
   applied:         'bg-blue-100 text-blue-700',
   shortlisted:     'bg-amber-100 text-amber-700',
+  on_hold:         'bg-orange-100 text-orange-700',
   not_shortlisted: 'bg-zinc-100 text-zinc-600',
   rejected:        'bg-red-100 text-red-700',
   hired:           'bg-emerald-100 text-emerald-700',
@@ -38,6 +39,7 @@ const STATUS_BADGE: Record<MatchingStatus, string> = {
 const STATUS_LABEL: Record<MatchingStatus, string> = {
   applied:         'Applied',
   shortlisted:     'Shortlisted',
+  on_hold:         'On Hold',
   not_shortlisted: 'Not Shortlisted',
   rejected:        'Rejected',
   hired:           'Hired',
