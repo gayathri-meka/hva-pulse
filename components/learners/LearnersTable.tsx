@@ -19,6 +19,7 @@ function loadSizing(): ColumnSizingState {
 
 const STATUS_BADGE: Record<string, string> = {
   Ongoing:        'bg-emerald-100 text-emerald-700',
+  'On Hold':      'bg-orange-100 text-orange-700',
   Dropout:        'bg-red-100 text-red-700',
   Discontinued:   'bg-zinc-200 text-zinc-600',
   'Placed - Self': 'bg-blue-100 text-blue-700',

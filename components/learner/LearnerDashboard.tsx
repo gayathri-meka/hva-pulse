@@ -21,6 +21,7 @@ type SnapshotData = {
   notInterested: number
   ignored: number
   shortlisted: number
+  onHold: number
   notShortlisted: number
   rejected: number
   hired: number
@@ -33,6 +34,7 @@ type FilterKey =
   | 'all'
   | 'applied'
   | 'shortlisted'
+  | 'on_hold'
   | 'not_shortlisted'
   | 'rejected'
   | 'hired'
@@ -43,6 +45,7 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   all:             'All',
   applied:         'Applied',
   shortlisted:     'In Process',
+  on_hold:         'On Hold',
   not_shortlisted: 'Not Shortlisted',
   rejected:        'Rejected',
   hired:           'Hired',

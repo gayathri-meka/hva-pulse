@@ -7,6 +7,7 @@ export type SnapshotStats = {
   notInterested: number
   ignored: number
   shortlisted: number
+  onHold: number
   notShortlisted: number
   rejected: number
   hired: number
@@ -26,6 +27,7 @@ export function computeSnapshot(
   const ignoredCount       = totalRoles - appliedCount - notInterestedCount
 
   const shortlistedCount    = applications.filter((a) => a.status === 'shortlisted').length
+  const onHoldCount         = applications.filter((a) => a.status === 'on_hold').length
   const notShortlistedCount = applications.filter((a) => a.status === 'not_shortlisted').length
   const rejectedCount       = applications.filter((a) => a.status === 'rejected').length
   const hiredCount          = applications.filter((a) => a.status === 'hired').length
@@ -46,6 +48,7 @@ export function computeSnapshot(
     notInterested:  notInterestedCount,
     ignored:        ignoredCount,
     shortlisted:    shortlistedCount,
+    onHold:         onHoldCount,
     notShortlisted: notShortlistedCount,
     rejected:       rejectedCount,
     hired:          hiredCount,

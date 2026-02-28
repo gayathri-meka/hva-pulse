@@ -44,7 +44,9 @@ export default async function CompaniesPage() {
     return { ...c, roles: companyRoles }
   })
 
-  const totalRoles = companiesWithRoles.reduce((s, c) => s + c.roles.length, 0)
+  const totalRoles     = companiesWithRoles.reduce((s, c) => s + c.roles.length, 0)
+  const openRoles      = companiesWithRoles.reduce((s, c) => s + c.roles.filter((r) => r.status === 'open').length, 0)
+  const openCompanies  = companiesWithRoles.filter((c) => c.roles.some((r) => r.status === 'open')).length
 
   return (
     <div>
@@ -53,6 +55,12 @@ export default async function CompaniesPage() {
           {companiesWithRoles.length} compan{companiesWithRoles.length !== 1 ? 'ies' : 'y'}
           {' · '}
           {totalRoles} role{totalRoles !== 1 ? 's' : ''}
+          {openRoles > 0 && (
+            <>
+              {' · '}
+              <span className="text-emerald-600">{openRoles} open</span>
+            </>
+          )}
         </p>
         <AddCompanyButton />
       </div>

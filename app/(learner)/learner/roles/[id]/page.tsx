@@ -82,9 +82,7 @@ export default async function RoleDetailPage({ params }: Props) {
         <div className="mt-3">
           <span
             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-              role.status === 'open'
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-zinc-100 text-zinc-500'
+              role.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'
             }`}
           >
             {role.status === 'open' ? 'Open for applications' : 'Closed'}

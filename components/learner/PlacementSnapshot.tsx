@@ -8,6 +8,7 @@ type Props = {
   notInterested: number
   ignored: number
   shortlisted: number
+  onHold: number
   notShortlisted: number
   rejected: number
   hired: number
@@ -24,6 +25,7 @@ export default function PlacementSnapshot({
   notInterested,
   ignored,
   shortlisted,
+  onHold,
   notShortlisted,
   rejected,
   hired,
@@ -122,6 +124,9 @@ export default function PlacementSnapshot({
               )}
               {shortlisted > 0 && (
                 <MiniStat label="In Process" value={shortlisted} valueClass="text-amber-600" />
+              )}
+              {onHold > 0 && (
+                <MiniStat label="On Hold" value={onHold} valueClass="text-orange-600" />
               )}
               {notShortlisted > 0 && (
                 <MiniStat label="Not Shortlisted" value={notShortlisted} valueClass="text-zinc-600" />

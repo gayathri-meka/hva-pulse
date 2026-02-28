@@ -64,17 +64,10 @@ export default function CompanyAccordion({ company, isOpen, onToggle }: Props) {
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {company.roles.length > 0 && (
               <>
-                <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                  {totalApplicants} applied
+                <span className="text-xs text-zinc-400">
+                  {totalApplicants} applied · {totalHired} hired
+                  {totalNI > 0 && ` · ${totalNI} not interested`}
                 </span>
-                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                  {totalHired} hired
-                </span>
-                {totalNI > 0 && (
-                  <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
-                    {totalNI} not interested
-                  </span>
-                )}
                 <div className="mx-1 h-4 w-px bg-zinc-200" />
               </>
             )}

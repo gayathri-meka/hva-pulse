@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import CompanyFilter from '@/components/placements/CompanyFilter'
+import StatusFilter from '@/components/placements/StatusFilter'
 import ApplicationsList from '@/components/placements/ApplicationsList'
 import type { ApplicationWithLearner } from '@/types'
 
@@ -30,7 +31,6 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     supabase.from('companies').select('id, company_name, created_at').order('company_name'),
     supabase.from('roles').select('id, company_id, role_title, location'),
     supabase.from('applications').select('*').order('created_at', { ascending: false }),
-    // Look up learner names directly from users table by user_id
     supabase.from('users').select('id, name, email'),
   ])
 
@@ -45,7 +45,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     (companies ?? []).map((c) => [c.id, c.company_name])
   )
 
-  // Determine which role_ids to include
+  // Determine which role_ids to include based on company/role filter
   let allowedRoleIds: Set<string> | null = null
   if (roleFilter) {
     allowedRoleIds = new Set([roleFilter])
@@ -56,9 +56,15 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     allowedRoleIds = new Set(matchingRoleIds)
   }
 
+  // byRole: after company/role filter, before status filter — used for status pill counts
   const byRole = allowedRoleIds
     ? (rawApplications ?? []).filter((a) => allowedRoleIds!.has(a.role_id))
     : (rawApplications ?? [])
+
+  const statusCounts = byRole.reduce((acc, a) => {
+    acc[a.status] = (acc[a.status] ?? 0) + 1
+    return acc
+  }, {} as Record<string, number>)
 
   const filteredApplications = statusFilter
     ? byRole.filter((a) => a.status === statusFilter)
@@ -86,24 +92,15 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     }
   })
 
-  const STATUS_LABEL: Record<string, string> = {
-    applied: 'Applied', shortlisted: 'Shortlisted',
-    not_shortlisted: 'Not Shortlisted',
-    rejected: 'Rejected', hired: 'Hired',
-  }
-
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-5 space-y-3">
         <Suspense>
           <CompanyFilter companies={companies ?? []} roles={roles ?? []} />
         </Suspense>
-        {statusFilter && STATUS_LABEL[statusFilter] && (
-          <div className="flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600">
-            <span>Status: {STATUS_LABEL[statusFilter]}</span>
-            <a href="/placements/applications" className="text-zinc-400 hover:text-zinc-700" aria-label="Clear status filter">✕</a>
-          </div>
-        )}
+        <Suspense>
+          <StatusFilter statusCounts={statusCounts} total={byRole.length} />
+        </Suspense>
       </div>
       <ApplicationsList applications={applications} />
     </div>

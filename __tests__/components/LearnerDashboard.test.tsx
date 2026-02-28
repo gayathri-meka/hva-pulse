@@ -20,7 +20,7 @@ vi.mock('@/components/learner/RoleCard', () => ({
 
 const snapshot = {
   total: 4, applied: 1, notInterested: 1, ignored: 2,
-  shortlisted: 0, notShortlisted: 0, rejected: 0, hired: 0, pending: 1,
+  shortlisted: 0, onHold: 0, notShortlisted: 0, rejected: 0, hired: 0, pending: 1,
   applicationRate: 25, reasonCounts: {},
 }
 

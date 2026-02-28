@@ -18,6 +18,7 @@ type RoleCardData = {
 const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
   applied:         'bg-blue-100 text-blue-700',
   shortlisted:     'bg-amber-100 text-amber-700',
+  on_hold:         'bg-orange-100 text-orange-700',
   not_shortlisted: 'bg-zinc-100 text-zinc-600',
   rejected:        'bg-red-100 text-red-700',
   hired:           'bg-emerald-100 text-emerald-700',
@@ -27,6 +28,7 @@ const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
 const MY_STATUS_LABEL: Record<MyStatus, string> = {
   applied:         'Applied',
   shortlisted:     'In Process',
+  on_hold:         'On Hold',
   not_shortlisted: 'Not Shortlisted',
   rejected:        'Rejected',
   hired:           'Hired',
@@ -173,9 +175,7 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
             <div className="flex shrink-0 flex-col items-end gap-1.5 pt-0.5">
               <span
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  role.status === 'open'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-zinc-100 text-zinc-500'
+                  role.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'
                 }`}
               >
                 {role.status === 'open' ? 'Open' : 'Closed'}

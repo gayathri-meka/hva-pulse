@@ -27,6 +27,7 @@ interface Props {
 const STATUS_BADGE: Record<string, string> = {
   applied:         'bg-blue-100 text-blue-700',
   shortlisted:     'bg-amber-100 text-amber-700',
+  on_hold:         'bg-orange-100 text-orange-700',
   not_shortlisted: 'bg-zinc-100 text-zinc-600',
   rejected:        'bg-red-100 text-red-700',
   hired:           'bg-emerald-100 text-emerald-700',
@@ -34,6 +35,7 @@ const STATUS_BADGE: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   applied:         'Applied',
   shortlisted:     'In Process',
+  on_hold:         'On Hold',
   not_shortlisted: 'Not Shortlisted',
   rejected:        'Rejected',
   hired:           'Hired',

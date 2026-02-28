@@ -64,7 +64,6 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <p className="mt-5 text-center text-xs text-zinc-400">For authorized HVA staff only</p>
       </div>
     </main>
   )

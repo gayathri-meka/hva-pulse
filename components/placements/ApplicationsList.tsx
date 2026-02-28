@@ -21,10 +21,11 @@ import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import type { ApplicationWithLearner } from '@/types'
 
-const STATUS_OPTIONS = ['applied', 'shortlisted', 'not_shortlisted', 'rejected', 'hired'] as const
+const STATUS_OPTIONS = ['applied', 'shortlisted', 'on_hold', 'not_shortlisted', 'rejected', 'hired'] as const
 const STATUS_LABEL: Record<string, string> = {
   applied:         'Applied',
   shortlisted:     'Shortlisted',
+  on_hold:         'On Hold',
   not_shortlisted: 'Not Shortlisted',
   rejected:        'Rejected',
   hired:           'Hired',
@@ -32,12 +33,13 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_BADGE: Record<string, string> = {
   applied:         'bg-blue-100 text-blue-700',
   shortlisted:     'bg-amber-100 text-amber-700',
+  on_hold:         'bg-orange-100 text-orange-700',
   not_shortlisted: 'bg-zinc-100 text-zinc-600',
   rejected:        'bg-red-100 text-red-700',
   hired:           'bg-emerald-100 text-emerald-700',
 }
 const STATUS_SORT_ORDER: Record<string, number> = {
-  applied: 0, shortlisted: 1, hired: 2, not_shortlisted: 3, rejected: 4,
+  applied: 0, shortlisted: 1, on_hold: 2, hired: 3, not_shortlisted: 4, rejected: 5,
 }
 
 type PendingChange = { id: string; newStatus: 'not_shortlisted' | 'rejected' } | null
@@ -240,11 +242,7 @@ export default function ApplicationsList({ applications }: Props) {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <p className="text-sm text-zinc-500">
-          {applications.length} application{applications.length !== 1 ? 's' : ''}
-          {selectedCount > 0 && ` · ${selectedCount} selected`}
-        </p>
+      <div className="mb-4 flex justify-end">
         <ExportButton applications={selectedApplications} disabled={selectedCount === 0} />
       </div>
 

@@ -83,7 +83,7 @@ export default function CompaniesListClient({
 }) {
   // orderedIds drives display order; initial is the source of truth for data
   const [orderedIds, setOrderedIds] = useState<string[]>(() => initial.map((c) => c.id))
-  const [openIds, setOpenIds]       = useState<Set<string>>(() => new Set())
+  const [openIds, setOpenIds]       = useState<Set<string>>(() => new Set(initial.map((c) => c.id)))
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
 
   // Track which IDs we've already seen so we only auto-expand genuinely new companies,
