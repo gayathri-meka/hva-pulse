@@ -34,7 +34,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     supabase.from('companies').select('id, company_name'),
     supabase.from('learners').select('*, users!learners_user_id_fkey(name, email)'),
     roleId
-      ? supabase.from('applications').select('user_id, status').eq('role_id', roleId)
+      ? supabase.from('applications').select('user_id, status, not_shortlisted_reason, rejection_feedback').eq('role_id', roleId)
       : Promise.resolve({ data: null, error: null }),
     roleId
       ? supabase.from('role_preferences').select('user_id, reasons').eq('role_id', roleId).eq('preference', 'not_interested')
@@ -81,11 +81,15 @@ export default async function MatchingPage({ searchParams }: Props) {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Derive placement status per learner ──────────────────────────────────
-  // Map user_id → application status
+  // Map user_id → { status, not_shortlisted_reason, rejection_feedback }
   const appMap = Object.fromEntries(
     (rawApplications ?? [])
       .filter((a) => a.user_id)
-      .map((a) => [a.user_id!, a.status as MatchingStatus])
+      .map((a) => [a.user_id!, {
+        status:                 a.status as MatchingStatus,
+        not_shortlisted_reason: (a.not_shortlisted_reason as string | null) ?? null,
+        rejection_feedback:     (a.rejection_feedback     as string | null) ?? null,
+      }])
   )
   // Set of user_ids who marked not_interested + their reasons
   const notInterestedSet = new Set(
@@ -99,21 +103,24 @@ export default async function MatchingPage({ searchParams }: Props) {
 
   const rows: MatchingRow[] = !roleId ? [] : filtered.map((l) => {
     let status: MatchingStatus
-    if (l.user_id && appMap[l.user_id]) {
-      status = appMap[l.user_id]
+    const appDetail = l.user_id ? appMap[l.user_id] : undefined
+    if (appDetail) {
+      status = appDetail.status
     } else if (l.user_id && notInterestedSet.has(l.user_id)) {
       status = 'not_interested'
     } else {
       status = 'not_applied'
     }
     return {
-      learner_id: l.learner_id,
-      name:       l.name,
-      batch:      l.batch,
-      lf:         l.lf,
-      prs_score:  null, // synced from Google Sheet later
+      learner_id:             l.learner_id,
+      name:                   l.name,
+      batch:                  l.batch,
+      lf:                     l.lf,
+      prs_score:              null, // synced from Google Sheet later
       status,
-      reasons:    status === 'not_interested' && l.user_id ? (reasonsMap[l.user_id] ?? []) : [],
+      reasons:                status === 'not_interested' && l.user_id ? (reasonsMap[l.user_id] ?? []) : [],
+      not_shortlisted_reason: appDetail?.not_shortlisted_reason ?? null,
+      rejection_feedback:     appDetail?.rejection_feedback     ?? null,
     }
   })
 
