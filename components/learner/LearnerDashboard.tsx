@@ -14,6 +14,8 @@ type RoleItem = {
   salary_range: string | null
   status: 'open' | 'closed'
   my_status: MyStatus
+  not_shortlisted_reason: string | null
+  rejection_feedback: string | null
 }
 
 type SnapshotData = {

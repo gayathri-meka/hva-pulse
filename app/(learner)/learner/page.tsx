@@ -47,7 +47,12 @@ export default async function LearnerDashboardPage() {
     ]),
   )
   const appMap = Object.fromEntries(
-    (applications ?? []).map((a) => [a.role_id, { id: a.id, status: a.status }]),
+    (applications ?? []).map((a) => [a.role_id, {
+      id: a.id,
+      status: a.status,
+      not_shortlisted_reason: (a.not_shortlisted_reason as string | null) ?? null,
+      rejection_feedback:     (a.rejection_feedback     as string | null) ?? null,
+    }]),
   )
   const prefMap = Object.fromEntries(
     (preferences ?? []).map((p) => [p.role_id, p.preference]),
@@ -82,6 +87,8 @@ export default async function LearnerDashboardPage() {
         salary_range: role.salary_range as string | null,
         status: role.status as 'open' | 'closed',
         my_status: myStatus,
+        not_shortlisted_reason: app?.not_shortlisted_reason ?? null,
+        rejection_feedback:     app?.rejection_feedback     ?? null,
       }
     })
 

@@ -13,6 +13,8 @@ type RoleCardData = {
   salary_range: string | null
   status: 'open' | 'closed'
   my_status: MyStatus
+  not_shortlisted_reason: string | null
+  rejection_feedback: string | null
 }
 
 const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
@@ -131,6 +133,10 @@ function NIReasonsModal({
 
 export default function RoleCard({ role }: { role: RoleCardData }) {
   const [myStatus, setMyStatus]     = useState<MyStatus>(role.my_status)
+  const reason =
+    myStatus === 'not_shortlisted' ? role.not_shortlisted_reason
+    : myStatus === 'rejected'       ? role.rejection_feedback
+    : null
   const [showNIModal, setShowNIModal] = useState(false)
   const [isPending, startTransition]  = useTransition()
 
@@ -181,9 +187,14 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
                 {role.status === 'open' ? 'Open' : 'Closed'}
               </span>
               {statusBadgeClass && (
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass}`}>
-                  {MY_STATUS_LABEL[myStatus]}
-                </span>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass}`}>
+                    {MY_STATUS_LABEL[myStatus]}
+                  </span>
+                  {reason && (
+                    <p className="max-w-[160px] truncate text-right text-xs text-zinc-400">{reason}</p>
+                  )}
+                </div>
               )}
             </div>
           </div>
