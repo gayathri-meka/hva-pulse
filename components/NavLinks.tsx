@@ -109,6 +109,8 @@ const ADMIN_LINKS = [
 const LF_LINKS = [
   { href: '/dashboard', label: 'Dashboard', Icon: DashboardIcon },
   { href: '/learners', label: 'My Learners', Icon: LearnersIcon },
+  { href: '/placements', label: 'Placements', Icon: PlacementsIcon },
+  { href: '/outreach', label: 'Job Outreach', Icon: OutreachIcon },
 ]
 
 export default function NavLinks({ role }: { role: 'admin' | 'LF' }) {

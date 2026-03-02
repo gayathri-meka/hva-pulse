@@ -37,9 +37,11 @@ export default function UserForm({ error }: { error?: string }) {
           <div className="relative">
             <select
               name="role"
-              defaultValue="admin"
+              defaultValue=""
+              required
               className="appearance-none rounded-lg border border-zinc-200 py-2 pl-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
             >
+              <option value="" disabled>Select role…</option>
               <option value="admin">Admin</option>
               <option value="LF">LF</option>
               <option value="learner">Learner</option>

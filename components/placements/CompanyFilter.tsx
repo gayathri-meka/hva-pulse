@@ -1,98 +1,87 @@
 'use client'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import Combobox from '@/components/ui/Combobox'
 import type { Company } from '@/types'
 
 interface RoleOption {
-  id: string
+  id:         string
   company_id: string
   role_title: string
 }
 
-interface Props {
-  companies: Company[]
-  roles: RoleOption[]
+interface LearnerOption {
+  id:    string
+  name:  string
+  email: string
 }
 
-export default function CompanyFilter({ companies, roles }: Props) {
+interface Props {
+  companies: Company[]
+  roles:     RoleOption[]
+  learners:  LearnerOption[]
+}
+
+export default function CompanyFilter({ companies, roles, learners }: Props) {
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
+  const router       = useRouter()
+  const pathname     = usePathname()
 
   const selectedCompany = searchParams.get('company') ?? ''
-  const selectedRole    = searchParams.get('role') ?? ''
+  const selectedRole    = searchParams.get('role')    ?? ''
+  const selectedLearner = searchParams.get('learner') ?? ''
 
-  // Roles shown in the role dropdown — filtered by selected company if one is chosen
+  // Roles shown in the role combobox — filtered by selected company
   const filteredRoles = selectedCompany
     ? roles.filter((r) => r.company_id === selectedCompany)
     : roles
 
-  function handleCompanyChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function navigate(updates: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString())
-    params.delete('role') // reset role when company changes
-    if (e.target.value) {
-      params.set('company', e.target.value)
-    } else {
-      params.delete('company')
+    for (const [key, val] of Object.entries(updates)) {
+      if (val) params.set(key, val)
+      else params.delete(key)
     }
     router.push(`${pathname}?${params.toString()}`)
   }
 
-  function handleRoleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const params = new URLSearchParams(searchParams.toString())
-    if (e.target.value) {
-      params.set('role', e.target.value)
-    } else {
-      params.delete('role')
-    }
-    router.push(`${pathname}?${params.toString()}`)
-  }
+  const companyOptions = companies.map((c) => ({ id: c.id, label: c.company_name }))
+  const roleOptions    = filteredRoles.map((r) => ({ id: r.id, label: r.role_title }))
+  const learnerOptions = learners.map((l) => ({
+    id:    l.id,
+    label: l.name || l.email,
+  }))
 
   return (
     <div className="flex flex-wrap gap-2">
-      {/* Company dropdown */}
-      <div className="relative">
-        <select
-          value={selectedCompany}
-          onChange={handleCompanyChange}
-          className="appearance-none rounded-lg border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
-        >
-          <option value="">All companies</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.company_name}
-            </option>
-          ))}
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
-            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
-          </svg>
-        </div>
-      </div>
+      {/* Company combobox */}
+      <Combobox
+        options={companyOptions}
+        value={selectedCompany}
+        placeholder="All companies"
+        onChange={(id) => navigate({ company: id, role: '' })}
+        className="min-w-[180px]"
+      />
 
-      {/* Role dropdown — only shown when a specific company is selected */}
+      {/* Role combobox — only shown when a company is selected */}
       {selectedCompany && (
-        <div className="relative">
-          <select
-            value={selectedRole}
-            onChange={handleRoleChange}
-            className="appearance-none rounded-lg border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
-          >
-            <option value="">All roles</option>
-            {filteredRoles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.role_title}
-              </option>
-            ))}
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
-            </svg>
-          </div>
-        </div>
+        <Combobox
+          options={roleOptions}
+          value={selectedRole}
+          placeholder="All roles"
+          onChange={(id) => navigate({ role: id })}
+          className="min-w-[160px]"
+        />
       )}
+
+      {/* Learner combobox */}
+      <Combobox
+        options={learnerOptions}
+        value={selectedLearner}
+        placeholder="All learners"
+        onChange={(id) => navigate({ learner: id })}
+        className="min-w-[180px]"
+      />
     </div>
   )
 }

@@ -5,7 +5,7 @@ import OutreachNav from '@/components/outreach/OutreachNav'
 export default async function OutreachLayout({ children }: { children: React.ReactNode }) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
   return (
     <div>

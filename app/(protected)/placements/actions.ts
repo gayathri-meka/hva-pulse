@@ -1,10 +1,9 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getAppUser } from '@/lib/auth'
+import { requireStaff } from '@/lib/auth'
 
 async function uploadJdAttachment(file: File, roleId: string): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -29,11 +28,7 @@ async function uploadJdAttachment(file: File, roleId: string): Promise<string | 
   }
 }
 
-async function requireAdmin() {
-  const appUser = await getAppUser()
-  if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
-  return appUser
-}
+const requireAdmin = requireStaff
 
 export async function createCompany(formData: FormData) {
   await requireAdmin()
@@ -171,6 +166,28 @@ export async function updateApplicationStatus(id: string, status: string, note?:
   }
 
   await supabase.from('applications').update(updates).eq('id', id)
+  revalidatePath('/placements/applications')
+  revalidatePath('/placements/analytics')
+}
+
+export async function bulkUpdateApplicationStatus(ids: string[], status: string, note?: string) {
+  await requireAdmin()
+
+  const supabase = await createServerSupabaseClient()
+
+  const updates: Record<string, unknown> = { status }
+  if (status === 'not_shortlisted') {
+    updates.not_shortlisted_reason = note ?? null
+    updates.rejection_feedback     = null
+  } else if (status === 'rejected') {
+    updates.rejection_feedback     = note ?? null
+    updates.not_shortlisted_reason = null
+  } else {
+    updates.not_shortlisted_reason = null
+    updates.rejection_feedback     = null
+  }
+
+  await supabase.from('applications').update(updates).in('id', ids)
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
 }

@@ -1,15 +1,10 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getAppUser } from '@/lib/auth'
+import { requireStaff } from '@/lib/auth'
 
-async function requireAdmin() {
-  const appUser = await getAppUser()
-  if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
-  return appUser
-}
+const requireAdmin = requireStaff
 
 export async function updateOpportunityStatus(id: string, status: string) {
   await requireAdmin()

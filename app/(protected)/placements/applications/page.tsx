@@ -9,15 +9,15 @@ import type { ApplicationWithLearner } from '@/types'
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ company?: string; role?: string; status?: string }>
+  searchParams: Promise<{ company?: string; role?: string; status?: string; learner?: string }>
 }
 
 export default async function ApplicationsPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
-  const { company: companyFilter, role: roleFilter, status: statusFilter } = await searchParams
+  const { company: companyFilter, role: roleFilter, status: statusFilter, learner: learnerFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -55,7 +55,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     allowedRoleIds = new Set(matchingRoleIds)
   }
 
-  // byRole: after company/role filter, before status filter — used for status pill counts
+  // byRole: after company/role filter, before status/learner filters — used for status pill counts
   const byRole = allowedRoleIds
     ? (rawApplications ?? []).filter((a) => allowedRoleIds!.has(a.role_id))
     : (rawApplications ?? [])
@@ -65,9 +65,9 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     return acc
   }, {} as Record<string, number>)
 
-  const filteredApplications = statusFilter
-    ? byRole.filter((a) => a.status === statusFilter)
-    : byRole
+  const filteredApplications = byRole
+    .filter((a) => !statusFilter  || a.status    === statusFilter)
+    .filter((a) => !learnerFilter || a.user_id   === learnerFilter)
 
   const applications: ApplicationWithLearner[] = filteredApplications.map((a) => {
     const role = roleMap[a.role_id]
@@ -91,11 +91,22 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     }
   })
 
+  // Learners who have at least one application — for the learner combobox
+  const applicantUserIds = new Set((rawApplications ?? []).map((a) => a.user_id).filter(Boolean))
+  const learnerOptions = (rawUsers ?? [])
+    .filter((u) => applicantUserIds.has(u.id))
+    .map((u) => ({ id: u.id, name: u.name ?? '', email: u.email ?? '' }))
+    .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email))
+
   return (
     <div>
       <div className="mb-5">
         <Suspense>
-          <CompanyFilter companies={companies ?? []} roles={roles ?? []} />
+          <CompanyFilter
+            companies={companies ?? []}
+            roles={roles ?? []}
+            learners={learnerOptions}
+          />
         </Suspense>
       </div>
       <ApplicationsList applications={applications} statusCounts={statusCounts} total={byRole.length} />

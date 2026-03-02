@@ -17,7 +17,7 @@ function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
-import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
+import { updateApplicationStatus, bulkUpdateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import StatusFilter from './StatusFilter'
 import type { ApplicationWithLearner } from '@/types'
@@ -43,7 +43,10 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   applied: 0, shortlisted: 1, on_hold: 2, hired: 3, not_shortlisted: 4, rejected: 5,
 }
 
-type PendingChange = { id: string; newStatus: 'not_shortlisted' | 'rejected' } | null
+type PendingChange =
+  | { bulk: false; id: string;       newStatus: 'not_shortlisted' | 'rejected' }
+  | { bulk: true;  ids: string[];    newStatus: 'not_shortlisted' | 'rejected' }
+  | null
 
 const col = createColumnHelper<ApplicationWithLearner>()
 
@@ -63,11 +66,12 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   const [pendingChange, setPendingChange] = useState<PendingChange>(null)
   const [noteText, setNoteText]           = useState('')
   const [noteError, setNoteError]         = useState(false)
+  const [bulkSelect, setBulkSelect]       = useState('')
   const [, startTransition] = useTransition()
 
   function handleStatusChange(id: string, newStatus: string) {
     if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
-      setPendingChange({ id, newStatus })
+      setPendingChange({ bulk: false, id, newStatus })
       setNoteText('')
       setNoteError(false)
       return
@@ -76,11 +80,38 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     startTransition(() => updateApplicationStatus(id, newStatus))
   }
 
+  function handleBulkStatusChange(newStatus: string) {
+    if (!newStatus) return
+    const ids = selectedApplications.map((a) => a.id)
+    if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
+      setPendingChange({ bulk: true, ids, newStatus })
+      setNoteText('')
+      setNoteError(false)
+      setBulkSelect('')
+      return
+    }
+    setStatusMap((prev) => Object.fromEntries(
+      Object.entries(prev).map(([k, v]) => [k, ids.includes(k) ? newStatus : v])
+    ))
+    startTransition(() => bulkUpdateApplicationStatus(ids, newStatus))
+    setRowSelection({})
+    setBulkSelect('')
+  }
+
   function handleModalConfirm() {
     if (!noteText.trim()) { setNoteError(true); return }
-    const { id, newStatus } = pendingChange!
-    setStatusMap((prev) => ({ ...prev, [id]: newStatus }))
-    startTransition(() => updateApplicationStatus(id, newStatus, noteText.trim()))
+    const note = noteText.trim()
+    const change = pendingChange!
+    if (change.bulk) {
+      setStatusMap((prev) => Object.fromEntries(
+        Object.entries(prev).map(([k, v]) => [k, change.ids.includes(k) ? change.newStatus : v])
+      ))
+      startTransition(() => bulkUpdateApplicationStatus(change.ids, change.newStatus, note))
+      setRowSelection({})
+    } else {
+      setStatusMap((prev) => ({ ...prev, [change.id]: change.newStatus }))
+      startTransition(() => updateApplicationStatus(change.id, change.newStatus, note))
+    }
     setPendingChange(null)
     setNoteText('')
     setNoteError(false)
@@ -169,7 +200,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
       cell: (info) => {
         const id            = info.row.original.id
         const currentStatus =
-          pendingChange?.id === id
+          (pendingChange && !pendingChange.bulk && pendingChange.id === id)
             ? pendingChange.newStatus
             : (statusMap[id] ?? info.getValue())
         const note =
@@ -249,7 +280,31 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
         <Suspense>
           <StatusFilter statusCounts={statusCounts} total={total} />
         </Suspense>
-        <ExportButton applications={selectedApplications} disabled={selectedCount === 0} />
+        <div className="flex items-center gap-2">
+          {selectedCount > 0 && (
+            <>
+              <span className="text-xs text-zinc-500">{selectedCount} selected</span>
+              <div className="relative">
+                <select
+                  value={bulkSelect}
+                  onChange={(e) => handleBulkStatusChange(e.target.value)}
+                  className="appearance-none rounded-lg border border-zinc-200 bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+                >
+                  <option value="">Change status…</option>
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </>
+          )}
+          <ExportButton applications={selectedApplications} disabled={selectedCount === 0} />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -321,10 +376,15 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
           <div className="relative w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
             <h3 className="mb-1 text-base font-semibold text-zinc-900">
               {pendingChange.newStatus === 'not_shortlisted' ? 'Not Shortlisted' : 'Rejected'}
+              {pendingChange.bulk && (
+                <span className="ml-2 text-sm font-normal text-zinc-400">
+                  · {pendingChange.ids.length} learner{pendingChange.ids.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </h3>
             <p className="mb-4 text-sm text-zinc-500">
               {pendingChange.newStatus === 'not_shortlisted'
-                ? 'Why wasn\'t this candidate shortlisted?'
+                ? 'Why weren\'t these candidates shortlisted?'
                 : 'What feedback did the company provide?'}
             </p>
 

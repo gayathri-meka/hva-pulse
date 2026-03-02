@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from './supabase-server'
 
 export type AppUser = {
@@ -23,3 +24,12 @@ export const getAppUser = cache(async (): Promise<AppUser | null> => {
 
   return (data as AppUser) ?? null
 })
+
+/** Throws/redirects if the current user is not admin or LF. Returns the user. */
+export async function requireStaff(): Promise<AppUser> {
+  const appUser = await getAppUser()
+  if (!appUser || (appUser.role !== 'admin' && appUser.role !== 'LF')) {
+    redirect('/dashboard')
+  }
+  return appUser
+}
