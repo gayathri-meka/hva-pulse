@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import ExpandableNote from '@/components/ui/ExpandableNote'
 import {
   useReactTable,
   getCoreRowModel,
@@ -93,11 +94,7 @@ const columns = [
           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[s]}`}>
             {STATUS_LABEL[s]}
           </span>
-          {note && (
-            <p className="mt-1 max-w-[140px] truncate text-xs text-zinc-400" title={note}>
-              {note}
-            </p>
-          )}
+          {note && <ExpandableNote note={note} />}
         </div>
       )
     },

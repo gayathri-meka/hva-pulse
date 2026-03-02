@@ -20,6 +20,7 @@ function loadSizing(): ColumnSizingState {
 import { updateApplicationStatus, bulkUpdateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import StatusFilter from './StatusFilter'
+import ExpandableNote from '@/components/ui/ExpandableNote'
 import type { ApplicationWithLearner } from '@/types'
 
 const STATUS_OPTIONS = ['applied', 'shortlisted', 'on_hold', 'not_shortlisted', 'rejected', 'hired'] as const
@@ -231,11 +232,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
                 </svg>
               </div>
             </div>
-            {note && (
-              <p className="mt-1 max-w-[140px] truncate text-xs text-zinc-400" title={note}>
-                {note}
-              </p>
-            )}
+            {note && <ExpandableNote note={note} />}
           </div>
         )
       },
