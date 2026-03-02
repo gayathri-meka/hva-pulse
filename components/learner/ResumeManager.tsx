@@ -44,12 +44,12 @@ export default function ResumeManager({ resumes }: { resumes: Resume[] }) {
         onSubmit={handleUpload}
         className="space-y-3 rounded-xl border border-dashed border-zinc-300 bg-white p-5"
       >
-        <p className="text-xs font-medium text-zinc-500">Upload resume (PDF only)</p>
+        <p className="text-xs font-medium text-zinc-500">Give this resume a name</p>
 
         <input
           name="version_name"
           type="text"
-          placeholder='Version name (e.g. "v1" or "Jan 2025")'
+          placeholder='e.g. "Tech roles", "Non-tech roles", "Updated Jan 2025"'
           value={versionName}
           onChange={(e) => setVersionName(e.target.value)}
           required

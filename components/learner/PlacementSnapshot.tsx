@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReasonEntry } from '@/lib/snapshot'
 
 type Props = {
   total: number
@@ -17,6 +18,8 @@ type Props = {
   reasonCounts: Record<string, number>
   ignoredOpenCount: number
   onViewIgnored: () => void
+  notShortlistedReasons: ReasonEntry[]
+  rejectedReasons: ReasonEntry[]
 }
 
 export default function PlacementSnapshot({
@@ -34,6 +37,8 @@ export default function PlacementSnapshot({
   reasonCounts,
   ignoredOpenCount,
   onViewIgnored,
+  notShortlistedReasons,
+  rejectedReasons,
 }: Props) {
   const [reasonsOpen, setReasonsOpen] = useState(false)
   const reasonEntries = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])
@@ -118,25 +123,23 @@ export default function PlacementSnapshot({
             <p className="mb-2.5 text-xs font-medium text-zinc-400">
               Of your {applied} application{applied !== 1 ? 's' : ''}:
             </p>
-            <div className="flex flex-wrap gap-4">
-              {pending > 0 && (
-                <MiniStat label="Awaiting outcome" value={pending} valueClass="text-blue-600" />
-              )}
-              {shortlisted > 0 && (
-                <MiniStat label="In Process" value={shortlisted} valueClass="text-amber-600" />
-              )}
-              {onHold > 0 && (
-                <MiniStat label="On Hold" value={onHold} valueClass="text-orange-600" />
-              )}
-              {notShortlisted > 0 && (
-                <MiniStat label="Not Shortlisted" value={notShortlisted} valueClass="text-zinc-600" />
-              )}
-              {rejected > 0 && (
-                <MiniStat label="Rejected" value={rejected} valueClass="text-red-600" />
-              )}
-              {hired > 0 && (
-                <MiniStat label="Hired" value={hired} valueClass="text-emerald-600" />
-              )}
+            <div className="grid grid-cols-3 gap-3">
+              <StatBox label="Pending shortlisting" value={pending} valueClass="text-blue-600" />
+              <StatBox label="Shortlisted"          value={shortlisted} valueClass="text-amber-600" />
+              <StatBox label="On Hold"              value={onHold} valueClass="text-orange-600" />
+              <StatBoxWithReasons
+                label="Not Shortlisted"
+                value={notShortlisted}
+                valueClass="text-zinc-600"
+                reasons={notShortlistedReasons}
+              />
+              <StatBoxWithReasons
+                label="Rejected"
+                value={rejected}
+                valueClass="text-red-600"
+                reasons={rejectedReasons}
+              />
+              <StatBox label="Hired" value={hired} valueClass="text-emerald-600" />
             </div>
           </>
         )}
@@ -178,19 +181,56 @@ function StatBox({
   )
 }
 
-function MiniStat({
+function StatBoxWithReasons({
   label,
   value,
   valueClass,
+  reasons,
 }: {
   label: string
   value: number
-  valueClass: string
+  valueClass?: string
+  reasons: ReasonEntry[]
 }) {
+  const [open, setOpen] = useState(false)
+  const hasReasons = reasons.length > 0
+
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={`text-sm font-bold ${valueClass}`}>{value}</span>
-      <span className="text-xs text-zinc-500">{label}</span>
+    <div className="rounded-lg bg-zinc-50 p-3">
+      <div className="flex items-start justify-between gap-1">
+        <p className={`text-xl font-bold ${valueClass ?? 'text-zinc-900'}`}>{value}</p>
+        {hasReasons && (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="mt-0.5 text-zinc-400 transition-colors hover:text-zinc-600"
+            aria-label={open ? 'Hide reasons' : 'Show reasons'}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-zinc-500">{label}</p>
+      {open && (
+        <div className="mt-2 space-y-2 border-t border-zinc-200 pt-2">
+          {reasons.map((r, i) => (
+            <div key={i}>
+              <p className="text-xs font-medium text-zinc-700">{r.company} · {r.role}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{r.reason}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

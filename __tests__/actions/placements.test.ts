@@ -4,16 +4,18 @@ vi.mock('next/navigation', () => ({
   redirect: vi.fn().mockImplementation((url: string) => { throw new Error(`NEXT_REDIRECT:${url}`) }),
 }))
 vi.mock('next/cache',      () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/auth',      () => ({ getAppUser: vi.fn() }))
+vi.mock('@/lib/auth', () => ({
+  getAppUser:   vi.fn(),
+  requireStaff: vi.fn(),
+}))
 vi.mock('@/lib/supabase-server', () => ({ createServerSupabaseClient: vi.fn() }))
 
-import { redirect } from 'next/navigation'
-import { getAppUser } from '@/lib/auth'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
+import { redirect }                      from 'next/navigation'
+import { requireStaff }                  from '@/lib/auth'
+import { createServerSupabaseClient }    from '@/lib/supabase-server'
+import { updateApplicationStatus }       from '@/app/(protected)/placements/actions'
 
 const adminUser  = { id: 'admin-1',   role: 'admin'   as const, name: 'Admin',   email: 'admin@test.com' }
-const learnerUser = { id: 'learner-1', role: 'learner' as const, name: 'Learner', email: 'learner@test.com' }
 
 function makeSupabaseMock() {
   const mockEq     = vi.fn().mockResolvedValue({ error: null })
@@ -23,17 +25,23 @@ function makeSupabaseMock() {
 }
 
 describe('updateApplicationStatus', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Default: auth passes (admin)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
+  })
 
-  test('redirects when caller is not admin', async () => {
-    vi.mocked(getAppUser).mockResolvedValue(learnerUser)
+  test('redirects when caller is not admin or LF', async () => {
+    vi.mocked(requireStaff).mockImplementationOnce(() => {
+      redirect('/dashboard')
+      return Promise.resolve(adminUser) // unreachable, satisfies type
+    })
     await expect(updateApplicationStatus('app-1', 'shortlisted')).rejects.toThrow()
     expect(redirect).toHaveBeenCalledWith('/dashboard')
   })
 
   test('sets not_shortlisted_reason and clears rejection_feedback', async () => {
     const { mockClient, mockUpdate } = makeSupabaseMock()
-    vi.mocked(getAppUser).mockResolvedValue(adminUser)
     vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
 
     await updateApplicationStatus('app-1', 'not_shortlisted', 'Stronger candidates selected')
@@ -47,7 +55,6 @@ describe('updateApplicationStatus', () => {
 
   test('sets rejection_feedback and clears not_shortlisted_reason', async () => {
     const { mockClient, mockUpdate } = makeSupabaseMock()
-    vi.mocked(getAppUser).mockResolvedValue(adminUser)
     vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
 
     await updateApplicationStatus('app-1', 'rejected', 'Needs more experience')
@@ -61,7 +68,6 @@ describe('updateApplicationStatus', () => {
 
   test('clears both note fields for any other status', async () => {
     const { mockClient, mockUpdate } = makeSupabaseMock()
-    vi.mocked(getAppUser).mockResolvedValue(adminUser)
     vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
 
     await updateApplicationStatus('app-1', 'shortlisted')
@@ -75,7 +81,6 @@ describe('updateApplicationStatus', () => {
 
   test('note defaults to null when not provided for not_shortlisted', async () => {
     const { mockClient, mockUpdate } = makeSupabaseMock()
-    vi.mocked(getAppUser).mockResolvedValue(adminUser)
     vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
 
     await updateApplicationStatus('app-1', 'not_shortlisted')

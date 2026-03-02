@@ -1,6 +1,8 @@
 type ApplicationRow = { status: string }
 type PreferenceRow  = { preference: string; reasons?: string[] | null }
 
+export type ReasonEntry = { company: string; role: string; reason: string }
+
 export type SnapshotStats = {
   total: number
   applied: number

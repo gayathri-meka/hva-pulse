@@ -38,6 +38,8 @@ function renderDashboard() {
       snapshot={snapshot}
       ignoredOpenCount={1}
       roles={roles}
+      notShortlistedReasons={[]}
+      rejectedReasons={[]}
     />
   )
 }
@@ -99,6 +101,8 @@ describe('LearnerDashboard', () => {
         snapshot={{ ...snapshot, hired: 0 }}
         ignoredOpenCount={0}
         roles={roles}
+        notShortlistedReasons={[]}
+        rejectedReasons={[]}
       />
     )
     // No hired roles, so Hired pill should not appear
@@ -108,7 +112,7 @@ describe('LearnerDashboard', () => {
   test('filter pill not rendered for statuses with no matching roles', () => {
     renderDashboard()
     // No shortlisted/rejected/hired roles in fixture
-    expect(screen.queryByRole('button', { name: 'In Process' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Shortlisted' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Rejected' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Hired' })).not.toBeInTheDocument()
   })

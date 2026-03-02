@@ -381,7 +381,9 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
             </h3>
             <p className="mb-4 text-sm text-zinc-500">
               {pendingChange.newStatus === 'not_shortlisted'
-                ? 'Why weren\'t these candidates shortlisted?'
+                ? pendingChange.bulk
+                  ? "Why weren't these candidates shortlisted?"
+                  : "Why wasn't this candidate shortlisted?"
                 : 'What feedback did the company provide?'}
             </p>
 

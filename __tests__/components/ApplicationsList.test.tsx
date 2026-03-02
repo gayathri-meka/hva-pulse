@@ -101,11 +101,11 @@ describe('ApplicationsList', () => {
 
   test('existing not_shortlisted_reason is shown below status badge', () => {
     render(<ApplicationsList applications={[makeApp({ status: 'not_shortlisted', not_shortlisted_reason: 'Too competitive' })]} {...defaultProps} />)
-    expect(screen.getByTitle('Too competitive')).toBeInTheDocument()
+    expect(screen.getByText('Too competitive')).toBeInTheDocument()
   })
 
   test('existing rejection_feedback is shown below status badge', () => {
     render(<ApplicationsList applications={[makeApp({ status: 'rejected', rejection_feedback: 'Needs more depth' })]} {...defaultProps} />)
-    expect(screen.getByTitle('Needs more depth')).toBeInTheDocument()
+    expect(screen.getByText('Needs more depth')).toBeInTheDocument()
   })
 })

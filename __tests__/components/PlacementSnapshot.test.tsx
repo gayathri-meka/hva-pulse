@@ -17,6 +17,8 @@ const baseProps = {
   reasonCounts: {},
   ignoredOpenCount: 0,
   onViewIgnored: vi.fn(),
+  notShortlistedReasons: [],
+  rejectedReasons: [],
 }
 
 describe('PlacementSnapshot', () => {
@@ -35,14 +37,14 @@ describe('PlacementSnapshot', () => {
 
   test('renders applications breakdown when applied > 0', () => {
     render(<PlacementSnapshot {...baseProps} />)
-    expect(screen.getByText('Awaiting outcome')).toBeInTheDocument()
-    expect(screen.getByText('In Process')).toBeInTheDocument()
+    expect(screen.getByText('Pending shortlisting')).toBeInTheDocument()
+    expect(screen.getByText('Shortlisted')).toBeInTheDocument()
     expect(screen.getByText('Not Shortlisted')).toBeInTheDocument()
   })
 
   test('hides applications breakdown when applied is 0', () => {
     render(<PlacementSnapshot {...baseProps} applied={0} pending={0} shortlisted={0} notShortlisted={0} />)
-    expect(screen.queryByText('Awaiting outcome')).not.toBeInTheDocument()
+    expect(screen.queryByText('Pending shortlisting')).not.toBeInTheDocument()
   })
 
   test('does not show ignored open roles callout when ignoredOpenCount is 0', () => {

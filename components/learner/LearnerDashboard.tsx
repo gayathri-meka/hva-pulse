@@ -4,6 +4,7 @@ import { useState } from 'react'
 import PlacementSnapshot from '@/components/learner/PlacementSnapshot'
 import RoleCard from '@/components/learner/RoleCard'
 import type { MyStatus } from '@/types'
+import type { ReasonEntry } from '@/lib/snapshot'
 
 type RoleItem = {
   id: string
@@ -44,7 +45,7 @@ type FilterKey =
 const FILTER_LABELS: Record<FilterKey, string> = {
   all:             'All',
   applied:         'Applied',
-  shortlisted:     'In Process',
+  shortlisted:     'Shortlisted',
   on_hold:         'On Hold',
   not_shortlisted: 'Not Shortlisted',
   rejected:        'Rejected',
@@ -58,9 +59,11 @@ type Props = {
   snapshot: SnapshotData
   ignoredOpenCount: number
   roles: RoleItem[]
+  notShortlistedReasons: ReasonEntry[]
+  rejectedReasons: ReasonEntry[]
 }
 
-export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles }: Props) {
+export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
 
   function handleViewIgnored() {
@@ -95,6 +98,8 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
         {...snapshot}
         ignoredOpenCount={ignoredOpenCount}
         onViewIgnored={handleViewIgnored}
+        notShortlistedReasons={notShortlistedReasons}
+        rejectedReasons={rejectedReasons}
       />
 
       {/* Filter pills */}

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import LearnerDashboard from '@/components/learner/LearnerDashboard'
-import { computeSnapshot } from '@/lib/snapshot'
+import { computeSnapshot, type ReasonEntry } from '@/lib/snapshot'
 import type { MyStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +26,7 @@ export default async function LearnerDashboardPage() {
     supabase.from('companies').select('id, company_name, sort_order, created_at'),
     supabase
       .from('applications')
-      .select('id, role_id, status')
+      .select('id, role_id, status, not_shortlisted_reason, rejection_feedback')
       .eq('user_id', appUser.id),
     supabase
       .from('role_preferences')
@@ -36,6 +36,9 @@ export default async function LearnerDashboardPage() {
 
   const companyMap = Object.fromEntries(
     (companies ?? []).map((c) => [c.id, c.company_name]),
+  )
+  const roleDetailMap = Object.fromEntries(
+    (roles ?? []).map((r) => [r.id, { company_name: companyMap[r.company_id] ?? '', role_title: r.role_title }]),
   )
   const companyMetaMap = Object.fromEntries(
     (companies ?? []).map((c) => [
@@ -90,6 +93,22 @@ export default async function LearnerDashboardPage() {
 
   const snapshot = computeSnapshot(roleList.length, applications ?? [], preferences ?? [])
 
+  const notShortlistedReasons: ReasonEntry[] = (applications ?? [])
+    .filter((a) => a.status === 'not_shortlisted' && (a.not_shortlisted_reason as string | null))
+    .map((a) => ({
+      company: roleDetailMap[a.role_id]?.company_name ?? '',
+      role:    roleDetailMap[a.role_id]?.role_title   ?? '',
+      reason:  a.not_shortlisted_reason as string,
+    }))
+
+  const rejectedReasons: ReasonEntry[] = (applications ?? [])
+    .filter((a) => a.status === 'rejected' && (a.rejection_feedback as string | null))
+    .map((a) => ({
+      company: roleDetailMap[a.role_id]?.company_name ?? '',
+      role:    roleDetailMap[a.role_id]?.role_title   ?? '',
+      reason:  a.rejection_feedback as string,
+    }))
+
   const ignoredOpenCount = sortedRoles.filter(
     (r) => r.status === 'open' && r.my_status === 'not_applied',
   ).length
@@ -103,6 +122,8 @@ export default async function LearnerDashboardPage() {
         snapshot={snapshot}
         ignoredOpenCount={ignoredOpenCount}
         roles={sortedRoles}
+        notShortlistedReasons={notShortlistedReasons}
+        rejectedReasons={rejectedReasons}
       />
     </div>
   )

@@ -50,7 +50,11 @@ export default async function ProfilePage() {
 
       {/* Resume management */}
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-zinc-700">Resumes</h2>
+        <h2 className="mb-1 text-sm font-semibold text-zinc-700">My Resumes</h2>
+        <p className="mb-3 text-xs text-zinc-400">
+          Save different versions here — e.g. one for tech roles and one for non-tech roles.
+          You&apos;ll choose which to use when applying.
+        </p>
         <ResumeManager resumes={resumes ?? []} />
       </div>
     </div>
