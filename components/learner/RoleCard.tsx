@@ -15,6 +15,7 @@ type RoleCardData = {
   my_status: MyStatus
   not_shortlisted_reason: string | null
   rejection_feedback: string | null
+  not_interested_reasons: string[]
 }
 
 const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
@@ -136,6 +137,7 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
   const reason =
     myStatus === 'not_shortlisted' ? role.not_shortlisted_reason
     : myStatus === 'rejected'       ? role.rejection_feedback
+    : myStatus === 'not_interested' ? (role.not_interested_reasons.length > 0 ? role.not_interested_reasons.join(', ') : null)
     : null
   const [showNIModal, setShowNIModal] = useState(false)
   const [isPending, startTransition]  = useTransition()

@@ -16,6 +16,7 @@ type RoleItem = {
   my_status: MyStatus
   not_shortlisted_reason: string | null
   rejection_feedback: string | null
+  not_interested_reasons: string[]
 }
 
 type SnapshotData = {

@@ -25,10 +25,10 @@ const snapshot = {
 }
 
 const roles = [
-  { id: '1', my_status: 'applied'       as const, status: 'open'   as const, company_name: 'A', role_title: 'Dev',    location: 'Mumbai',    salary_range: null, not_shortlisted_reason: null, rejection_feedback: null },
-  { id: '2', my_status: 'not_applied'   as const, status: 'open'   as const, company_name: 'B', role_title: 'PM',     location: 'Delhi',     salary_range: null, not_shortlisted_reason: null, rejection_feedback: null },
-  { id: '3', my_status: 'not_interested'as const, status: 'closed' as const, company_name: 'C', role_title: 'Design', location: 'Pune',      salary_range: null, not_shortlisted_reason: null, rejection_feedback: null },
-  { id: '4', my_status: 'not_applied'   as const, status: 'closed' as const, company_name: 'D', role_title: 'BA',     location: 'Bangalore', salary_range: null, not_shortlisted_reason: null, rejection_feedback: null },
+  { id: '1', my_status: 'applied'       as const, status: 'open'   as const, company_name: 'A', role_title: 'Dev',    location: 'Mumbai',    salary_range: null, not_shortlisted_reason: null, rejection_feedback: null, not_interested_reasons: [] },
+  { id: '2', my_status: 'not_applied'   as const, status: 'open'   as const, company_name: 'B', role_title: 'PM',     location: 'Delhi',     salary_range: null, not_shortlisted_reason: null, rejection_feedback: null, not_interested_reasons: [] },
+  { id: '3', my_status: 'not_interested'as const, status: 'closed' as const, company_name: 'C', role_title: 'Design', location: 'Pune',      salary_range: null, not_shortlisted_reason: null, rejection_feedback: null, not_interested_reasons: [] },
+  { id: '4', my_status: 'not_applied'   as const, status: 'closed' as const, company_name: 'D', role_title: 'BA',     location: 'Bangalore', salary_range: null, not_shortlisted_reason: null, rejection_feedback: null, not_interested_reasons: [] },
 ]
 
 function renderDashboard() {

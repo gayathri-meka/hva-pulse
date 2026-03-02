@@ -57,6 +57,9 @@ export default async function LearnerDashboardPage() {
   const prefMap = Object.fromEntries(
     (preferences ?? []).map((p) => [p.role_id, p.preference]),
   )
+  const prefReasonsMap = Object.fromEntries(
+    (preferences ?? []).map((p) => [p.role_id, (p.reasons as string[] | null) ?? []]),
+  )
 
   // Build role list sorted by company order, then split open-first
   const roleList = [...(roles ?? [])]
@@ -67,8 +70,9 @@ export default async function LearnerDashboardPage() {
       return diff !== 0 ? diff : ma.created.localeCompare(mb.created)
     })
     .map((role) => {
-      const app = appMap[role.id]
+      const app  = appMap[role.id]
       const pref = prefMap[role.id]
+      const niReasons = prefReasonsMap[role.id] ?? []
 
       let myStatus: MyStatus
       if (app) {
@@ -89,6 +93,7 @@ export default async function LearnerDashboardPage() {
         my_status: myStatus,
         not_shortlisted_reason: app?.not_shortlisted_reason ?? null,
         rejection_feedback:     app?.rejection_feedback     ?? null,
+        not_interested_reasons: niReasons,
       }
     })
 
