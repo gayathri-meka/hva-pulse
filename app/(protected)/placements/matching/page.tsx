@@ -9,7 +9,7 @@ import MatchingTable, { type MatchingRow, type MatchingStatus } from '@/componen
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ role?: string; batch?: string; lf?: string; status?: string }>
+  searchParams: Promise<{ role?: string; batch?: string; lf?: string; status?: string; learner?: string }>
 }
 
 export default async function MatchingPage({ searchParams }: Props) {
@@ -17,7 +17,7 @@ export default async function MatchingPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
-  const { role: roleId, batch: batchFilter, lf: lfFilter, status: statusFilter } = await searchParams
+  const { role: roleId, batch: batchFilter, lf: lfFilter, status: statusFilter, learner: learnerFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -74,10 +74,11 @@ export default async function MatchingPage({ searchParams }: Props) {
   const batches = [...new Set(allLearners.map((l) => l.batch).filter(Boolean))].sort()
   const lfs     = [...new Set(allLearners.map((l) => l.lf).filter(Boolean))].sort()
 
-  // ── Apply batch / LF filters ──────────────────────────────────────────────
+  // ── Apply batch / LF / learner filters ───────────────────────────────────
   const filtered = allLearners
-    .filter((l) => !batchFilter || l.batch === batchFilter)
-    .filter((l) => !lfFilter    || l.lf    === lfFilter)
+    .filter((l) => !batchFilter   || l.batch       === batchFilter)
+    .filter((l) => !lfFilter      || l.lf          === lfFilter)
+    .filter((l) => !learnerFilter || l.learner_id  === learnerFilter)
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Derive placement status per learner ──────────────────────────────────
@@ -101,7 +102,20 @@ export default async function MatchingPage({ searchParams }: Props) {
       .map((p) => [p.user_id!, (p.reasons as string[]) ?? []])
   )
 
-  const rows: MatchingRow[] = !roleId ? [] : filtered.map((l) => {
+  const rows: MatchingRow[] = filtered.map((l) => {
+    if (!roleId) {
+      return {
+        learner_id:             l.learner_id,
+        name:                   l.name,
+        batch:                  l.batch,
+        lf:                     l.lf,
+        prs_score:              null,
+        status:                 'not_applied' as MatchingStatus, // placeholder; Status column hidden
+        reasons:                [],
+        not_shortlisted_reason: null,
+        rejection_feedback:     null,
+      }
+    }
     let status: MatchingStatus
     const appDetail = l.user_id ? appMap[l.user_id] : undefined
     if (appDetail) {
@@ -139,29 +153,22 @@ export default async function MatchingPage({ searchParams }: Props) {
 
       {/* Controls */}
       <Suspense>
-        <MatchingControls roles={roleOptions} batches={batches} lfs={lfs} />
+        <MatchingControls
+          roles={roleOptions}
+          batches={batches}
+          lfs={lfs}
+          learners={allLearners.map((l) => ({ id: l.learner_id, name: l.name }))}
+        />
       </Suspense>
 
-      {/* Empty state — no role selected */}
-      {!roleId && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-white py-24 text-center">
-          <p className="text-sm font-medium text-zinc-500">Select a role above to see matching learners</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            {roleOptions.length} role{roleOptions.length !== 1 ? 's' : ''} available
-          </p>
-        </div>
-      )}
-
-      {/* Role selected: filter pills + table */}
+      {/* Status filter pills — only meaningful when a role is selected */}
       {roleId && (
-        <>
-          <Suspense>
-            <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
-          </Suspense>
-
-          <MatchingTable rows={filteredRows} />
-        </>
+        <Suspense>
+          <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
+        </Suspense>
       )}
+
+      <MatchingTable rows={filteredRows} roleSelected={!!roleId} />
 
     </div>
   )

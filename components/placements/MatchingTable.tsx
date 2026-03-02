@@ -107,14 +107,14 @@ function loadSizing(): ColumnSizingState {
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
 
-export default function MatchingTable({ rows }: { rows: MatchingRow[] }) {
+export default function MatchingTable({ rows, roleSelected = true }: { rows: MatchingRow[]; roleSelected?: boolean }) {
   const [sorting, setSorting]           = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
 
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnSizing },
+    state: { sorting, columnSizing, columnVisibility: { status: roleSelected } },
     onSortingChange: setSorting,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
