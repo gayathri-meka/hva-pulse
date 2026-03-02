@@ -18,6 +18,7 @@ export default async function LearnerDashboardPage() {
     { data: companies },
     { data: applications },
     { data: preferences },
+    { data: resumeCheck },
   ] = await Promise.all([
     supabase
       .from('roles')
@@ -32,6 +33,7 @@ export default async function LearnerDashboardPage() {
       .from('role_preferences')
       .select('role_id, preference, reasons')
       .eq('user_id', appUser.id),
+    supabase.from('resumes').select('id').eq('user_id', appUser.id).limit(1),
   ])
 
   const companyMap = Object.fromEntries(
@@ -125,7 +127,8 @@ export default async function LearnerDashboardPage() {
     (r) => r.status === 'open' && r.my_status === 'not_applied',
   ).length
 
-  const firstName = appUser.name?.split(' ')[0] ?? 'there'
+  const hasResume  = (resumeCheck ?? []).length > 0
+  const firstName  = appUser.name?.split(' ')[0] ?? 'there'
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
@@ -136,6 +139,7 @@ export default async function LearnerDashboardPage() {
         roles={sortedRoles}
         notShortlistedReasons={notShortlistedReasons}
         rejectedReasons={rejectedReasons}
+        hasResume={hasResume}
       />
     </div>
   )

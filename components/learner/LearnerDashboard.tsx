@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import PlacementSnapshot from '@/components/learner/PlacementSnapshot'
 import RoleCard from '@/components/learner/RoleCard'
 import type { MyStatus } from '@/types'
@@ -64,9 +65,10 @@ type Props = {
   roles: RoleItem[]
   notShortlistedReasons: ReasonEntry[]
   rejectedReasons: ReasonEntry[]
+  hasResume: boolean
 }
 
-export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons }: Props) {
+export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
 
   function handleViewIgnored() {
@@ -96,6 +98,21 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
       <div className="mb-5">
         <h1 className="text-xl font-bold text-zinc-900">Hey, {firstName}!</h1>
       </div>
+
+      {!hasResume && (
+        <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-amber-900">You haven&apos;t uploaded a resume yet.</p>
+            <p className="mt-0.5 text-xs text-amber-700">Upload one on your profile so you can start applying to companies.</p>
+          </div>
+          <Link
+            href="/learner/profile"
+            className="shrink-0 rounded-lg bg-amber-800 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-900"
+          >
+            Upload now
+          </Link>
+        </div>
+      )}
 
       <PlacementSnapshot
         {...snapshot}

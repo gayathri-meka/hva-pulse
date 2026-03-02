@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import ResumeManager from '@/components/learner/ResumeManager'
@@ -6,7 +7,14 @@ import { signOut } from '@/app/actions'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ProfilePage() {
+interface Props {
+  searchParams: Promise<{ back?: string }>
+}
+
+export default async function ProfilePage({ searchParams }: Props) {
+  const { back } = await searchParams
+  // Only allow internal learner role paths to prevent open-redirect
+  const backHref = back?.startsWith('/learner/roles/') ? back : null
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
 
@@ -22,6 +30,17 @@ export default async function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
+      {backHref && (
+        <Link
+          href={backHref}
+          className="mb-5 inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+          Back to role
+        </Link>
+      )}
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-xl font-bold text-zinc-900">Profile</h1>
         <form action={signOut}>

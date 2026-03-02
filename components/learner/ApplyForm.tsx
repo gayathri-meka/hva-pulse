@@ -137,7 +137,7 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
             You need to upload a resume before you can apply.
           </p>
           <Link
-            href="/learner/profile"
+            href={`/learner/profile?back=/learner/roles/${roleId}`}
             className="mt-3 inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-700 transition-colors"
           >
             Upload resume →

@@ -40,6 +40,7 @@ function renderDashboard() {
       roles={roles}
       notShortlistedReasons={[]}
       rejectedReasons={[]}
+      hasResume={true}
     />
   )
 }
@@ -103,6 +104,7 @@ describe('LearnerDashboard', () => {
         roles={roles}
         notShortlistedReasons={[]}
         rejectedReasons={[]}
+        hasResume={true}
       />
     )
     // No hired roles, so Hired pill should not appear
