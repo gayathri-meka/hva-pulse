@@ -18,7 +18,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const rows = await getSheetRows()
+    const rows = await getSheetRows(process.env.GOOGLE_LEARNER_ROSTER_SHEET_ID!, 'Learners')
     const validRows = rows.filter((row) => row['email'] && row['learner_id'])
 
     // ── Step 1: Upsert a users row for every learner ──────────────────────────
@@ -113,6 +113,11 @@ export async function POST() {
         return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 })
       }
     }
+
+    await supabase.from('sync_logs').upsert(
+      { sheet_key: 'learner_roster', last_synced_at: new Date().toISOString(), records_synced: learners.length },
+      { onConflict: 'sheet_key' }
+    )
 
     return NextResponse.json({
       success: true,

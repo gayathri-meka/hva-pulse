@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const protectedPrefixes = ['/dashboard', '/learners', '/users', '/placements', '/learner', '/outreach']
+  const protectedPrefixes = ['/dashboard', '/learners', '/users', '/placements', '/learner', '/outreach', '/settings']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
 
   if (!user && isProtected) {
@@ -53,6 +53,7 @@ export const config = {
     '/placements/:path*',
     '/learner/:path*',
     '/outreach/:path*',
+    '/settings/:path*',
     '/login',
   ],
 }

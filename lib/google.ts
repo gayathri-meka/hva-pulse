@@ -1,6 +1,6 @@
 import { google } from 'googleapis'
 
-export async function getSheetRows(): Promise<Record<string, string>[]> {
+export async function getSheetRows(sheetId: string, tabName: string): Promise<Record<string, string>[]> {
   const auth = new google.auth.GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -12,8 +12,8 @@ export async function getSheetRows(): Promise<Record<string, string>[]> {
   const sheets = google.sheets({ version: 'v4', auth })
 
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
-    range: 'Learners',
+    spreadsheetId: sheetId,
+    range: tabName,
   })
 
   const rows = response.data.values

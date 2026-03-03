@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
-import SyncButton from './SyncButton'
 import LearnersFilters from './LearnersFilters'
 import LearnersTable from '@/components/learners/LearnersTable'
 
@@ -40,6 +39,10 @@ export default async function LearnersPage({ searchParams }: Props) {
     phone_number: string; category: string; lf_name: string; status: string
     batch_name: string; tech_mentor_name: string; core_skills_mentor_name: string
     track: string; join_date: string | null
+    year_of_graduation: number | null; degree: string | null; specialisation: string | null
+    current_location: string | null; prs: number | null; readiness: string | null
+    blacklisted_date: string | null; proactiveness: number | null; articulation: number | null
+    comprehension: number | null; tech_score: number | null
     users: { name: string; email: string } | null
   }
   const learners = ((rawLearners ?? []) as RawLearner[])
@@ -77,7 +80,6 @@ export default async function LearnersPage({ searchParams }: Props) {
             {lf ? ` · ${lf}` : ''}
           </p>
         </div>
-        {appUser.role === 'admin' && <SyncButton />}
       </div>
 
       <div className="mb-5">

@@ -15,6 +15,18 @@ export type Learner = {
   core_skills_mentor_name: string
   track: string
   join_date: string | null
+  // From Learner Info sheet sync:
+  year_of_graduation: number | null
+  degree:             string | null
+  specialisation:     string | null
+  current_location:   string | null
+  prs:                number | null
+  readiness:          string | null
+  blacklisted_date:   string | null
+  proactiveness:      number | null
+  articulation:       number | null
+  comprehension:      number | null
+  tech_score:         number | null
   // Populated via join with users table:
   name: string
   email: string
