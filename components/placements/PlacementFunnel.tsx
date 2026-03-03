@@ -56,11 +56,11 @@ interface BranchCard {
 function ArrowWithBranches({ branches }: { branches: BranchCard[] }) {
   return (
     <div className="flex items-stretch py-0.5">
-      {/* Left spacer — keeps arrow centred */}
-      <div className="flex-1" />
+      {/* Left spacer — nudges arrow left */}
+      <div className="w-8 shrink-0" />
 
       {/* Center: variable-height shaft + arrowhead */}
-      <div className="flex flex-col items-center px-6">
+      <div className="flex flex-col items-center px-3">
         <div className="w-px flex-1 bg-zinc-300" />
         <svg width="14" height="10" viewBox="0 0 14 10" fill="none" className="mt-[-1px] shrink-0 text-zinc-300">
           <path d="M1 1l6 7 6-7" stroke="currentColor" strokeWidth="1.5"
