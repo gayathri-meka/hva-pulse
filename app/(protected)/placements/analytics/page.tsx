@@ -15,7 +15,7 @@ export default async function AnalyticsPage() {
 
   const [{ data: roles }, { data: applications }, { data: preferences }] = await Promise.all([
     supabase.from('roles').select('id'),
-    supabase.from('applications').select('status'),
+    supabase.from('applications').select('status, not_shortlisted_reasons, rejection_reasons'),
     supabase.from('role_preferences').select('reasons').eq('preference', 'not_interested'),
   ])
 
@@ -29,6 +29,24 @@ export default async function AnalyticsPage() {
   for (const pref of allPrefs) {
     for (const reason of (pref.reasons as string[]) ?? []) {
       reasonCounts[reason] = (reasonCounts[reason] ?? 0) + 1
+    }
+  }
+
+  const notShortlistedReasonCounts: Record<string, number> = {}
+  for (const app of allApps) {
+    if (app.status === 'not_shortlisted') {
+      for (const reason of (app.not_shortlisted_reasons as string[]) ?? []) {
+        notShortlistedReasonCounts[reason] = (notShortlistedReasonCounts[reason] ?? 0) + 1
+      }
+    }
+  }
+
+  const rejectionReasonCounts: Record<string, number> = {}
+  for (const app of allApps) {
+    if (app.status === 'rejected') {
+      for (const reason of (app.rejection_reasons as string[]) ?? []) {
+        rejectionReasonCounts[reason] = (rejectionReasonCounts[reason] ?? 0) + 1
+      }
     }
   }
 
@@ -59,6 +77,8 @@ export default async function AnalyticsPage() {
           hired={hired}
           rejected={rejected}
           reasonCounts={reasonCounts}
+          notShortlistedReasonCounts={notShortlistedReasonCounts}
+          rejectionReasonCounts={rejectionReasonCounts}
         />
       </div>
 

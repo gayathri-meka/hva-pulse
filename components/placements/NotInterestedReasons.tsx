@@ -1,5 +1,7 @@
 interface Props {
   reasonCounts: Record<string, number>
+  title:    string
+  subtitle: string
 }
 
 const COLORS: { bar: string; text: string }[] = [
@@ -12,15 +14,15 @@ const COLORS: { bar: string; text: string }[] = [
   { bar: 'bg-sky-400',     text: 'text-sky-500'     },
 ]
 
-export default function NotInterestedReasons({ reasonCounts }: Props) {
+export default function NotInterestedReasons({ reasonCounts, title, subtitle }: Props) {
   const entries = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])
   const max = entries[0]?.[1] ?? 1
 
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-lg font-bold text-zinc-900">Why Learners Decline Roles</h2>
-        <p className="mt-0.5 text-xs text-zinc-500">Reasons selected when marking not interested</p>
+        <h2 className="text-lg font-bold text-zinc-900">{title}</h2>
+        <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p>
       </div>
 
       {entries.length === 0 ? (

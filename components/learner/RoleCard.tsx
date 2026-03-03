@@ -15,6 +15,7 @@ type RoleCardData = {
   my_status: MyStatus
   not_shortlisted_reasons: string[]
   not_shortlisted_reason: string | null
+  rejection_reasons: string[]
   rejection_feedback: string | null
   not_interested_reasons: string[]
 }
@@ -142,7 +143,12 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
         : role.not_shortlisted_reason  // backward compat: old free-text only records
       return parts || null
     }
-    if (myStatus === 'rejected') return role.rejection_feedback
+    if (myStatus === 'rejected') {
+      const parts = role.rejection_reasons.length > 0
+        ? role.rejection_reasons.join(', ') + (role.rejection_feedback ? ` — ${role.rejection_feedback}` : '')
+        : role.rejection_feedback
+      return parts || null
+    }
     if (myStatus === 'not_interested') return role.not_interested_reasons.length > 0 ? role.not_interested_reasons.join(', ') : null
     return null
   })()

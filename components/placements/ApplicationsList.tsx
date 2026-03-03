@@ -45,11 +45,18 @@ const STATUS_SORT_ORDER: Record<string, number> = {
 }
 
 const NS_REASONS = [
-  'Low PRS',
+  'Skill Mismatch',
   'Eligibility Mismatch',
   'Location Mismatch',
   'Blacklisted',
   'Joining Date Mismatch',
+  'Other',
+]
+
+const REJECTION_REASONS = [
+  'Gap in technical skills',
+  'Gap in communication skills',
+  'Other',
 ]
 
 type PendingChange =
@@ -74,7 +81,6 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   )
   const [pendingChange, setPendingChange]   = useState<PendingChange>(null)
   const [noteText, setNoteText]             = useState('')
-  const [noteError, setNoteError]           = useState(false)
   const [checkedReasons, setCheckedReasons] = useState<Set<string>>(new Set())
   const [reasonsError, setReasonsError]     = useState(false)
   const [bulkSelect, setBulkSelect]         = useState('')
@@ -83,7 +89,6 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   function openModal(change: NonNullable<PendingChange>) {
     setPendingChange(change)
     setNoteText('')
-    setNoteError(false)
     setCheckedReasons(new Set())
     setReasonsError(false)
   }
@@ -115,16 +120,10 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
 
   function handleModalConfirm() {
     const change = pendingChange!
-    const isNotShortlisted = change.newStatus === 'not_shortlisted'
+    if (checkedReasons.size === 0) { setReasonsError(true); return }
 
-    if (isNotShortlisted) {
-      if (checkedReasons.size === 0) { setReasonsError(true); return }
-    } else {
-      if (!noteText.trim()) { setNoteError(true); return }
-    }
-
-    const reasons = isNotShortlisted ? Array.from(checkedReasons) : undefined
-    const note    = isNotShortlisted ? (noteText.trim() || undefined) : noteText.trim()
+    const reasons = Array.from(checkedReasons)
+    const note    = noteText.trim() || undefined
 
     if (change.bulk) {
       setStatusMap((prev) => Object.fromEntries(
@@ -138,7 +137,6 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     }
     setPendingChange(null)
     setNoteText('')
-    setNoteError(false)
     setCheckedReasons(new Set())
     setReasonsError(false)
   }
@@ -146,7 +144,6 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   function handleModalCancel() {
     setPendingChange(null)
     setNoteText('')
-    setNoteError(false)
     setCheckedReasons(new Set())
     setReasonsError(false)
   }
@@ -238,7 +235,12 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
             if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
             return comment  // backward compat
           }
-          if (currentStatus === 'rejected') return info.row.original.rejection_feedback
+          if (currentStatus === 'rejected') {
+            const reasons = info.row.original.rejection_reasons ?? []
+            const comment = info.row.original.rejection_feedback
+            if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
+            return comment  // backward compat
+          }
           return null
         })()
         return (
@@ -415,61 +417,54 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
                 ? pendingChange.bulk
                   ? "Why weren't these candidates shortlisted?"
                   : "Why wasn't this candidate shortlisted?"
-                : 'What feedback did the company provide?'}
+                : pendingChange.bulk
+                  ? 'Why were these candidates rejected?'
+                  : 'Why was this candidate rejected?'}
             </p>
 
-            {pendingChange.newStatus === 'not_shortlisted' ? (
-              <>
-                <div className={`space-y-2.5 rounded-lg border p-3 ${reasonsError ? 'border-red-300 bg-red-50' : 'border-zinc-200'}`}>
-                  {NS_REASONS.map((reason) => (
-                    <label key={reason} className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={checkedReasons.has(reason)}
-                        onChange={(e) => {
-                          setCheckedReasons((prev) => {
-                            const next = new Set(prev)
-                            e.target.checked ? next.add(reason) : next.delete(reason)
-                            return next
-                          })
-                          setReasonsError(false)
-                        }}
-                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                      />
-                      <span className="text-sm text-zinc-700">{reason}</span>
-                    </label>
-                  ))}
-                </div>
-                {reasonsError && (
-                  <p className="mt-1 text-xs text-red-600">Select at least one reason.</p>
-                )}
-                <label className="mt-3 block text-xs font-medium text-zinc-500">
-                  Additional comments <span className="text-zinc-400">(optional)</span>
-                </label>
-                <textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  rows={2}
-                  placeholder="e.g. Stronger candidates were selected for this round"
-                  className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
-                />
-              </>
-            ) : (
-              <>
-                <textarea
-                  value={noteText}
-                  onChange={(e) => { setNoteText(e.target.value); setNoteError(false) }}
-                  rows={3}
-                  placeholder="e.g. Good communication but needs more technical depth"
-                  className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900 ${
-                    noteError ? 'border-red-300 bg-red-50' : 'border-zinc-200'
-                  }`}
-                />
-                {noteError && (
-                  <p className="mt-1 text-xs text-red-600">This field is required.</p>
-                )}
-              </>
-            )}
+            {(() => {
+              const reasons = pendingChange.newStatus === 'not_shortlisted' ? NS_REASONS : REJECTION_REASONS
+              const placeholder = pendingChange.newStatus === 'not_shortlisted'
+                ? 'e.g. Stronger candidates were selected for this round'
+                : 'e.g. Needs more depth in system design'
+              return (
+                <>
+                  <div className={`space-y-2.5 rounded-lg border p-3 ${reasonsError ? 'border-red-300 bg-red-50' : 'border-zinc-200'}`}>
+                    {reasons.map((reason) => (
+                      <label key={reason} className="flex cursor-pointer items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={checkedReasons.has(reason)}
+                          onChange={(e) => {
+                            setCheckedReasons((prev) => {
+                              const next = new Set(prev)
+                              e.target.checked ? next.add(reason) : next.delete(reason)
+                              return next
+                            })
+                            setReasonsError(false)
+                          }}
+                          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        />
+                        <span className="text-sm text-zinc-700">{reason}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {reasonsError && (
+                    <p className="mt-1 text-xs text-red-600">Select at least one reason.</p>
+                  )}
+                  <label className="mt-3 block text-xs font-medium text-zinc-500">
+                    Additional details <span className="text-zinc-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    rows={2}
+                    placeholder={placeholder}
+                    className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                  />
+                </>
+              )
+            })()}
 
             <div className="mt-4 flex justify-end gap-2">
               <button

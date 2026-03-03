@@ -5,16 +5,18 @@ import Link from 'next/link'
 import NotInterestedReasons from './NotInterestedReasons'
 
 interface Props {
-  totalRoles:     number
-  notInterested:  number
-  totalApps:      number
-  notShortlisted: number
-  stillApplied:   number
-  shortlistPassed: number
-  inProcess:      number
-  hired:          number
-  rejected:       number
-  reasonCounts:   Record<string, number>
+  totalRoles:                 number
+  notInterested:              number
+  totalApps:                  number
+  notShortlisted:             number
+  stillApplied:               number
+  shortlistPassed:            number
+  inProcess:                  number
+  hired:                      number
+  rejected:                   number
+  reasonCounts:               Record<string, number>
+  notShortlistedReasonCounts: Record<string, number>
+  rejectionReasonCounts:      Record<string, number>
 }
 
 function pct(num: number, denom: number): string {
@@ -69,33 +71,31 @@ function ArrowWithBranches({ branches }: { branches: BranchCard[] }) {
       {/* Right: stacked branch cards */}
       <div className="flex flex-1 flex-col justify-center gap-1.5 py-0.5">
         {branches.map((b) => (
-          <div key={b.label} className="flex items-start gap-2">
-            <div className={`mt-3 h-px w-6 shrink-0 ${b.dividerCls}`} />
-            <div className="flex flex-col gap-0.5">
-              <Link
-                href={b.href}
-                className={`block rounded-lg border ${b.cardBorder} ${b.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
-              >
-                <p className={`text-[9px] font-semibold uppercase tracking-widest ${b.labelCls}`}>
-                  {b.label}
-                </p>
-                <p className={`mt-0.5 text-base font-bold tabular-nums ${b.countCls}`}>{b.count}</p>
-                {b.pctStr && (
-                  <p className={`text-[10px] ${b.metaCls}`}>{b.pctStr}</p>
-                )}
-              </Link>
-              {b.onWhyClick && (
-                <button
-                  onClick={b.onWhyClick}
-                  className="self-end flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-500 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                    <path d="M2 11a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2zM7 7a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7zM12 3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V3z" />
-                  </svg>
-                  Why?
-                </button>
+          <div key={b.label} className="flex items-center gap-2">
+            <div className={`h-px w-6 shrink-0 ${b.dividerCls}`} />
+            <Link
+              href={b.href}
+              className={`block rounded-lg border ${b.cardBorder} ${b.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
+            >
+              <p className={`text-[9px] font-semibold uppercase tracking-widest ${b.labelCls}`}>
+                {b.label}
+              </p>
+              <p className={`mt-0.5 text-base font-bold tabular-nums ${b.countCls}`}>{b.count}</p>
+              {b.pctStr && (
+                <p className={`text-[10px] ${b.metaCls}`}>{b.pctStr}</p>
               )}
-            </div>
+            </Link>
+            {b.onWhyClick && (
+              <button
+                onClick={b.onWhyClick}
+                className="flex shrink-0 items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-500 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                  <path d="M2 11a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2zM7 7a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7zM12 3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V3z" />
+                </svg>
+                Why?
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -157,9 +157,13 @@ function RolesHeading({ count, href }: { count: number; href: string }) {
 // ─── Reasons modal ────────────────────────────────────────────────────────────
 function ReasonsModal({
   reasonCounts,
+  title,
+  subtitle,
   onClose,
 }: {
   reasonCounts: Record<string, number>
+  title:    string
+  subtitle: string
   onClose: () => void
 }) {
   return (
@@ -171,7 +175,7 @@ function ReasonsModal({
         className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <NotInterestedReasons reasonCounts={reasonCounts} />
+        <NotInterestedReasons reasonCounts={reasonCounts} title={title} subtitle={subtitle} />
         <button
           onClick={onClose}
           className="mt-5 w-full rounded-lg border border-zinc-200 py-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-50"
@@ -195,14 +199,39 @@ export default function PlacementFunnel({
   hired,
   rejected,
   reasonCounts,
+  notShortlistedReasonCounts,
+  rejectionReasonCounts,
 }: Props) {
-  const [showReasons, setShowReasons] = useState(false)
+  const [showReasons,         setShowReasons]         = useState(false)
+  const [showNSReasons,       setShowNSReasons]       = useState(false)
+  const [showRejReasons,      setShowRejReasons]      = useState(false)
 
   return (
     <div className="mx-auto max-w-sm">
 
       {showReasons && (
-        <ReasonsModal reasonCounts={reasonCounts} onClose={() => setShowReasons(false)} />
+        <ReasonsModal
+          reasonCounts={reasonCounts}
+          title="Why Learners Decline Roles"
+          subtitle="Reasons given when marking a role as not interested"
+          onClose={() => setShowReasons(false)}
+        />
+      )}
+      {showNSReasons && (
+        <ReasonsModal
+          reasonCounts={notShortlistedReasonCounts}
+          title="Why Learners Are Not Shortlisted"
+          subtitle="Reasons given when moving an application to not shortlisted"
+          onClose={() => setShowNSReasons(false)}
+        />
+      )}
+      {showRejReasons && (
+        <ReasonsModal
+          reasonCounts={rejectionReasonCounts}
+          title="Why Learners Are Getting Rejected"
+          subtitle="Reasons given when rejecting an application after interview"
+          onClose={() => setShowRejReasons(false)}
+        />
       )}
 
       {/* ── INTEREST STAGE ── */}
@@ -241,6 +270,7 @@ export default function PlacementFunnel({
           cardBg:     'bg-zinc-50',  cardBorder: 'border-zinc-200',
           labelCls:   'text-zinc-400', countCls: 'text-zinc-700',
           metaCls:    'text-zinc-400', dividerCls: 'bg-zinc-200',
+          onWhyClick: () => setShowNSReasons(true),
         },
         {
           label:      'Still Applied',
@@ -285,6 +315,7 @@ export default function PlacementFunnel({
           cardBg:     'bg-red-50',   cardBorder: 'border-red-100',
           labelCls:   'text-red-400', countCls: 'text-red-700',
           metaCls:    'text-red-400', dividerCls: 'bg-red-200',
+          onWhyClick: () => setShowRejReasons(true),
         },
       ]} />
 

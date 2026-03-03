@@ -87,6 +87,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       updated_at: a.updated_at,
       not_shortlisted_reasons: (a.not_shortlisted_reasons as string[] | null) ?? [],
       not_shortlisted_reason:  a.not_shortlisted_reason ?? null,
+      rejection_reasons:       (a.rejection_reasons as string[] | null) ?? [],
       rejection_feedback:      a.rejection_feedback ?? null,
       learner_name: user?.name || 'Unknown',
       learner_email: user?.email || '',

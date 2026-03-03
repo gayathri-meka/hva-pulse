@@ -27,7 +27,7 @@ export default async function LearnerDashboardPage() {
     supabase.from('companies').select('id, company_name, sort_order, created_at'),
     supabase
       .from('applications')
-      .select('id, role_id, status, not_shortlisted_reasons, not_shortlisted_reason, rejection_feedback')
+      .select('id, role_id, status, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
       .eq('user_id', appUser.id),
     supabase
       .from('role_preferences')
@@ -54,6 +54,7 @@ export default async function LearnerDashboardPage() {
       status: a.status,
       not_shortlisted_reasons: (a.not_shortlisted_reasons as string[] | null) ?? [],
       not_shortlisted_reason:  (a.not_shortlisted_reason  as string | null) ?? null,
+      rejection_reasons:       (a.rejection_reasons       as string[] | null) ?? [],
       rejection_feedback:      (a.rejection_feedback      as string | null) ?? null,
     }]),
   )
@@ -96,6 +97,7 @@ export default async function LearnerDashboardPage() {
         my_status: myStatus,
         not_shortlisted_reasons: app?.not_shortlisted_reasons ?? [],
         not_shortlisted_reason:  app?.not_shortlisted_reason  ?? null,
+        rejection_reasons:       app?.rejection_reasons       ?? [],
         rejection_feedback:      app?.rejection_feedback      ?? null,
         not_interested_reasons: niReasons,
       }
@@ -128,12 +130,22 @@ export default async function LearnerDashboardPage() {
     })
 
   const rejectedReasons: ReasonEntry[] = (applications ?? [])
-    .filter((a) => a.status === 'rejected' && (a.rejection_feedback as string | null))
-    .map((a) => ({
-      company: roleDetailMap[a.role_id]?.company_name ?? '',
-      role:    roleDetailMap[a.role_id]?.role_title   ?? '',
-      reason:  a.rejection_feedback as string,
-    }))
+    .filter((a) => a.status === 'rejected')
+    .filter((a) => {
+      const reasons = (a.rejection_reasons as string[] | null) ?? []
+      return reasons.length > 0 || (a.rejection_feedback as string | null)
+    })
+    .map((a) => {
+      const reasons = (a.rejection_reasons as string[] | null) ?? []
+      const comment = (a.rejection_feedback as string | null) ?? ''
+      return {
+        company: roleDetailMap[a.role_id]?.company_name ?? '',
+        role:    roleDetailMap[a.role_id]?.role_title   ?? '',
+        reason:  reasons.length > 0
+          ? reasons.join(', ') + (comment ? ` — ${comment}` : '')
+          : comment,
+      }
+    })
 
   const ignoredOpenCount = sortedRoles.filter(
     (r) => r.status === 'open' && r.my_status === 'not_applied',

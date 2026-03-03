@@ -39,6 +39,7 @@ export type Application = {
   resume_url: string | null; created_at: string; updated_at: string
   not_shortlisted_reasons: string[] | null
   not_shortlisted_reason: string | null   // additional comments (optional free text)
+  rejection_reasons: string[] | null
   rejection_feedback: string | null
 }
 

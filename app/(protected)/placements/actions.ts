@@ -157,14 +157,17 @@ export async function updateApplicationStatus(id: string, status: string, note?:
   if (status === 'not_shortlisted') {
     updates.not_shortlisted_reasons = reasons ?? []
     updates.not_shortlisted_reason  = note ?? null
+    updates.rejection_reasons       = []
     updates.rejection_feedback      = null
   } else if (status === 'rejected') {
+    updates.rejection_reasons       = reasons ?? []
     updates.rejection_feedback      = note ?? null
     updates.not_shortlisted_reasons = []
     updates.not_shortlisted_reason  = null
   } else {
     updates.not_shortlisted_reasons = []
     updates.not_shortlisted_reason  = null
+    updates.rejection_reasons       = []
     updates.rejection_feedback      = null
   }
 
@@ -182,14 +185,17 @@ export async function bulkUpdateApplicationStatus(ids: string[], status: string,
   if (status === 'not_shortlisted') {
     updates.not_shortlisted_reasons = reasons ?? []
     updates.not_shortlisted_reason  = note ?? null
+    updates.rejection_reasons       = []
     updates.rejection_feedback      = null
   } else if (status === 'rejected') {
+    updates.rejection_reasons       = reasons ?? []
     updates.rejection_feedback      = note ?? null
     updates.not_shortlisted_reasons = []
     updates.not_shortlisted_reason  = null
   } else {
     updates.not_shortlisted_reasons = []
     updates.not_shortlisted_reason  = null
+    updates.rejection_reasons       = []
     updates.rejection_feedback      = null
   }
 

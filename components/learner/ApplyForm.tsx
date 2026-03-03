@@ -13,6 +13,7 @@ type Application = {
   created_at: string
   not_shortlisted_reasons: string[] | null
   not_shortlisted_reason: string | null
+  rejection_reasons: string[] | null
   rejection_feedback: string | null
 }
 
@@ -57,6 +58,7 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
     const status = application?.status ?? 'applied'
     const nsReasons = application?.not_shortlisted_reasons ?? []
     const nsComment = application?.not_shortlisted_reason ?? null
+    const rejReasons = application?.rejection_reasons ?? []
     const rejectionNote = status === 'rejected' ? application?.rejection_feedback : null
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -106,10 +108,22 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
           </div>
         )}
 
-        {rejectionNote && (
+        {status === 'rejected' && (rejReasons.length > 0 || rejectionNote) && (
           <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Feedback</p>
-            <p className="mt-1 text-sm leading-relaxed text-zinc-700">{rejectionNote}</p>
+            {rejReasons.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {rejReasons.map((r) => (
+                  <span key={r} className="rounded-full bg-zinc-200 px-2.5 py-0.5 text-xs font-medium text-zinc-700">{r}</span>
+                ))}
+              </div>
+            )}
+            {rejReasons.length === 0 && rejectionNote && (
+              <p className="mt-1 text-sm leading-relaxed text-zinc-700">{rejectionNote}</p>
+            )}
+            {rejReasons.length > 0 && rejectionNote && (
+              <p className="mt-2 text-sm leading-relaxed text-zinc-600">{rejectionNote}</p>
+            )}
           </div>
         )}
       </div>
