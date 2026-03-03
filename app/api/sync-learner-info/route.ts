@@ -10,12 +10,13 @@ function parseNum(val: string): number | null {
 
 function parseDate(val: string): string | null {
   if (!val?.trim()) return null
+  // Explicit MM/DD/YYYY parse — avoids engine-dependent new Date() interpretation
+  const match = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (match) return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
+  // Fallback: use local date methods to avoid UTC shift
   const d = new Date(val)
   if (isNaN(d.getTime())) return null
-  const y   = d.getFullYear()
-  const m   = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export async function POST() {
@@ -74,7 +75,7 @@ export async function POST() {
           user_id:            userId,
           year_of_graduation: row['year_of_graduation']?.trim() ? (parseInt(row['year_of_graduation'], 10) || null) : null,
           degree:             row['degree']?.trim()           || null,
-          specialisation:     row['specialisation']?.trim()   || null,
+          specialisation:     row['specialisation']?.trim() || row['specialization']?.trim() || null,
           current_location:   row['current_location']?.trim() || null,
           prs:                parseNum(row['prs']),
           readiness:          row['readiness']?.trim()        || null,

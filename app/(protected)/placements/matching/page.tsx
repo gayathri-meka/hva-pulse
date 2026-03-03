@@ -73,6 +73,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     comprehension:      number | null
     tech_score:         number | null
     current_location:   string | null
+    readiness:          string | null
     blacklisted_date:   string | null
   }
   const allLearners = ((rawLearners ?? []) as RawLearner[]).map((l) => ({
@@ -90,6 +91,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     comprehension:      l.comprehension,
     tech_score:         l.tech_score,
     current_location:   l.current_location,
+    readiness:          l.readiness,
     blacklisted_date:   l.blacklisted_date,
   }))
 
@@ -129,7 +131,8 @@ export default async function MatchingPage({ searchParams }: Props) {
     comprehension:      l.comprehension,
     tech_score:         l.tech_score,
     current_location:   l.current_location,
-    is_blacklisted:     l.blacklisted_date !== null,
+    readiness:          l.readiness,
+    is_blacklisted:     (l.blacklisted_date !== null ? 'Yes' : 'No') as 'Yes' | 'No',
     blacklisted_date:   l.blacklisted_date,
   })
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import ExpandableNote from '@/components/ui/ExpandableNote'
 import {
   useReactTable,
@@ -16,6 +16,7 @@ import {
   type ColumnFiltersState,
   type ColumnOrderState,
   type Column,
+  type FilterFn,
 } from '@tanstack/react-table'
 
 export type MatchingStatus =
@@ -30,13 +31,14 @@ export type MatchingRow = {
   year_of_graduation:     number | null
   degree:                 string | null
   specialisation:         string | null
+  readiness:              string | null
   prs_score:              number | null
   proactiveness:          number | null
   articulation:           number | null
   comprehension:          number | null
   tech_score:             number | null
   current_location:       string | null
-  is_blacklisted:         boolean
+  is_blacklisted:         'Yes' | 'No'
   blacklisted_date:       string | null
   status:                 MatchingStatus
   reasons:                string[]
@@ -66,16 +68,29 @@ const STATUS_LABEL: Record<MatchingStatus, string> = {
   not_interested:  'Not Interested',
 }
 
+// Shared multi-select filterFn: filter value is string[], cell value coerced to string
+const multiSelectFilter: FilterFn<MatchingRow> = (row, colId, filterValues: string[]) =>
+  !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
+multiSelectFilter.autoRemove = (val: string[]) => !val?.length
+
 function numCell(val: number | null) {
-  return (
-    <span className="tabular-nums text-zinc-500">
-      {val != null ? val : '—'}
-    </span>
-  )
+  return <span className="tabular-nums text-zinc-500">{val != null ? val : '—'}</span>
 }
 
-function FilterSelect({ column }: { column: Column<MatchingRow, unknown> }) {
-  const currentValue = (column.getFilterValue() as string) ?? ''
+// ── Multi-select checkbox dropdown ────────────────────────────────────────────
+function FilterDropdown({ column }: { column: Column<MatchingRow, unknown> }) {
+  const [open, setOpen] = useState(false)
+  const containerRef    = useRef<HTMLDivElement>(null)
+  const selected        = (column.getFilterValue() as string[]) ?? []
+
+  useEffect(() => {
+    if (!open) return
+    function onOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [open])
 
   const options: string[] =
     column.id === 'is_blacklisted'
@@ -85,20 +100,60 @@ function FilterSelect({ column }: { column: Column<MatchingRow, unknown> }) {
           .map(String)
           .sort()
 
+  function toggle(val: string) {
+    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
+    column.setFilterValue(next.length ? next : undefined)
+  }
+
+  const label =
+    selected.length === 0 ? 'All'
+    : selected.length === 1 ? selected[0]
+    : `${selected.length} selected`
+
   return (
-    <select
-      className="mt-1 w-full rounded border border-zinc-200 bg-white px-1 py-0.5 text-xs font-normal normal-case tracking-normal text-zinc-600 focus:outline-none"
-      value={currentValue}
-      onChange={(e) => column.setFilterValue(e.target.value || undefined)}
-    >
-      <option value="">All</option>
-      {options.map((v) => (
-        <option key={v} value={v}>{v}</option>
-      ))}
-    </select>
+    <div ref={containerRef} className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-xs font-normal normal-case tracking-normal focus:outline-none ${
+          selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-0.5 max-h-52 min-w-[140px] overflow-y-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { column.setFilterValue(undefined); setOpen(false) }}
+              className="w-full px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50 border-b border-zinc-100"
+            >
+              Clear filter
+            </button>
+          )}
+          {options.map((opt) => (
+            <label key={opt} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={() => toggle(opt)}
+                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+          {options.length === 0 && <p className="px-3 py-1 text-xs text-zinc-400">No values</p>}
+        </div>
+      )}
+    </div>
   )
 }
 
+// ── Column definitions ────────────────────────────────────────────────────────
 const col = createColumnHelper<MatchingRow>()
 
 const columns = [
@@ -110,81 +165,83 @@ const columns = [
   }),
   col.accessor('batch', {
     header: 'Batch',
-    size: 150,
-    filterFn: 'equals',
+    size: 140,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
   }),
   col.accessor('lf', {
     header: 'LF',
-    size: 150,
-    filterFn: 'equals',
+    size: 140,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
   }),
   col.accessor('year_of_graduation', {
     header: 'Grad Year',
     size: 110,
-    filterFn: (row, colId, filterValue) =>
-      !filterValue || String(row.getValue(colId) ?? '') === filterValue,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="tabular-nums text-zinc-500">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('degree', {
     header: 'Degree',
     size: 140,
-    filterFn: 'equals',
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
   }),
   col.accessor('specialisation', {
     header: 'Specialisation',
     size: 170,
-    filterFn: 'equals',
+    filterFn: multiSelectFilter,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+  }),
+  col.accessor('readiness', {
+    header: 'Readiness',
+    size: 130,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
   }),
   col.accessor('prs_score', {
     header: 'PRS',
     size: 90,
-    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
+    filterFn: multiSelectFilter,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('proactiveness', {
     header: 'Proactiveness',
     size: 130,
-    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
+    filterFn: multiSelectFilter,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('articulation', {
     header: 'Articulation',
     size: 120,
-    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
+    filterFn: multiSelectFilter,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('comprehension', {
     header: 'Comprehension',
     size: 130,
-    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
+    filterFn: multiSelectFilter,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('tech_score', {
     header: 'Tech Score',
     size: 110,
-    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
+    filterFn: multiSelectFilter,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('current_location', {
     header: 'Location',
     size: 140,
-    filterFn: 'equals',
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
   }),
   col.accessor('is_blacklisted', {
     header: 'Blacklisted?',
     size: 120,
     enableSorting: false,
-    filterFn: (row, _, filterValue) => {
-      if (!filterValue) return true
-      return filterValue === 'Yes' ? row.original.is_blacklisted : !row.original.is_blacklisted
-    },
+    filterFn: multiSelectFilter,
     cell: (info) => {
-      const v    = info.getValue()
+      const v    = info.getValue() === 'Yes'
       const date = info.row.original.blacklisted_date
       return (
         <span
@@ -222,31 +279,34 @@ const columns = [
   }),
 ]
 
+// ── Column ordering ───────────────────────────────────────────────────────────
+const BASE_ORDER: ColumnOrderState = [
+  'name', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
+  'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
+  'current_location', 'is_blacklisted', 'status',
+]
+const ROLE_ORDER: ColumnOrderState = [
+  'name', 'status', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
+  'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
+  'current_location', 'is_blacklisted',
+]
+
+// ── Sizing ────────────────────────────────────────────────────────────────────
 const SIZING_KEY = 'hva-col-matching'
 function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
 
-const BASE_ORDER: ColumnOrderState = [
-  'name', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation',
-  'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
-  'current_location', 'is_blacklisted', 'status',
-]
-const ROLE_ORDER: ColumnOrderState = [
-  'name', 'status', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation',
-  'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
-  'current_location', 'is_blacklisted',
-]
-
+// ── Table component ───────────────────────────────────────────────────────────
 export default function MatchingTable({ rows, roleSelected = true }: { rows: MatchingRow[]; roleSelected?: boolean }) {
   const [sorting, setSorting]             = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   const columnOrder = useMemo<ColumnOrderState>(
-    () => roleSelected ? ROLE_ORDER : BASE_ORDER,
-    [roleSelected]
+    () => (roleSelected ? ROLE_ORDER : BASE_ORDER),
+    [roleSelected],
   )
 
   const table = useReactTable({
@@ -294,9 +354,7 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
                     {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
                     {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                   </div>
-                  {header.column.getCanFilter() && (
-                    <FilterSelect column={header.column} />
-                  )}
+                  {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
                   {header.column.getCanResize() && (
                     <div
                       onMouseDown={header.getResizeHandler()}
