@@ -68,6 +68,7 @@ export async function POST() {
 
         return {
           learner_id:         learnerId,
+          user_id:            userId,
           year_of_graduation: row['year_of_graduation']?.trim() ? (parseInt(row['year_of_graduation'], 10) || null) : null,
           degree:             row['degree']?.trim()           || null,
           specialisation:     row['specialisation']?.trim()   || null,
