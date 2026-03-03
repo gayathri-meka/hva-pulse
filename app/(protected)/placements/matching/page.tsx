@@ -17,7 +17,7 @@ export default async function MatchingPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
-  const { role: roleId, batch: batchFilter, lf: lfFilter, status: statusFilter, learner: learnerFilter } = await searchParams
+  const { role: roleId, status: statusFilter, learner: learnerFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -93,15 +93,9 @@ export default async function MatchingPage({ searchParams }: Props) {
     blacklisted_date:   l.blacklisted_date,
   }))
 
-  // ── Filter options ────────────────────────────────────────────────────────
-  const batches = [...new Set(allLearners.map((l) => l.batch).filter(Boolean))].sort()
-  const lfs     = [...new Set(allLearners.map((l) => l.lf).filter(Boolean))].sort()
-
-  // ── Apply batch / LF / learner filters ───────────────────────────────────
+  // ── Apply learner filter (server-side; batch/LF handled by column filters) ─
   const filtered = allLearners
-    .filter((l) => !batchFilter   || l.batch       === batchFilter)
-    .filter((l) => !lfFilter      || l.lf          === lfFilter)
-    .filter((l) => !learnerFilter || l.learner_id  === learnerFilter)
+    .filter((l) => !learnerFilter || l.learner_id === learnerFilter)
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Derive placement status per learner ──────────────────────────────────
@@ -192,8 +186,6 @@ export default async function MatchingPage({ searchParams }: Props) {
       <Suspense>
         <MatchingControls
           roles={roleOptions}
-          batches={batches}
-          lfs={lfs}
           learners={allLearners.map((l) => ({ id: l.learner_id, name: l.name }))}
         />
       </Suspense>

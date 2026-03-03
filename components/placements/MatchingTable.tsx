@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import ExpandableNote from '@/components/ui/ExpandableNote'
 import {
   useReactTable,
@@ -14,6 +14,7 @@ import {
   type SortingState,
   type ColumnSizingState,
   type ColumnFiltersState,
+  type ColumnOrderState,
   type Column,
 } from '@tanstack/react-table'
 
@@ -141,31 +142,31 @@ const columns = [
   col.accessor('prs_score', {
     header: 'PRS',
     size: 90,
-    enableColumnFilter: false,
+    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('proactiveness', {
     header: 'Proactiveness',
     size: 130,
-    enableColumnFilter: false,
+    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('articulation', {
     header: 'Articulation',
     size: 120,
-    enableColumnFilter: false,
+    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('comprehension', {
     header: 'Comprehension',
     size: 130,
-    enableColumnFilter: false,
+    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('tech_score', {
     header: 'Tech Score',
     size: 110,
-    enableColumnFilter: false,
+    filterFn: (row, colId, fv) => !fv || String(row.getValue(colId) ?? '') === fv,
     cell: (info) => numCell(info.getValue()),
   }),
   col.accessor('current_location', {
@@ -227,15 +228,31 @@ function loadSizing(): ColumnSizingState {
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
 
+const BASE_ORDER: ColumnOrderState = [
+  'name', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation',
+  'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
+  'current_location', 'is_blacklisted', 'status',
+]
+const ROLE_ORDER: ColumnOrderState = [
+  'name', 'status', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation',
+  'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
+  'current_location', 'is_blacklisted',
+]
+
 export default function MatchingTable({ rows, roleSelected = true }: { rows: MatchingRow[]; roleSelected?: boolean }) {
   const [sorting, setSorting]             = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
+  const columnOrder = useMemo<ColumnOrderState>(
+    () => roleSelected ? ROLE_ORDER : BASE_ORDER,
+    [roleSelected]
+  )
+
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnSizing, columnFilters, columnVisibility: { status: roleSelected } },
+    state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { status: roleSelected } },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: (updater) => {
