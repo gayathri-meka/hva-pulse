@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSheetRows } from '@/lib/google'
+import { getSheetRows, getSheetRaw } from '@/lib/google'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 function parseNum(val: string): number | null {
@@ -103,5 +103,21 @@ export async function POST() {
     return NextResponse.json({ success: true, count: updates.length })
   } catch (err) {
     return NextResponse.json({ success: false, error: String(err) }, { status: 500 })
+  }
+}
+
+/** Debug-only GET — returns raw sheet headers + first 3 rows. Admin only. */
+export async function GET() {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { data: appUser } = await supabase.from('users').select('role').eq('email', user.email!).single()
+    if (!appUser || appUser.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { headers, rows } = await getSheetRaw(process.env.GOOGLE_LEARNER_INFO_SHEET_ID!, 'Learner info')
+    return NextResponse.json({ headers, sample: rows })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

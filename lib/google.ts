@@ -1,15 +1,28 @@
 import { google } from 'googleapis'
 
-export async function getSheetRows(sheetId: string, tabName: string): Promise<Record<string, string>[]> {
-  const auth = new google.auth.GoogleAuth({
+function makeAuth() {
+  return new google.auth.GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
       private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     },
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   })
+}
 
-  const sheets = google.sheets({ version: 'v4', auth })
+/** Returns the raw (un-normalised) header row and first `maxDataRows` data rows. */
+export async function getSheetRaw(sheetId: string, tabName: string, maxDataRows = 3) {
+  const sheets   = google.sheets({ version: 'v4', auth: makeAuth() })
+  const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: tabName })
+  const rows     = response.data.values ?? []
+  return {
+    headers:  (rows[0] ?? []) as string[],
+    rows:     rows.slice(1, maxDataRows + 1) as string[][],
+  }
+}
+
+export async function getSheetRows(sheetId: string, tabName: string): Promise<Record<string, string>[]> {
+  const sheets = google.sheets({ version: 'v4', auth: makeAuth() })
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
