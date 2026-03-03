@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useRef, useEffect } from 'react'
 import {
   useReactTable,
@@ -101,7 +102,14 @@ const columns = [
   col.accessor('name', {
     header: 'Name',
     size: 200,
-    cell: (info) => <span className="font-medium text-zinc-900">{info.getValue()}</span>,
+    cell: (info) => (
+      <Link
+        href={`/learners?tab=snapshot&learner=${info.row.original.learner_id}`}
+        className="font-medium text-zinc-900 hover:text-[#5BAE5B] hover:underline"
+      >
+        {info.getValue()}
+      </Link>
+    ),
   }),
   col.accessor('email', {
     header: 'Email',
