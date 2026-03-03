@@ -55,12 +55,9 @@ interface BranchCard {
 // ─── Arrow with one or more dropout branches to the right ────────────────────
 function ArrowWithBranches({ branches }: { branches: BranchCard[] }) {
   return (
-    <div className="flex items-stretch py-0.5">
-      {/* Left spacer — nudges arrow left */}
-      <div className="w-8 shrink-0" />
-
+    <div className="flex items-stretch">
       {/* Center: variable-height shaft + arrowhead */}
-      <div className="flex flex-col items-center px-3">
+      <div className="flex w-10 shrink-0 flex-col items-center">
         <div className="w-px flex-1 bg-zinc-300" />
         <svg width="14" height="10" viewBox="0 0 14 10" fill="none" className="mt-[-1px] shrink-0 text-zinc-300">
           <path d="M1 1l6 7 6-7" stroke="currentColor" strokeWidth="1.5"
@@ -71,8 +68,8 @@ function ArrowWithBranches({ branches }: { branches: BranchCard[] }) {
       {/* Right: stacked branch cards */}
       <div className="flex flex-1 flex-col justify-center gap-1.5 py-0.5">
         {branches.map((b) => (
-          <div key={b.label} className="flex items-center gap-2">
-            <div className={`h-px w-6 shrink-0 ${b.dividerCls}`} />
+          <div key={b.label} className="flex items-center gap-1">
+            <div className={`h-px w-3 shrink-0 ${b.dividerCls}`} />
             <Link
               href={b.href}
               className={`block rounded-lg border ${b.cardBorder} ${b.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
@@ -111,32 +108,30 @@ function FunnelStage({
   count:       number
   metaLabel?:  string
   metaValue?:  string
-  href:        string
+  href?:       string
   bg:          string
   border:      string
   accent:      string
   countColor:  string
   widthClass:  string
 }) {
-  return (
-    <Link
-      href={href}
-      className={`mx-auto block ${widthClass} rounded-xl border ${border} ${bg} px-4 py-3 transition-opacity hover:opacity-75`}
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className={`text-[10px] font-semibold uppercase tracking-widest ${accent}`}>{label}</p>
-          <p className={`mt-0.5 text-2xl font-bold tabular-nums ${countColor}`}>{count}</p>
-        </div>
-        {metaLabel && metaValue && (
-          <div className="text-right">
-            <p className="text-[10px] text-zinc-400">{metaLabel}</p>
-            <p className="text-base font-semibold text-zinc-600">{metaValue}</p>
-          </div>
-        )}
+  const cls = `block ${widthClass} rounded-xl border ${border} ${bg} px-4 py-3`
+  const inner = (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className={`text-[10px] font-semibold uppercase tracking-widest ${accent}`}>{label}</p>
+        <p className={`mt-0.5 text-2xl font-bold tabular-nums ${countColor}`}>{count}</p>
       </div>
-    </Link>
+      {metaLabel && metaValue && (
+        <div className="text-right">
+          <p className="text-[10px] text-zinc-400">{metaLabel}</p>
+          <p className="text-base font-semibold text-zinc-600">{metaValue}</p>
+        </div>
+      )}
+    </div>
   )
+  if (!href) return <div className={cls}>{inner}</div>
+  return <Link href={href} className={`${cls} transition-opacity hover:opacity-75`}>{inner}</Link>
 }
 
 // ─── Roles heading (no box) ───────────────────────────────────────────────────
@@ -144,12 +139,10 @@ function RolesHeading({ count, href }: { count: number; href: string }) {
   return (
     <Link
       href={href}
-      className="mx-auto flex w-full justify-center px-1 py-1.5 transition-opacity hover:opacity-75"
+      className="flex items-baseline gap-1.5 py-1.5 pl-1 transition-opacity hover:opacity-75"
     >
-      <span className="text-lg font-bold tabular-nums text-zinc-700">
-        {count}{' '}
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Roles</span>
-      </span>
+      <span className="text-lg font-bold tabular-nums text-zinc-700">{count}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Roles</span>
     </Link>
   )
 }
@@ -288,7 +281,6 @@ export default function PlacementFunnel({
         count={shortlistPassed}
         metaLabel="shortlist rate"
         metaValue={pct(shortlistPassed, totalApps)}
-        href="/placements/applications?status=shortlisted"
         bg="bg-amber-50" border="border-amber-100"
         accent="text-amber-500" countColor="text-amber-900"
         widthClass="w-[85%]"

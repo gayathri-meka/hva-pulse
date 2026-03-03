@@ -5,11 +5,12 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import MatchingControls from '@/components/placements/MatchingControls'
 import MatchingStatusFilter from '@/components/placements/MatchingStatusFilter'
 import MatchingTable, { type MatchingRow, type MatchingStatus } from '@/components/placements/MatchingTable'
+import NotInterestedTable, { type NotInterestedRow } from '@/components/placements/NotInterestedTable'
 
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ role?: string; batch?: string; lf?: string; status?: string; learner?: string }>
+  searchParams: Promise<{ role?: string; status?: string; learner?: string; mode?: string }>
 }
 
 export default async function MatchingPage({ searchParams }: Props) {
@@ -17,18 +18,18 @@ export default async function MatchingPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
-  const { role: roleId, status: statusFilter, learner: learnerFilter } = await searchParams
+  const { role: roleId, status: statusFilter, learner: learnerFilter, mode } = await searchParams
+  const isNotInterestedMode = mode === 'not_interested'
 
   const supabase = await createServerSupabaseClient()
 
-  // Always fetch: roles + companies (for dropdown), learners (for table + filters)
-  // Conditionally fetch: applications + preferences only when a role is selected
   const [
     { data: roles },
     { data: companies },
     { data: rawLearners },
     { data: rawApplications },
     { data: rawPreferences },
+    { data: rawNotInterested },
   ] = await Promise.all([
     supabase.from('roles').select('id, company_id, role_title, status').order('created_at', { ascending: false }),
     supabase.from('companies').select('id, company_name'),
@@ -38,6 +39,9 @@ export default async function MatchingPage({ searchParams }: Props) {
       : Promise.resolve({ data: null, error: null }),
     roleId
       ? supabase.from('role_preferences').select('user_id, reasons').eq('role_id', roleId).eq('preference', 'not_interested')
+      : Promise.resolve({ data: null, error: null }),
+    isNotInterestedMode
+      ? supabase.from('role_preferences').select('user_id, role_id, reasons').eq('preference', 'not_interested')
       : Promise.resolve({ data: null, error: null }),
   ])
 
@@ -94,6 +98,28 @@ export default async function MatchingPage({ searchParams }: Props) {
     readiness:          l.readiness,
     blacklisted_date:   l.blacklisted_date,
   }))
+
+  // ── Not-interested mode: build flat list of all declined role preferences ──
+  const userIdToLearner = new Map(allLearners.map((l) => [l.user_id, l]))
+  const roleInfoMap     = new Map((roles ?? []).map((r) => [r.id, { role_title: r.role_title, company_name: companyMap[r.company_id] ?? '' }]))
+
+  const notInterestedRows: NotInterestedRow[] = (rawNotInterested ?? [])
+    .filter((p) => p.user_id && roleInfoMap.has(p.role_id))
+    .map((p) => {
+      const learner  = userIdToLearner.get(p.user_id!)
+      const roleInfo = roleInfoMap.get(p.role_id)!
+      return {
+        user_id:      p.user_id!,
+        role_id:      p.role_id,
+        learner_name: learner?.name ?? '',
+        batch:        learner?.batch ?? '',
+        lf:           learner?.lf   ?? '',
+        company_name: roleInfo.company_name,
+        role_title:   roleInfo.role_title,
+        reasons:      (p.reasons as string[]) ?? [],
+      }
+    })
+    .sort((a, b) => a.learner_name.localeCompare(b.learner_name))
 
   // ── Apply learner filter (server-side; batch/LF handled by column filters) ─
   const filtered = allLearners
@@ -185,7 +211,6 @@ export default async function MatchingPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
 
-      {/* Controls */}
       <Suspense>
         <MatchingControls
           roles={roleOptions}
@@ -193,14 +218,18 @@ export default async function MatchingPage({ searchParams }: Props) {
         />
       </Suspense>
 
-      {/* Status filter pills — only meaningful when a role is selected */}
-      {roleId && (
-        <Suspense>
-          <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
-        </Suspense>
+      {isNotInterestedMode ? (
+        <NotInterestedTable rows={notInterestedRows} />
+      ) : (
+        <>
+          {roleId && (
+            <Suspense>
+              <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
+            </Suspense>
+          )}
+          <MatchingTable rows={filteredRows} roleSelected={!!roleId} />
+        </>
       )}
-
-      <MatchingTable rows={filteredRows} roleSelected={!!roleId} />
 
     </div>
   )
