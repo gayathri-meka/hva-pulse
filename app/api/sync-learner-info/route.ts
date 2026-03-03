@@ -10,10 +10,19 @@ function parseNum(val: string): number | null {
 
 function parseDate(val: string): string | null {
   if (!val?.trim()) return null
-  // Explicit MM/DD/YYYY parse — avoids engine-dependent new Date() interpretation
+  // Google Sheets UNFORMATTED_VALUE returns date cells as serial numbers
+  // (days since Dec 30 1899, same epoch as Excel)
+  if (/^\d+(\.\d+)?$/.test(val.trim())) {
+    const serial = Math.floor(parseFloat(val))
+    if (serial > 0) {
+      const d = new Date(Math.round((serial - 25569) * 86400 * 1000))
+      return d.toISOString().split('T')[0]
+    }
+  }
+  // Explicit MM/DD/YYYY string fallback
   const match = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (match) return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
-  // Fallback: use local date methods to avoid UTC shift
+  // Last resort: local date methods
   const d = new Date(val)
   if (isNaN(d.getTime())) return null
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -35,7 +44,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const rows = await getSheetRows(process.env.GOOGLE_LEARNER_INFO_SHEET_ID!, 'Learner info')
+    const rows = await getSheetRows(process.env.GOOGLE_LEARNER_INFO_SHEET_ID!, 'Learner info', true)
     const validRows = rows.filter((row) => row['email']?.trim())
 
     // email → user_id

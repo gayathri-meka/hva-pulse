@@ -21,24 +21,29 @@ export async function getSheetRaw(sheetId: string, tabName: string, maxDataRows 
   }
 }
 
-export async function getSheetRows(sheetId: string, tabName: string): Promise<Record<string, string>[]> {
-  const sheets = google.sheets({ version: 'v4', auth: makeAuth() })
-
+export async function getSheetRows(
+  sheetId: string,
+  tabName: string,
+  rawValues = false,
+): Promise<Record<string, string>[]> {
+  const sheets   = google.sheets({ version: 'v4', auth: makeAuth() })
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: tabName,
+    spreadsheetId:     sheetId,
+    range:             tabName,
+    valueRenderOption: rawValues ? 'UNFORMATTED_VALUE' : 'FORMATTED_VALUE',
   })
 
   const rows = response.data.values
   if (!rows || rows.length < 2) return []
 
   const headers = (rows[0] as string[]).map((h) =>
-    h.trim().toLowerCase().replace(/\s+/g, '_')
+    String(h).trim().toLowerCase().replace(/\s+/g, '_')
   )
   return rows.slice(1).map((row) => {
     const obj: Record<string, string> = {}
     headers.forEach((header, i) => {
-      obj[header] = (row[i] as string) ?? ''
+      // Coerce to string — with UNFORMATTED_VALUE cells may be numbers
+      obj[header] = row[i] != null ? String(row[i]) : ''
     })
     return obj
   })
