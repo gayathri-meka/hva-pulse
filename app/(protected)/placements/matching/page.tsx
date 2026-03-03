@@ -59,15 +59,38 @@ export default async function MatchingPage({ searchParams }: Props) {
 
   // ── Flatten learners (join with users) ────────────────────────────────────
   type RawLearner = {
-    learner_id: string; user_id: string | null; lf_name: string
-    batch_name: string; users: { name: string; email: string } | null
+    learner_id:         string
+    user_id:            string | null
+    lf_name:            string
+    batch_name:         string
+    users:              { name: string; email: string } | null
+    year_of_graduation: number | null
+    degree:             string | null
+    specialisation:     string | null
+    prs:                number | null
+    proactiveness:      number | null
+    articulation:       number | null
+    comprehension:      number | null
+    tech_score:         number | null
+    current_location:   string | null
+    blacklisted_date:   string | null
   }
   const allLearners = ((rawLearners ?? []) as RawLearner[]).map((l) => ({
-    learner_id: l.learner_id,
-    user_id:    l.user_id,
-    name:       l.users?.name ?? '',
-    batch:      l.batch_name ?? '',
-    lf:         l.lf_name ?? '',
+    learner_id:         l.learner_id,
+    user_id:            l.user_id,
+    name:               l.users?.name ?? '',
+    batch:              l.batch_name ?? '',
+    lf:                 l.lf_name ?? '',
+    year_of_graduation: l.year_of_graduation,
+    degree:             l.degree,
+    specialisation:     l.specialisation,
+    prs:                l.prs,
+    proactiveness:      l.proactiveness,
+    articulation:       l.articulation,
+    comprehension:      l.comprehension,
+    tech_score:         l.tech_score,
+    current_location:   l.current_location,
+    blacklisted_date:   l.blacklisted_date,
   }))
 
   // ── Filter options ────────────────────────────────────────────────────────
@@ -102,6 +125,20 @@ export default async function MatchingPage({ searchParams }: Props) {
       .map((p) => [p.user_id!, (p.reasons as string[]) ?? []])
   )
 
+  const sharedLearnerFields = (l: typeof filtered[number]) => ({
+    year_of_graduation: l.year_of_graduation,
+    degree:             l.degree,
+    specialisation:     l.specialisation,
+    prs_score:          l.prs,
+    proactiveness:      l.proactiveness,
+    articulation:       l.articulation,
+    comprehension:      l.comprehension,
+    tech_score:         l.tech_score,
+    current_location:   l.current_location,
+    is_blacklisted:     l.blacklisted_date !== null,
+    blacklisted_date:   l.blacklisted_date,
+  })
+
   const rows: MatchingRow[] = filtered.map((l) => {
     if (!roleId) {
       return {
@@ -109,7 +146,7 @@ export default async function MatchingPage({ searchParams }: Props) {
         name:                   l.name,
         batch:                  l.batch,
         lf:                     l.lf,
-        prs_score:              null,
+        ...sharedLearnerFields(l),
         status:                 'not_applied' as MatchingStatus, // placeholder; Status column hidden
         reasons:                [],
         not_shortlisted_reason: null,
@@ -130,7 +167,7 @@ export default async function MatchingPage({ searchParams }: Props) {
       name:                   l.name,
       batch:                  l.batch,
       lf:                     l.lf,
-      prs_score:              null, // synced from Google Sheet later
+      ...sharedLearnerFields(l),
       status,
       reasons:                status === 'not_interested' && l.user_id ? (reasonsMap[l.user_id] ?? []) : [],
       not_shortlisted_reason: appDetail?.not_shortlisted_reason ?? null,
