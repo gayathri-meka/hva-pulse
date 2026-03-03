@@ -65,9 +65,13 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     return acc
   }, {} as Record<string, number>)
 
+  const inProcessStatuses = ['shortlisted', 'on_hold']
   const filteredApplications = byRole
-    .filter((a) => !statusFilter  || a.status    === statusFilter)
-    .filter((a) => !learnerFilter || a.user_id   === learnerFilter)
+    .filter((a) =>
+      !statusFilter ||
+      (statusFilter === 'in_process' ? inProcessStatuses.includes(a.status) : a.status === statusFilter)
+    )
+    .filter((a) => !learnerFilter || a.user_id === learnerFilter)
 
   const applications: ApplicationWithLearner[] = filteredApplications.map((a) => {
     const role = roleMap[a.role_id]
@@ -81,8 +85,9 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       resume_url: a.resume_url,
       created_at: a.created_at,
       updated_at: a.updated_at,
-      not_shortlisted_reason: a.not_shortlisted_reason ?? null,
-      rejection_feedback:     a.rejection_feedback ?? null,
+      not_shortlisted_reasons: (a.not_shortlisted_reasons as string[] | null) ?? [],
+      not_shortlisted_reason:  a.not_shortlisted_reason ?? null,
+      rejection_feedback:      a.rejection_feedback ?? null,
       learner_name: user?.name || 'Unknown',
       learner_email: user?.email || '',
       company_name: companyMap[role?.company_id ?? ''] ?? 'Unknown',

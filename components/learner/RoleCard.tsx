@@ -13,6 +13,7 @@ type RoleCardData = {
   salary_range: string | null
   status: 'open' | 'closed'
   my_status: MyStatus
+  not_shortlisted_reasons: string[]
   not_shortlisted_reason: string | null
   rejection_feedback: string | null
   not_interested_reasons: string[]
@@ -134,11 +135,17 @@ function NIReasonsModal({
 
 export default function RoleCard({ role }: { role: RoleCardData }) {
   const [myStatus, setMyStatus]     = useState<MyStatus>(role.my_status)
-  const reason =
-    myStatus === 'not_shortlisted' ? role.not_shortlisted_reason
-    : myStatus === 'rejected'       ? role.rejection_feedback
-    : myStatus === 'not_interested' ? (role.not_interested_reasons.length > 0 ? role.not_interested_reasons.join(', ') : null)
-    : null
+  const reason = (() => {
+    if (myStatus === 'not_shortlisted') {
+      const parts = role.not_shortlisted_reasons.length > 0
+        ? role.not_shortlisted_reasons.join(', ') + (role.not_shortlisted_reason ? ` — ${role.not_shortlisted_reason}` : '')
+        : role.not_shortlisted_reason  // backward compat: old free-text only records
+      return parts || null
+    }
+    if (myStatus === 'rejected') return role.rejection_feedback
+    if (myStatus === 'not_interested') return role.not_interested_reasons.length > 0 ? role.not_interested_reasons.join(', ') : null
+    return null
+  })()
   const [showNIModal, setShowNIModal] = useState(false)
   const [isPending, startTransition]  = useTransition()
 

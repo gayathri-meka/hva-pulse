@@ -44,6 +44,14 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   applied: 0, shortlisted: 1, on_hold: 2, hired: 3, not_shortlisted: 4, rejected: 5,
 }
 
+const NS_REASONS = [
+  'Low PRS',
+  'Eligibility Mismatch',
+  'Location Mismatch',
+  'Blacklisted',
+  'Joining Date Mismatch',
+]
+
 type PendingChange =
   | { bulk: false; id: string;       newStatus: 'not_shortlisted' | 'rejected' }
   | { bulk: true;  ids: string[];    newStatus: 'not_shortlisted' | 'rejected' }
@@ -64,17 +72,25 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   const [statusMap, setStatusMap]       = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
-  const [pendingChange, setPendingChange] = useState<PendingChange>(null)
-  const [noteText, setNoteText]           = useState('')
-  const [noteError, setNoteError]         = useState(false)
-  const [bulkSelect, setBulkSelect]       = useState('')
+  const [pendingChange, setPendingChange]   = useState<PendingChange>(null)
+  const [noteText, setNoteText]             = useState('')
+  const [noteError, setNoteError]           = useState(false)
+  const [checkedReasons, setCheckedReasons] = useState<Set<string>>(new Set())
+  const [reasonsError, setReasonsError]     = useState(false)
+  const [bulkSelect, setBulkSelect]         = useState('')
   const [, startTransition] = useTransition()
+
+  function openModal(change: NonNullable<PendingChange>) {
+    setPendingChange(change)
+    setNoteText('')
+    setNoteError(false)
+    setCheckedReasons(new Set())
+    setReasonsError(false)
+  }
 
   function handleStatusChange(id: string, newStatus: string) {
     if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
-      setPendingChange({ bulk: false, id, newStatus })
-      setNoteText('')
-      setNoteError(false)
+      openModal({ bulk: false, id, newStatus })
       return
     }
     setStatusMap((prev) => ({ ...prev, [id]: newStatus }))
@@ -85,9 +101,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     if (!newStatus) return
     const ids = selectedApplications.map((a) => a.id)
     if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
-      setPendingChange({ bulk: true, ids, newStatus })
-      setNoteText('')
-      setNoteError(false)
+      openModal({ bulk: true, ids, newStatus })
       setBulkSelect('')
       return
     }
@@ -100,28 +114,41 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   }
 
   function handleModalConfirm() {
-    if (!noteText.trim()) { setNoteError(true); return }
-    const note = noteText.trim()
     const change = pendingChange!
+    const isNotShortlisted = change.newStatus === 'not_shortlisted'
+
+    if (isNotShortlisted) {
+      if (checkedReasons.size === 0) { setReasonsError(true); return }
+    } else {
+      if (!noteText.trim()) { setNoteError(true); return }
+    }
+
+    const reasons = isNotShortlisted ? Array.from(checkedReasons) : undefined
+    const note    = isNotShortlisted ? (noteText.trim() || undefined) : noteText.trim()
+
     if (change.bulk) {
       setStatusMap((prev) => Object.fromEntries(
         Object.entries(prev).map(([k, v]) => [k, change.ids.includes(k) ? change.newStatus : v])
       ))
-      startTransition(() => bulkUpdateApplicationStatus(change.ids, change.newStatus, note))
+      startTransition(() => bulkUpdateApplicationStatus(change.ids, change.newStatus, note, reasons))
       setRowSelection({})
     } else {
       setStatusMap((prev) => ({ ...prev, [change.id]: change.newStatus }))
-      startTransition(() => updateApplicationStatus(change.id, change.newStatus, note))
+      startTransition(() => updateApplicationStatus(change.id, change.newStatus, note, reasons))
     }
     setPendingChange(null)
     setNoteText('')
     setNoteError(false)
+    setCheckedReasons(new Set())
+    setReasonsError(false)
   }
 
   function handleModalCancel() {
     setPendingChange(null)
     setNoteText('')
     setNoteError(false)
+    setCheckedReasons(new Set())
+    setReasonsError(false)
   }
 
   const columns = [
@@ -204,12 +231,16 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
           (pendingChange && !pendingChange.bulk && pendingChange.id === id)
             ? pendingChange.newStatus
             : (statusMap[id] ?? info.getValue())
-        const note =
-          currentStatus === 'not_shortlisted'
-            ? info.row.original.not_shortlisted_reason
-            : currentStatus === 'rejected'
-              ? info.row.original.rejection_feedback
-              : null
+        const note = (() => {
+          if (currentStatus === 'not_shortlisted') {
+            const reasons = info.row.original.not_shortlisted_reasons ?? []
+            const comment = info.row.original.not_shortlisted_reason
+            if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
+            return comment  // backward compat
+          }
+          if (currentStatus === 'rejected') return info.row.original.rejection_feedback
+          return null
+        })()
         return (
           <div>
             <div className="relative inline-flex">
@@ -387,21 +418,57 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
                 : 'What feedback did the company provide?'}
             </p>
 
-            <textarea
-              value={noteText}
-              onChange={(e) => { setNoteText(e.target.value); setNoteError(false) }}
-              rows={3}
-              placeholder={
-                pendingChange.newStatus === 'not_shortlisted'
-                  ? 'e.g. Stronger candidates were selected for this round'
-                  : 'e.g. Good communication but needs more technical depth'
-              }
-              className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900 ${
-                noteError ? 'border-red-300 bg-red-50' : 'border-zinc-200'
-              }`}
-            />
-            {noteError && (
-              <p className="mt-1 text-xs text-red-600">This field is required.</p>
+            {pendingChange.newStatus === 'not_shortlisted' ? (
+              <>
+                <div className={`space-y-2.5 rounded-lg border p-3 ${reasonsError ? 'border-red-300 bg-red-50' : 'border-zinc-200'}`}>
+                  {NS_REASONS.map((reason) => (
+                    <label key={reason} className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={checkedReasons.has(reason)}
+                        onChange={(e) => {
+                          setCheckedReasons((prev) => {
+                            const next = new Set(prev)
+                            e.target.checked ? next.add(reason) : next.delete(reason)
+                            return next
+                          })
+                          setReasonsError(false)
+                        }}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                      />
+                      <span className="text-sm text-zinc-700">{reason}</span>
+                    </label>
+                  ))}
+                </div>
+                {reasonsError && (
+                  <p className="mt-1 text-xs text-red-600">Select at least one reason.</p>
+                )}
+                <label className="mt-3 block text-xs font-medium text-zinc-500">
+                  Additional comments <span className="text-zinc-400">(optional)</span>
+                </label>
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Stronger candidates were selected for this round"
+                  className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                />
+              </>
+            ) : (
+              <>
+                <textarea
+                  value={noteText}
+                  onChange={(e) => { setNoteText(e.target.value); setNoteError(false) }}
+                  rows={3}
+                  placeholder="e.g. Good communication but needs more technical depth"
+                  className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900 ${
+                    noteError ? 'border-red-300 bg-red-50' : 'border-zinc-200'
+                  }`}
+                />
+                {noteError && (
+                  <p className="mt-1 text-xs text-red-600">This field is required.</p>
+                )}
+              </>
             )}
 
             <div className="mt-4 flex justify-end gap-2">

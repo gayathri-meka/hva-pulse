@@ -148,21 +148,24 @@ export async function createApplication(formData: FormData) {
   revalidatePath('/placements/analytics')
 }
 
-export async function updateApplicationStatus(id: string, status: string, note?: string) {
+export async function updateApplicationStatus(id: string, status: string, note?: string, reasons?: string[]) {
   await requireAdmin()
 
   const supabase = await createServerSupabaseClient()
 
   const updates: Record<string, unknown> = { status }
   if (status === 'not_shortlisted') {
-    updates.not_shortlisted_reason = note ?? null
-    updates.rejection_feedback     = null
+    updates.not_shortlisted_reasons = reasons ?? []
+    updates.not_shortlisted_reason  = note ?? null
+    updates.rejection_feedback      = null
   } else if (status === 'rejected') {
-    updates.rejection_feedback     = note ?? null
-    updates.not_shortlisted_reason = null
+    updates.rejection_feedback      = note ?? null
+    updates.not_shortlisted_reasons = []
+    updates.not_shortlisted_reason  = null
   } else {
-    updates.not_shortlisted_reason = null
-    updates.rejection_feedback     = null
+    updates.not_shortlisted_reasons = []
+    updates.not_shortlisted_reason  = null
+    updates.rejection_feedback      = null
   }
 
   await supabase.from('applications').update(updates).eq('id', id)
@@ -170,21 +173,24 @@ export async function updateApplicationStatus(id: string, status: string, note?:
   revalidatePath('/placements/analytics')
 }
 
-export async function bulkUpdateApplicationStatus(ids: string[], status: string, note?: string) {
+export async function bulkUpdateApplicationStatus(ids: string[], status: string, note?: string, reasons?: string[]) {
   await requireAdmin()
 
   const supabase = await createServerSupabaseClient()
 
   const updates: Record<string, unknown> = { status }
   if (status === 'not_shortlisted') {
-    updates.not_shortlisted_reason = note ?? null
-    updates.rejection_feedback     = null
+    updates.not_shortlisted_reasons = reasons ?? []
+    updates.not_shortlisted_reason  = note ?? null
+    updates.rejection_feedback      = null
   } else if (status === 'rejected') {
-    updates.rejection_feedback     = note ?? null
-    updates.not_shortlisted_reason = null
+    updates.rejection_feedback      = note ?? null
+    updates.not_shortlisted_reasons = []
+    updates.not_shortlisted_reason  = null
   } else {
-    updates.not_shortlisted_reason = null
-    updates.rejection_feedback     = null
+    updates.not_shortlisted_reasons = []
+    updates.not_shortlisted_reason  = null
+    updates.rejection_feedback      = null
   }
 
   await supabase.from('applications').update(updates).in('id', ids)
