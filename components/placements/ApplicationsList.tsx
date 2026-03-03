@@ -56,6 +56,7 @@ const NS_REASONS = [
 const REJECTION_REASONS = [
   'Gap in technical skills',
   'Gap in communication skills',
+  'Copied',
   'Other',
 ]
 
