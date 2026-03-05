@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import ExpandableNote from '@/components/ui/ExpandableNote'
 import {
   useReactTable,
@@ -20,7 +21,7 @@ import {
 } from '@tanstack/react-table'
 
 export type MatchingStatus =
-  | 'applied' | 'shortlisted' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
+  | 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
   | 'not_applied' | 'not_interested'
 
 export type MatchingRow = {
@@ -47,25 +48,27 @@ export type MatchingRow = {
 }
 
 const STATUS_BADGE: Record<MatchingStatus, string> = {
-  applied:         'bg-blue-100 text-blue-700',
-  shortlisted:     'bg-amber-100 text-amber-700',
-  on_hold:         'bg-orange-100 text-orange-700',
-  not_shortlisted: 'bg-zinc-100 text-zinc-600',
-  rejected:        'bg-red-100 text-red-700',
-  hired:           'bg-emerald-100 text-emerald-700',
-  not_applied:     'bg-zinc-100 text-zinc-500',
-  not_interested:  'bg-zinc-100 text-zinc-400',
+  applied:            'bg-blue-100 text-blue-700',
+  shortlisted:        'bg-amber-100 text-amber-700',
+  interviews_ongoing: 'bg-violet-100 text-violet-700',
+  on_hold:            'bg-orange-100 text-orange-700',
+  not_shortlisted:    'bg-zinc-100 text-zinc-600',
+  rejected:           'bg-red-100 text-red-700',
+  hired:              'bg-emerald-100 text-emerald-700',
+  not_applied:        'bg-zinc-100 text-zinc-500',
+  not_interested:     'bg-zinc-100 text-zinc-400',
 }
 
 const STATUS_LABEL: Record<MatchingStatus, string> = {
-  applied:         'Applied',
-  shortlisted:     'Shortlisted',
-  on_hold:         'On Hold',
-  not_shortlisted: 'Not Shortlisted',
-  rejected:        'Rejected',
-  hired:           'Hired',
-  not_applied:     'Not Applied',
-  not_interested:  'Not Interested',
+  applied:            'Applied',
+  shortlisted:        'Shortlisted',
+  interviews_ongoing: 'Interviews Ongoing',
+  on_hold:            'On Hold',
+  not_shortlisted:    'Not Shortlisted',
+  rejected:           'Rejected',
+  hired:              'Hired',
+  not_applied:        'Not Applied',
+  not_interested:     'Not Interested',
 }
 
 // Shared multi-select filterFn: filter value is string[], cell value coerced to string
@@ -161,7 +164,14 @@ const columns = [
     header: 'Learner',
     size: 200,
     enableColumnFilter: false,
-    cell: (info) => <span className="font-medium text-zinc-900">{info.getValue()}</span>,
+    cell: (info) => (
+      <Link
+        href={`/learners?tab=snapshot&learner=${info.row.original.learner_id}`}
+        className="font-medium text-zinc-900 hover:text-[#5BAE5B] hover:underline"
+      >
+        {info.getValue()}
+      </Link>
+    ),
   }),
   col.accessor('batch', {
     header: 'Batch',

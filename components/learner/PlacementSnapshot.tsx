@@ -9,6 +9,7 @@ type Props = {
   notInterested: number
   ignored: number
   shortlisted: number
+  interviewsOngoing: number
   onHold: number
   notShortlisted: number
   rejected: number
@@ -28,6 +29,7 @@ export default function PlacementSnapshot({
   notInterested,
   ignored,
   shortlisted,
+  interviewsOngoing,
   onHold,
   notShortlisted,
   rejected,
@@ -126,6 +128,7 @@ export default function PlacementSnapshot({
             <div className="grid grid-cols-3 gap-3">
               <StatBox label="Pending shortlisting" value={pending} valueClass="text-blue-600" />
               <StatBox label="Shortlisted"          value={shortlisted} valueClass="text-amber-600" />
+              <StatBox label="Interviews Ongoing"   value={interviewsOngoing} valueClass="text-violet-600" />
               <StatBox label="On Hold"              value={onHold} valueClass="text-orange-600" />
               <StatBoxWithReasons
                 label="Not Shortlisted"

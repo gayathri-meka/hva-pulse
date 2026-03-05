@@ -65,7 +65,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     return acc
   }, {} as Record<string, number>)
 
-  const inProcessStatuses = ['shortlisted', 'on_hold']
+  const inProcessStatuses = ['shortlisted', 'interviews_ongoing', 'on_hold']
   const filteredApplications = byRole
     .filter((a) =>
       !statusFilter ||

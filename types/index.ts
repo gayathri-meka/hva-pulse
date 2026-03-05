@@ -47,7 +47,7 @@ export type CompanyWithRoles = Company & { roles: RoleWithCounts[] }
 
 export type Application = {
   id: string; role_id: string; learner_id: string; user_id: string | null
-  status: 'applied' | 'shortlisted' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
+  status: 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
   resume_url: string | null; created_at: string; updated_at: string
   not_shortlisted_reasons: string[] | null
   not_shortlisted_reason: string | null   // additional comments (optional free text)
@@ -70,7 +70,7 @@ export type RolePreference = {
 }
 
 export type MyStatus =
-  | 'applied' | 'shortlisted' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
+  | 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
   | 'not_interested' | 'not_applied'
 
 export type JobPersona = {

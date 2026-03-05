@@ -8,6 +8,7 @@ const baseProps = {
   notInterested: 2,
   ignored: 5,
   shortlisted: 1,
+  interviewsOngoing: 0,
   onHold: 0,
   notShortlisted: 1,
   rejected: 0,

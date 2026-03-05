@@ -17,31 +17,34 @@ function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
+import Link from 'next/link'
 import { updateApplicationStatus, bulkUpdateApplicationStatus } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import StatusFilter from './StatusFilter'
 import ExpandableNote from '@/components/ui/ExpandableNote'
 import type { ApplicationWithLearner } from '@/types'
 
-const STATUS_OPTIONS = ['applied', 'shortlisted', 'on_hold', 'not_shortlisted', 'rejected', 'hired'] as const
+const STATUS_OPTIONS = ['applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired'] as const
 const STATUS_LABEL: Record<string, string> = {
-  applied:         'Applied',
-  shortlisted:     'Shortlisted',
-  on_hold:         'On Hold',
-  not_shortlisted: 'Not Shortlisted',
-  rejected:        'Rejected',
-  hired:           'Hired',
+  applied:             'Applied',
+  shortlisted:         'Shortlisted',
+  interviews_ongoing:  'Interviews Ongoing',
+  on_hold:             'On Hold',
+  not_shortlisted:     'Not Shortlisted',
+  rejected:            'Rejected',
+  hired:               'Hired',
 }
 const STATUS_BADGE: Record<string, string> = {
-  applied:         'bg-blue-100 text-blue-700',
-  shortlisted:     'bg-amber-100 text-amber-700',
-  on_hold:         'bg-orange-100 text-orange-700',
-  not_shortlisted: 'bg-zinc-100 text-zinc-600',
-  rejected:        'bg-red-100 text-red-700',
-  hired:           'bg-emerald-100 text-emerald-700',
+  applied:             'bg-blue-100 text-blue-700',
+  shortlisted:         'bg-amber-100 text-amber-700',
+  interviews_ongoing:  'bg-violet-100 text-violet-700',
+  on_hold:             'bg-orange-100 text-orange-700',
+  not_shortlisted:     'bg-zinc-100 text-zinc-600',
+  rejected:            'bg-red-100 text-red-700',
+  hired:               'bg-emerald-100 text-emerald-700',
 }
 const STATUS_SORT_ORDER: Record<string, number> = {
-  applied: 0, shortlisted: 1, on_hold: 2, hired: 3, not_shortlisted: 4, rejected: 5,
+  applied: 0, shortlisted: 1, interviews_ongoing: 2, on_hold: 3, hired: 4, not_shortlisted: 5, rejected: 6,
 }
 
 const NS_REASONS = [
@@ -177,7 +180,12 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
       size: 200,
       cell: (info) => (
         <div>
-          <p className="font-medium text-zinc-900">{info.getValue()}</p>
+          <Link
+            href={`/learners?tab=snapshot&learner=${info.row.original.learner_id}`}
+            className="font-medium text-zinc-900 hover:text-[#5BAE5B] hover:underline"
+          >
+            {info.getValue()}
+          </Link>
           <p className="text-xs text-zinc-400">{info.row.original.learner_email}</p>
         </div>
       ),

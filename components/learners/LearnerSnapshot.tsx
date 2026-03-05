@@ -72,21 +72,23 @@ const READINESS_BADGE: Record<string, string> = {
 }
 
 const APP_STATUS_BADGE: Record<string, string> = {
-  applied:         'bg-blue-100 text-blue-700',
-  shortlisted:     'bg-amber-100 text-amber-700',
-  on_hold:         'bg-orange-100 text-orange-700',
-  not_shortlisted: 'bg-zinc-100 text-zinc-600',
-  rejected:        'bg-red-100 text-red-700',
-  hired:           'bg-emerald-100 text-emerald-700',
+  applied:             'bg-blue-100 text-blue-700',
+  shortlisted:         'bg-amber-100 text-amber-700',
+  interviews_ongoing:  'bg-violet-100 text-violet-700',
+  on_hold:             'bg-orange-100 text-orange-700',
+  not_shortlisted:     'bg-zinc-100 text-zinc-600',
+  rejected:            'bg-red-100 text-red-700',
+  hired:               'bg-emerald-100 text-emerald-700',
 }
 
 const APP_STATUS_LABEL: Record<string, string> = {
-  applied:         'Applied',
-  shortlisted:     'Shortlisted',
-  on_hold:         'On Hold',
-  not_shortlisted: 'Not Shortlisted',
-  rejected:        'Rejected',
-  hired:           'Hired',
+  applied:             'Applied',
+  shortlisted:         'Shortlisted',
+  interviews_ongoing:  'Interviews Ongoing',
+  on_hold:             'On Hold',
+  not_shortlisted:     'Not Shortlisted',
+  rejected:            'Rejected',
+  hired:               'Hired',
 }
 
 function fmtDate(iso: string | null) {
@@ -175,8 +177,8 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
 
   // Placement counts
   const totalApps   = apps.length
-  const shortlisted = apps.filter((a) => ['shortlisted', 'on_hold', 'hired', 'rejected'].includes(a.status)).length
-  const inProcess   = apps.filter((a) => ['shortlisted', 'on_hold'].includes(a.status)).length
+  const shortlisted = apps.filter((a) => ['shortlisted', 'interviews_ongoing', 'on_hold', 'hired', 'rejected'].includes(a.status)).length
+  const inProcess   = apps.filter((a) => ['shortlisted', 'interviews_ongoing', 'on_hold'].includes(a.status)).length
   const hired       = apps.filter((a) => a.status === 'hired').length
   const notSL       = apps.filter((a) => a.status === 'not_shortlisted').length
   const rejected    = apps.filter((a) => a.status === 'rejected').length
@@ -200,6 +202,7 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
                   {[learner.phone_number, learner.current_location].filter(Boolean).join(' · ')}
                 </p>
               )}
+              <p className="mt-0.5 font-mono text-xs text-zinc-400">{learner.learner_id}</p>
             </div>
           </div>
           <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${LEARNER_STATUS_BADGE[learner.status] ?? 'bg-zinc-100 text-zinc-600'}`}>

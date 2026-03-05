@@ -3,25 +3,27 @@
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
 const STATUS_LABELS: Record<string, string> = {
-  applied:         'Applied',
-  shortlisted:     'Shortlisted',
-  on_hold:         'On Hold',
-  not_shortlisted: 'Not Shortlisted',
-  hired:           'Hired',
-  rejected:        'Rejected',
+  applied:             'Applied',
+  shortlisted:         'Shortlisted',
+  interviews_ongoing:  'Interviews Ongoing',
+  on_hold:             'On Hold',
+  not_shortlisted:     'Not Shortlisted',
+  hired:               'Hired',
+  rejected:            'Rejected',
 }
 
 // Active pill colours per status
 const STATUS_ACTIVE_CLASS: Record<string, string> = {
-  applied:         'bg-blue-600 text-white',
-  shortlisted:     'bg-amber-500 text-white',
-  on_hold:         'bg-orange-500 text-white',
-  not_shortlisted: 'bg-zinc-600 text-white',
-  hired:           'bg-emerald-600 text-white',
-  rejected:        'bg-red-600 text-white',
+  applied:             'bg-blue-600 text-white',
+  shortlisted:         'bg-amber-500 text-white',
+  interviews_ongoing:  'bg-violet-600 text-white',
+  on_hold:             'bg-orange-500 text-white',
+  not_shortlisted:     'bg-zinc-600 text-white',
+  hired:               'bg-emerald-600 text-white',
+  rejected:            'bg-red-600 text-white',
 }
 
-const STATUS_ORDER = ['applied', 'shortlisted', 'on_hold', 'not_shortlisted', 'hired', 'rejected']
+const STATUS_ORDER = ['applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'hired', 'rejected']
 
 interface Props {
   // Counts from the full (unfiltered-by-status) result set

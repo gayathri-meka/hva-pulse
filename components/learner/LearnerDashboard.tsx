@@ -28,6 +28,7 @@ type SnapshotData = {
   notInterested: number
   ignored: number
   shortlisted: number
+  interviewsOngoing: number
   onHold: number
   notShortlisted: number
   rejected: number
@@ -41,6 +42,7 @@ type FilterKey =
   | 'all'
   | 'applied'
   | 'shortlisted'
+  | 'interviews_ongoing'
   | 'on_hold'
   | 'not_shortlisted'
   | 'rejected'
@@ -49,15 +51,16 @@ type FilterKey =
   | 'ignored'
 
 const FILTER_LABELS: Record<FilterKey, string> = {
-  all:             'All',
-  applied:         'Applied',
-  shortlisted:     'Shortlisted',
-  on_hold:         'On Hold',
-  not_shortlisted: 'Not Shortlisted',
-  rejected:        'Rejected',
-  hired:           'Hired',
-  not_interested:  'Not Interested',
-  ignored:         'Ignored',
+  all:                 'All',
+  applied:             'Applied',
+  shortlisted:         'Shortlisted',
+  interviews_ongoing:  'Interviews Ongoing',
+  on_hold:             'On Hold',
+  not_shortlisted:     'Not Shortlisted',
+  rejected:            'Rejected',
+  hired:               'Hired',
+  not_interested:      'Not Interested',
+  ignored:             'Ignored',
 }
 
 type Props = {

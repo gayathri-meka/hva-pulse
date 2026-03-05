@@ -138,12 +138,27 @@ export async function updateJobDescription(id: string, jobDescription: string) {
 export async function createApplication(formData: FormData) {
   await requireAdmin()
 
-  const role_id = (formData.get('role_id') as string).trim()
+  const role_id    = (formData.get('role_id')    as string).trim()
   const learner_id = (formData.get('learner_id') as string).trim()
   const resume_url = ((formData.get('resume_url') as string) ?? '').trim() || null
 
-  const supabase = await createServerSupabaseClient()
-  await supabase.from('applications').insert({ role_id, learner_id, resume_url })
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
+
+  // Resolve the learner's user_id so the application is visible on the learner dashboard
+  const { data: learnerRow } = await supabase
+    .from('learners')
+    .select('user_id')
+    .eq('learner_id', learner_id)
+    .single()
+
+  await supabase.from('applications').insert({
+    role_id,
+    learner_id,
+    resume_url,
+    user_id: learnerRow?.user_id ?? null,
+  })
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
 }
@@ -151,7 +166,9 @@ export async function createApplication(formData: FormData) {
 export async function updateApplicationStatus(id: string, status: string, note?: string, reasons?: string[]) {
   await requireAdmin()
 
-  const supabase = await createServerSupabaseClient()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
   const updates: Record<string, unknown> = { status }
   if (status === 'not_shortlisted') {
@@ -171,7 +188,8 @@ export async function updateApplicationStatus(id: string, status: string, note?:
     updates.rejection_feedback      = null
   }
 
-  await supabase.from('applications').update(updates).eq('id', id)
+  const { error } = await supabase.from('applications').update(updates).eq('id', id)
+  if (error) throw new Error(`Failed to update status: ${error.message}`)
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
 }
@@ -179,7 +197,9 @@ export async function updateApplicationStatus(id: string, status: string, note?:
 export async function bulkUpdateApplicationStatus(ids: string[], status: string, note?: string, reasons?: string[]) {
   await requireAdmin()
 
-  const supabase = await createServerSupabaseClient()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
   const updates: Record<string, unknown> = { status }
   if (status === 'not_shortlisted') {
@@ -199,7 +219,8 @@ export async function bulkUpdateApplicationStatus(ids: string[], status: string,
     updates.rejection_feedback      = null
   }
 
-  await supabase.from('applications').update(updates).in('id', ids)
+  const { error } = await supabase.from('applications').update(updates).in('id', ids)
+  if (error) throw new Error(`Failed to bulk update status: ${error.message}`)
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
 }

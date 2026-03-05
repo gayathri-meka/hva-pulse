@@ -7,6 +7,7 @@ const STATUS_ORDER = [
   'not_applied',
   'applied',
   'shortlisted',
+  'interviews_ongoing',
   'on_hold',
   'not_shortlisted',
   'hired',
@@ -14,25 +15,27 @@ const STATUS_ORDER = [
 ]
 
 const STATUS_LABELS: Record<string, string> = {
-  not_interested:  'Not Interested',
-  not_applied:     'Not Applied',
-  applied:         'Applied',
-  shortlisted:     'Shortlisted',
-  on_hold:         'On Hold',
-  not_shortlisted: 'Not Shortlisted',
-  hired:           'Hired',
-  rejected:        'Rejected',
+  not_interested:     'Not Interested',
+  not_applied:        'Not Applied',
+  applied:            'Applied',
+  shortlisted:        'Shortlisted',
+  interviews_ongoing: 'Interviews Ongoing',
+  on_hold:            'On Hold',
+  not_shortlisted:    'Not Shortlisted',
+  hired:              'Hired',
+  rejected:           'Rejected',
 }
 
 const STATUS_ACTIVE_CLASS: Record<string, string> = {
-  not_interested:  'bg-zinc-600 text-white',
-  not_applied:     'bg-zinc-500 text-white',
-  applied:         'bg-blue-600 text-white',
-  shortlisted:     'bg-amber-500 text-white',
-  on_hold:         'bg-orange-500 text-white',
-  not_shortlisted: 'bg-zinc-600 text-white',
-  hired:           'bg-emerald-600 text-white',
-  rejected:        'bg-red-600 text-white',
+  not_interested:     'bg-zinc-600 text-white',
+  not_applied:        'bg-zinc-500 text-white',
+  applied:            'bg-blue-600 text-white',
+  shortlisted:        'bg-amber-500 text-white',
+  interviews_ongoing: 'bg-violet-600 text-white',
+  on_hold:            'bg-orange-500 text-white',
+  not_shortlisted:    'bg-zinc-600 text-white',
+  hired:              'bg-emerald-600 text-white',
+  rejected:           'bg-red-600 text-white',
 }
 
 interface Props {

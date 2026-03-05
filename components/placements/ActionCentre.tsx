@@ -2,8 +2,9 @@ import Link from 'next/link'
 
 interface Props {
   awaitingShortlist: number
-  inProcess: number
-  totalApps: number
+  yetToStart:        number
+  interviewsOngoing: number
+  totalApps:         number
 }
 
 function pct(num: number, denom: number): string {
@@ -60,8 +61,8 @@ function ActionItem({
   )
 }
 
-export default function ActionCentre({ awaitingShortlist, inProcess, totalApps }: Props) {
-  const total = awaitingShortlist + inProcess
+export default function ActionCentre({ awaitingShortlist, yetToStart, interviewsOngoing, totalApps }: Props) {
+  const total = awaitingShortlist + yetToStart + interviewsOngoing
 
   return (
     <div>
@@ -90,15 +91,26 @@ export default function ActionCentre({ awaitingShortlist, inProcess, totalApps }
           dotColor="bg-blue-400"
         />
         <ActionItem
-          count={inProcess}
-          pctStr={pct(inProcess, totalApps)}
-          title="interviews need an update"
-          description="Shortlisted candidates are awaiting an interview outcome. Chase the company for a decision."
-          href="/placements/applications?status=in_process"
+          count={yetToStart}
+          pctStr={pct(yetToStart, totalApps)}
+          title="shortlisted yet to start interviews"
+          description="These candidates have been shortlisted but interviews haven't started yet. Follow up with the company."
+          href="/placements/applications?status=shortlisted"
           countColor="text-amber-700"
           borderColor="border-amber-100"
           bgColor="bg-amber-50"
           dotColor="bg-amber-400"
+        />
+        <ActionItem
+          count={interviewsOngoing}
+          pctStr={pct(interviewsOngoing, totalApps)}
+          title="interviews ongoing need an update"
+          description="Interviews are in progress. Chase the company for an outcome — hired or rejected."
+          href="/placements/applications?status=interviews_ongoing"
+          countColor="text-violet-700"
+          borderColor="border-violet-100"
+          bgColor="bg-violet-50"
+          dotColor="bg-violet-400"
         />
       </div>
     </div>

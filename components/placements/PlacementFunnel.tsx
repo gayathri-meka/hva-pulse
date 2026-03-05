@@ -6,12 +6,15 @@ import NotInterestedReasons from './NotInterestedReasons'
 
 interface Props {
   totalRoles:                 number
+  weeklyRoles:                { label: string; count: number }[]
   notInterested:              number
   totalApps:                  number
   notShortlisted:             number
   stillApplied:               number
   shortlistPassed:            number
-  inProcess:                  number
+  yetToStart:                 number
+  interviewsOngoing:          number
+  onHold:                     number
   hired:                      number
   rejected:                   number
   reasonCounts:               Record<string, number>
@@ -38,6 +41,18 @@ function SectionLabel({ label }: { label: string }) {
 }
 
 // ─── Branch card ──────────────────────────────────────────────────────────────
+interface TwinCard {
+  label:      string
+  count:      number
+  pctStr?:    string
+  href:       string
+  cardBg:     string
+  cardBorder: string
+  labelCls:   string
+  countCls:   string
+  metaCls:    string
+}
+
 interface BranchCard {
   label:        string
   count:        number
@@ -50,6 +65,7 @@ interface BranchCard {
   metaCls:      string
   dividerCls:   string
   onWhyClick?:  () => void
+  twin?:        TwinCard
 }
 
 // ─── Arrow with one or more dropout branches to the right ────────────────────
@@ -70,18 +86,35 @@ function ArrowWithBranches({ branches }: { branches: BranchCard[] }) {
         {branches.map((b) => (
           <div key={b.label} className="flex items-center gap-1">
             <div className={`h-px w-3 shrink-0 ${b.dividerCls}`} />
-            <Link
-              href={b.href}
-              className={`block rounded-lg border ${b.cardBorder} ${b.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
-            >
-              <p className={`text-[9px] font-semibold uppercase tracking-widest ${b.labelCls}`}>
-                {b.label}
-              </p>
-              <p className={`mt-0.5 text-base font-bold tabular-nums ${b.countCls}`}>{b.count}</p>
-              {b.pctStr && (
-                <p className={`text-[10px] ${b.metaCls}`}>{b.pctStr}</p>
-              )}
-            </Link>
+            {b.twin ? (
+              <div className="flex gap-1.5">
+                <Link
+                  href={b.href}
+                  className={`block rounded-lg border ${b.cardBorder} ${b.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
+                >
+                  <p className={`text-[9px] font-semibold uppercase tracking-widest ${b.labelCls}`}>{b.label}</p>
+                  <p className={`mt-0.5 text-base font-bold tabular-nums ${b.countCls}`}>{b.count}</p>
+                  {b.pctStr && <p className={`text-[10px] ${b.metaCls}`}>{b.pctStr}</p>}
+                </Link>
+                <Link
+                  href={b.twin.href}
+                  className={`block rounded-lg border ${b.twin.cardBorder} ${b.twin.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
+                >
+                  <p className={`text-[9px] font-semibold uppercase tracking-widest ${b.twin.labelCls}`}>{b.twin.label}</p>
+                  <p className={`mt-0.5 text-base font-bold tabular-nums ${b.twin.countCls}`}>{b.twin.count}</p>
+                  {b.twin.pctStr && <p className={`text-[10px] ${b.twin.metaCls}`}>{b.twin.pctStr}</p>}
+                </Link>
+              </div>
+            ) : (
+              <Link
+                href={b.href}
+                className={`block rounded-lg border ${b.cardBorder} ${b.cardBg} px-3 py-2 transition-opacity hover:opacity-75`}
+              >
+                <p className={`text-[9px] font-semibold uppercase tracking-widest ${b.labelCls}`}>{b.label}</p>
+                <p className={`mt-0.5 text-base font-bold tabular-nums ${b.countCls}`}>{b.count}</p>
+                {b.pctStr && <p className={`text-[10px] ${b.metaCls}`}>{b.pctStr}</p>}
+              </Link>
+            )}
             {b.onWhyClick && (
               <button
                 onClick={b.onWhyClick}
@@ -134,16 +167,73 @@ function FunnelStage({
   return <Link href={href} className={`${cls} transition-opacity hover:opacity-75`}>{inner}</Link>
 }
 
-// ─── Roles heading (no box) ───────────────────────────────────────────────────
-function RolesHeading({ count, href }: { count: number; href: string }) {
+// ─── Roles box with "When?" button ───────────────────────────────────────────
+function RolesBox({ count, href, onWhenClick }: { count: number; href: string; onWhenClick: () => void }) {
   return (
-    <Link
-      href={href}
-      className="flex items-baseline gap-1.5 py-1.5 pl-1 transition-opacity hover:opacity-75"
+    <div className="flex items-center gap-2 py-1.5 pl-1">
+      <Link href={href} className="flex items-baseline gap-1.5 transition-opacity hover:opacity-75">
+        <span className="text-lg font-bold tabular-nums text-zinc-700">{count}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Roles</span>
+      </Link>
+      <button
+        onClick={onWhenClick}
+        className="flex shrink-0 items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-500 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+          <path d="M2 11a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2zM7 7a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7zM12 3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V3z" />
+        </svg>
+        When?
+      </button>
+    </div>
+  )
+}
+
+// ─── Weekly breakdown modal ───────────────────────────────────────────────────
+function WeeklyModal({
+  weeklyRoles,
+  onClose,
+}: {
+  weeklyRoles: { label: string; count: number }[]
+  onClose: () => void
+}) {
+  const maxCount = Math.max(...weeklyRoles.map((w) => w.count), 1)
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
     >
-      <span className="text-lg font-bold tabular-nums text-zinc-700">{count}</span>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Roles</span>
-    </Link>
+      <div
+        className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-zinc-900">Roles Added by Week</p>
+        <p className="mt-0.5 text-xs text-zinc-500">How many roles were posted each week</p>
+        <div className="mt-4 max-h-72 space-y-3 overflow-y-auto">
+          {weeklyRoles.length === 0 ? (
+            <p className="text-xs text-zinc-400">No data available.</p>
+          ) : (
+            weeklyRoles.map((w) => (
+              <div key={w.label} className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-right text-xs text-zinc-500">{w.label}</span>
+                <div className="flex flex-1 items-center gap-2">
+                  <div
+                    className="h-5 rounded bg-[#5BAE5B]/25"
+                    style={{ width: `${(w.count / maxCount) * 100}%`, minWidth: w.count > 0 ? '4px' : '0' }}
+                  />
+                  <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-700">{w.count}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-5 w-full rounded-lg border border-zinc-200 py-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-50"
+        >
+          Close
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -183,12 +273,15 @@ function ReasonsModal({
 // ─── Funnel ───────────────────────────────────────────────────────────────────
 export default function PlacementFunnel({
   totalRoles,
+  weeklyRoles,
   notInterested,
   totalApps,
   notShortlisted,
   stillApplied,
   shortlistPassed,
-  inProcess,
+  yetToStart,
+  interviewsOngoing,
+  onHold,
   hired,
   rejected,
   reasonCounts,
@@ -198,10 +291,14 @@ export default function PlacementFunnel({
   const [showReasons,         setShowReasons]         = useState(false)
   const [showNSReasons,       setShowNSReasons]       = useState(false)
   const [showRejReasons,      setShowRejReasons]      = useState(false)
+  const [showWhenModal,       setShowWhenModal]       = useState(false)
 
   return (
     <div className="mx-auto max-w-sm">
 
+      {showWhenModal && (
+        <WeeklyModal weeklyRoles={weeklyRoles} onClose={() => setShowWhenModal(false)} />
+      )}
       {showReasons && (
         <ReasonsModal
           reasonCounts={reasonCounts}
@@ -230,7 +327,7 @@ export default function PlacementFunnel({
       {/* ── INTEREST STAGE ── */}
       <SectionLabel label="Interest Stage" />
 
-      <RolesHeading count={totalRoles} href="/placements/companies" />
+      <RolesBox count={totalRoles} href="/placements/companies" onWhenClick={() => setShowWhenModal(true)} />
 
       <ArrowWithBranches branches={[{
         label:       'Not Interested',
@@ -291,13 +388,31 @@ export default function PlacementFunnel({
 
       <ArrowWithBranches branches={[
         {
-          label:      'In Process',
-          count:      inProcess,
-          pctStr:     `${pct(inProcess, shortlistPassed)} of shortlisted`,
-          href:       '/placements/applications?status=in_process',
-          cardBg:     'bg-amber-50', cardBorder: 'border-amber-100',
+          label:      'Yet to Start',
+          count:      yetToStart,
+          pctStr:     `${pct(yetToStart, shortlistPassed)} of shortlisted`,
+          href:       '/placements/applications?status=shortlisted',
+          cardBg:     'bg-amber-50',  cardBorder: 'border-amber-100',
           labelCls:   'text-amber-500', countCls: 'text-amber-800',
           metaCls:    'text-amber-500', dividerCls: 'bg-amber-200',
+          twin: {
+            label:      'Interviews Ongoing',
+            count:      interviewsOngoing,
+            pctStr:     `${pct(interviewsOngoing, shortlistPassed)} of shortlisted`,
+            href:       '/placements/applications?status=interviews_ongoing',
+            cardBg:     'bg-violet-50',   cardBorder: 'border-violet-100',
+            labelCls:   'text-violet-500', countCls: 'text-violet-800',
+            metaCls:    'text-violet-500',
+          },
+        },
+        {
+          label:      'On Hold',
+          count:      onHold,
+          pctStr:     `${pct(onHold, shortlistPassed)} of shortlisted`,
+          href:       '/placements/applications?status=on_hold',
+          cardBg:     'bg-orange-50', cardBorder: 'border-orange-100',
+          labelCls:   'text-orange-400', countCls: 'text-orange-700',
+          metaCls:    'text-orange-400', dividerCls: 'bg-orange-200',
         },
         {
           label:      'Rejected',
