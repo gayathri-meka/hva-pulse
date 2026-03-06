@@ -59,12 +59,10 @@ export async function POST() {
   for (const candidate of candidates) {
     const { matchScore: _score, ...row } = candidate as { matchScore: number; [key: string]: unknown }
 
-    // Use upsert only when we have a dedup key; plain insert otherwise
-    const op = row.external_id
-      ? adminClient.from('job_opportunities').upsert(row, { onConflict: 'source_platform,external_id', ignoreDuplicates: true })
-      : adminClient.from('job_opportunities').insert(row)
-
-    const { error } = await op
+    // external_id is always set by the scraper so upsert is always safe
+    const { error } = await adminClient
+      .from('job_opportunities')
+      .upsert(row, { onConflict: 'source_platform,external_id', ignoreDuplicates: true })
 
     if (error) {
       skipped++

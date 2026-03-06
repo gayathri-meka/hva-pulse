@@ -32,6 +32,23 @@ type LinkedInJob = {
   id:       string | null
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Extract a unique identifier from a LinkedIn job URL.
+// LinkedIn job IDs are 8–10 digit numbers that appear at the end of the view path,
+// either as a bare number (/jobs/view/4098765123/) or embedded in a slug
+// (/jobs/view/react-developer-at-acme-4098765123/).
+// Falls back to the URL path (no query string) so external_id is never null
+// — avoiding the DB UNIQUE NULLS NOT DISTINCT constraint issue.
+export function extractJobId(link: string | null | undefined): string {
+  if (!link) return `unknown:${Date.now()}:${Math.random()}`
+  // All digit sequences of 8+ chars — LinkedIn job IDs are always in this range
+  const nums = link.match(/\d{8,}/g)
+  if (nums?.length) return nums[nums.length - 1] // last long number = job ID
+  // Fallback: path without query string
+  return link.split('?')[0]
+}
+
 // ── LinkedIn scraper ──────────────────────────────────────────────────────────
 // Uses the public jobs-guest API endpoint — no login required.
 // f_E=2 = Entry level filter; omit for all experience levels.
@@ -86,8 +103,10 @@ async function fetchLinkedInPage(
 
     if (!title || !company) return
 
-    const idMatch = link?.match(/\/jobs\/view\/(\d+)/)
-    const id      = idMatch?.[1] ?? null
+    // Extract LinkedIn job ID — handles both plain (/view/1234567890/)
+    // and slug (/view/react-developer-at-acme-1234567890/) URL formats.
+    // Always produce a non-null id to avoid the DB UNIQUE NULLS NOT DISTINCT issue.
+    const id = extractJobId(link)
 
     jobs.push({ title, company, location: loc, dateStr, link: link ?? null, id })
   })
@@ -194,7 +213,7 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
             job_description: null,
             match_reasoning: buildMatchReasoning(titleMatched, skillsMatched, job.location ?? location),
             original_url:    job.link,
-            external_id:     job.id,
+            external_id:     job.id, // always non-null (set by extractJobId in fetchLinkedInPage)
             persona_id:      persona.id,
             status:          'discovered',
             matchScore,
