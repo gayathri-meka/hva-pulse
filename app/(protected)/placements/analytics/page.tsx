@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import PlacementFunnel from '@/components/placements/PlacementFunnel'
 import ActionCentre from '@/components/placements/ActionCentre'
 import TatDeepDive from '@/components/placements/TatDeepDive'
+import AnalyticsFilters from '@/components/placements/AnalyticsFilters'
+import PlacementHealth from '@/components/placements/PlacementHealth'
 
 // ── TAT Deep Dive cutoff ──────────────────────────────────────────────────────
 // Only applications created on or after this date are counted for TAT metrics.
@@ -12,21 +15,58 @@ const TAT_CUTOFF_DATE = '2026-03-05'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AnalyticsPage() {
+interface Props {
+  searchParams: Promise<{ lf?: string; batch?: string }>
+}
+
+export default async function AnalyticsPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
+  const { lf, batch } = await searchParams
+
   const supabase = await createServerSupabaseClient()
 
+  // ── Filter: resolve learner user_ids for LF / batch ───────────────────────
+  const [{ data: allLearners }, { data: filteredLearners }] = await Promise.all([
+    supabase.from('learners').select('lf_name, batch_name'),
+    (lf || batch)
+      ? (() => {
+          let q = supabase.from('learners').select('user_id')
+          if (lf)    q = q.eq('lf_name',    lf)
+          if (batch) q = q.eq('batch_name', batch)
+          return q
+        })()
+      : Promise.resolve({ data: null, error: null }),
+  ])
+
+  const lfs     = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort()    as string[]
+  const batches = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
+
+  const filterUserIds = filteredLearners
+    ? filteredLearners.map((l) => l.user_id).filter((id): id is string => !!id)
+    : null
+
+  // ── Main data queries (filtered when applicable) ───────────────────────────
+  let appsQuery = supabase.from('applications').select('status, not_shortlisted_reasons, rejection_reasons, created_at')
+  let prefsQuery = supabase.from('role_preferences').select('reasons').eq('preference', 'not_interested')
+  let tatQuery  = supabase
+    .from('applications')
+    .select('created_at, status, shortlisting_decision_taken_at, interviews_started_at, hiring_decision_taken_at')
+    .gte('created_at', TAT_CUTOFF_DATE)
+
+  if (filterUserIds) {
+    appsQuery  = appsQuery.in('user_id',  filterUserIds)
+    prefsQuery = prefsQuery.in('user_id', filterUserIds)
+    tatQuery   = tatQuery.in('user_id',   filterUserIds)
+  }
+
   const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps }] = await Promise.all([
-    supabase.from('roles').select('id, created_at'),
-    supabase.from('applications').select('status, not_shortlisted_reasons, rejection_reasons'),
-    supabase.from('role_preferences').select('reasons').eq('preference', 'not_interested'),
-    supabase
-      .from('applications')
-      .select('created_at, status, shortlisting_decision_taken_at, interviews_started_at, hiring_decision_taken_at')
-      .gte('created_at', TAT_CUTOFF_DATE),
+    supabase.from('roles').select('id, created_at, status'), // roles are not learner-specific
+    appsQuery,
+    prefsQuery,
+    tatQuery,
   ])
 
   const allApps       = applications ?? []
@@ -145,7 +185,56 @@ export default async function AnalyticsPage() {
   // Everyone who passed the shortlisting gate (used as stage-3 denominator)
   const shortlistPassed = yetToStart + interviewsOngoing + onHold + hired + rejected
 
+  // ── Age stats for Action Centre ──────────────────────────────────────────────
+  type AgeStats = { oldest: number; avg: number; buckets: { gt14: number; d7to14: number; d1to7: number } }
+
+  function ageStats(apps: { created_at: string | null | undefined }[]): AgeStats {
+    const nowMs = Date.now()
+    const days  = apps
+      .map((a) => a.created_at ? Math.floor((nowMs - new Date(a.created_at).getTime()) / 86_400_000) : 0)
+    if (days.length === 0) return { oldest: 0, avg: 0, buckets: { gt14: 0, d7to14: 0, d1to7: 0 } }
+    const oldest  = Math.max(...days)
+    const avg     = Math.round(days.reduce((s, d) => s + d, 0) / days.length)
+    const buckets = {
+      gt14:   days.filter((d) => d > 14).length,
+      d7to14: days.filter((d) => d > 7 && d <= 14).length,
+      d1to7:  days.filter((d) => d <= 7).length,
+    }
+    return { oldest, avg, buckets }
+  }
+
+  const appliedAge           = ageStats(allApps.filter((a) => a.status === 'applied'))
+  const shortlistedAge       = ageStats(allApps.filter((a) => a.status === 'shortlisted'))
+  const interviewsOngoingAge = ageStats(allApps.filter((a) => a.status === 'interviews_ongoing'))
+
+  // ── Placement Health metrics ──────────────────────────────────────────────
+  const openRoles        = roles?.filter((r) => r.status === 'open').length ?? 0
+  const last4Weeks       = weeklyRoles.slice(0, 4)
+  const weeklyAvg        = last4Weeks.length > 0
+    ? last4Weeks.reduce((s, w) => s + w.count, 0) / last4Weeks.length
+    : 0
+  const appsPerRole      = totalRoles > 0 ? totalApps / totalRoles : 0
+  const notInterestedRate = (totalApps + notInterested) > 0
+    ? notInterested / (totalApps + notInterested)
+    : 0
+  const shortlistRate    = totalApps > 0 ? shortlistPassed / totalApps : 0
+  const hireRate         = (hired + rejected) > 0 ? hired / (hired + rejected) : 0
+
   return (
+    <div>
+    <Suspense>
+      <AnalyticsFilters lfs={lfs} batches={batches} />
+    </Suspense>
+    <PlacementHealth
+      openRoles={openRoles}
+      weeklyAvg={weeklyAvg}
+      appsPerRole={appsPerRole}
+      notInterestedRate={notInterestedRate}
+      shortlistRate={shortlistRate}
+      hireRate={hireRate}
+      totalRoles={totalRoles}
+      totalApps={totalApps}
+    />
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:gap-10">
       {/* Left: vertical funnel */}
       <div>
@@ -170,7 +259,15 @@ export default async function AnalyticsPage() {
 
       {/* Right: action centre + TAT */}
       <div className="pt-2">
-        <ActionCentre awaitingShortlist={stillApplied} yetToStart={yetToStart} interviewsOngoing={interviewsOngoing} totalApps={totalApps} />
+        <ActionCentre
+          awaitingShortlist={stillApplied}
+          yetToStart={yetToStart}
+          interviewsOngoing={interviewsOngoing}
+          totalApps={totalApps}
+          appliedAge={appliedAge}
+          shortlistedAge={shortlistedAge}
+          interviewsOngoingAge={interviewsOngoingAge}
+        />
         <TatDeepDive
           total={effectiveTatTotal}
           stage1={effectiveTatStage1}
@@ -180,6 +277,7 @@ export default async function AnalyticsPage() {
           isDummy={DUMMY_TAT}
         />
       </div>
+    </div>
     </div>
   )
 }

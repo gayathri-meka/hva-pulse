@@ -39,7 +39,7 @@ export async function POST() {
 
   const result = await scrapeJobsForPersonas((personas ?? []) as JobPersona[])
 
-  if (result.error && !(result as { candidates?: unknown[] }).candidates) {
+  if (result.error) {
     return NextResponse.json({ error: result.error, inserted: 0, skipped: 0, fetched: 0, filteredByTitle: 0 }, { status: 200 })
   }
 
@@ -58,12 +58,13 @@ export async function POST() {
 
   for (const candidate of candidates) {
     const { matchScore: _score, ...row } = candidate as { matchScore: number; [key: string]: unknown }
-    const { error } = await adminClient
-      .from('job_opportunities')
-      .upsert(row, {
-        onConflict: 'source_platform,external_id',
-        ignoreDuplicates: true,
-      })
+
+    // Use upsert only when we have a dedup key; plain insert otherwise
+    const op = row.external_id
+      ? adminClient.from('job_opportunities').upsert(row, { onConflict: 'source_platform,external_id', ignoreDuplicates: true })
+      : adminClient.from('job_opportunities').insert(row)
+
+    const { error } = await op
 
     if (error) {
       skipped++

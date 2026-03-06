@@ -15,11 +15,11 @@ export default function RunScrapeButton() {
       if (data.error) {
         setResult(`Error: ${data.error}`)
       } else if (data.inserted === 0 && data.fetched === 0) {
-        setResult('Jooble returned 0 jobs — check your API key or try different keywords')
+        setResult('LinkedIn returned 0 jobs — try different keywords or locations in your personas')
       } else if (data.inserted === 0) {
-        setResult(`Fetched ${data.fetched} jobs from Jooble — all filtered out by title (${data.filteredByTitle} title mismatches). Try broader job titles in your persona.`)
+        setResult(`Fetched ${data.fetched} jobs from LinkedIn — all filtered out by title (${data.filteredByTitle} title mismatches). Try broader job titles in your persona.`)
       } else {
-        setResult(`Scrape complete: ${data.inserted} new job${data.inserted !== 1 ? 's' : ''} found, ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''} skipped (${data.fetched} fetched from Jooble)`)
+        setResult(`Scrape complete: ${data.inserted} new job${data.inserted !== 1 ? 's' : ''} found, ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''} skipped (${data.fetched} fetched from LinkedIn)`)
       }
     } catch {
       setResult('Scrape failed. Check the console for details.')

@@ -1,111 +1,134 @@
+import * as cheerio from 'cheerio'
 import type { JobPersona } from '@/types'
 
-export type JoobleJob = {
-  title: string
-  company: string
-  location: string
-  snippet: string
-  salary: string
-  source: string
-  type: string
-  link: string
-  updated: string
-  id: string
-}
-
 export type ScrapeResult = {
-  job_title: string
-  company_name: string
-  location: string | null
+  job_title:       string
+  company_name:    string
+  location:        string | null
   source_platform: string
-  date_posted: string | null
+  date_posted:     string | null
   job_description: string | null
   match_reasoning: string
-  original_url: string | null
-  external_id: string | null
-  persona_id: string
-  status: 'discovered'
+  original_url:    string | null
+  external_id:     string | null
+  persona_id:      string
+  status:          'discovered'
 }
 
 export type ScrapeOutcome = {
-  inserted: number
-  skipped: number
-  fetched?: number
+  inserted:         number
+  skipped:          number
+  fetched?:         number
   filteredByTitle?: number
-  error?: string
+  error?:           string
 }
 
-async function fetchJoobleJobs(
-  keywords: string,
-  location: string,
-  apiKey: string
-): Promise<JoobleJob[]> {
-  const res = await fetch(`https://jooble.org/api/${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keywords, location, resultonpage: 20 }),
+type LinkedInJob = {
+  title:   string
+  company: string
+  location: string
+  dateStr: string | null
+  link:    string | null
+  id:      string | null
+}
+
+// ── LinkedIn scraper ──────────────────────────────────────────────────────────
+// Uses the public jobs-guest API endpoint — no login required.
+async function fetchLinkedInJobs(keywords: string, location: string): Promise<LinkedInJob[]> {
+  const params = new URLSearchParams({
+    keywords,
+    f_TPR: 'r2592000', // last 30 days
+    start:  '0',
   })
-  if (!res.ok) {
-    console.error(`Jooble API error: ${res.status} ${res.statusText}`)
+  if (location) params.set('location', location)
+
+  const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?${params}`
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer':         'https://www.linkedin.com/',
+      },
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch (e) {
+    console.error(`LinkedIn fetch error for "${keywords}" in "${location}":`, e)
     return []
   }
-  const data = await res.json()
-  return (data?.jobs ?? []) as JoobleJob[]
+
+  if (!res.ok) {
+    console.error(`LinkedIn returned ${res.status} for "${keywords}" in "${location}"`)
+    return []
+  }
+
+  const html = await res.text()
+  const $    = cheerio.load(html)
+  const jobs: LinkedInJob[] = []
+
+  $('li').each((_, el) => {
+    const $el    = $(el)
+    const title   = $el.find('.base-search-card__title').text().trim()
+    const company = $el.find('.base-search-card__subtitle').text().trim()
+    const loc     = $el.find('.job-search-card__location').text().trim()
+    const dateStr = $el.find('time').attr('datetime') ?? null
+    const link    = $el.find('a.base-card__full-link').attr('href') ?? null
+
+    if (!title || !company) return
+
+    const idMatch = link?.match(/\/jobs\/view\/(\d+)/)
+    const id      = idMatch?.[1] ?? null
+
+    jobs.push({ title, company, location: loc, dateStr, link: link ?? null, id })
+  })
+
+  return jobs
 }
 
+// ── Filtering helpers ─────────────────────────────────────────────────────────
 function countTitleMatches(title: string, targetTitles: string[]): { count: number; matched: string[] } {
-  const lower = title.toLowerCase()
-  // Split each target title into individual words and check if any word matches
+  const lower   = title.toLowerCase()
   const matched = targetTitles.filter((t) => {
-    const titleLower = t.toLowerCase()
-    // First try exact phrase match
-    if (lower.includes(titleLower)) return true
-    // Then try any individual word from the target title (min 4 chars to avoid noise)
-    return titleLower.split(/\s+/).some((word) => word.length >= 4 && lower.includes(word))
+    const tl = t.toLowerCase()
+    if (lower.includes(tl)) return true
+    return tl.split(/\s+/).some((word) => word.length >= 4 && lower.includes(word))
   })
   return { count: matched.length, matched }
 }
 
-function countSkillMatches(description: string, skills: string[]): { count: number; matched: string[] } {
-  const lower = description.toLowerCase()
+function countSkillMatches(text: string, skills: string[]): { count: number; matched: string[] } {
+  const lower   = text.toLowerCase()
   const matched = skills.filter((s) => lower.includes(s.toLowerCase()))
   return { count: matched.length, matched }
 }
 
-function checkExperienceMatch(description: string, min: number | null, max: number | null): boolean {
+function checkExperienceMatch(text: string, min: number | null, max: number | null): boolean {
   if (min === null && max === null) return true
-  const matches = description.match(/(\d+)\s*(?:\+\s*)?years?/gi)
-  if (!matches) return true // can't determine, pass through
-  for (const m of matches) {
-    const num = parseInt(m.replace(/\D+/g, ''), 10)
-    if (!isNaN(num)) {
-      if (min !== null && num < min) return false
-      if (max !== null && num > max) return false
+  const hits = text.match(/(\d+)\s*(?:\+\s*)?years?/gi)
+  if (!hits) return true
+  for (const m of hits) {
+    const n = parseInt(m.replace(/\D+/g, ''), 10)
+    if (!isNaN(n)) {
+      if (min !== null && n < min) return false
+      if (max !== null && n > max) return false
       return true
     }
   }
   return true
 }
 
-function buildMatchReasoning(
-  titleMatched: string[],
-  skillsMatched: string[],
-  location: string
-): string {
+function buildMatchReasoning(titleMatched: string[], skillsMatched: string[], location: string): string {
   const parts: string[] = []
-  if (titleMatched.length > 0) {
-    parts.push(`Title matched: ${titleMatched.slice(0, 3).join(', ')}`)
-  }
-  if (skillsMatched.length > 0) {
-    parts.push(`Skills found: ${skillsMatched.slice(0, 5).join(', ')}`)
-  }
-  if (location) {
-    parts.push(`Location: ${location}`)
-  }
+  if (titleMatched.length > 0)  parts.push(`Title matched: ${titleMatched.slice(0, 3).join(', ')}`)
+  if (skillsMatched.length > 0) parts.push(`Skills found: ${skillsMatched.slice(0, 5).join(', ')}`)
+  if (location)                  parts.push(`Location: ${location}`)
   return parts.join('. ') || 'Generic match'
 }
 
-function parseDate(dateStr: string): string | null {
+function parseDate(dateStr: string | null): string | null {
   if (!dateStr) return null
   try {
     const d = new Date(dateStr)
@@ -116,16 +139,8 @@ function parseDate(dateStr: string): string | null {
   }
 }
 
+// ── Main export ───────────────────────────────────────────────────────────────
 export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<ScrapeOutcome> {
-  const apiKey = process.env.JOOBLE_API_KEY?.trim()
-  if (!apiKey) {
-    return {
-      inserted: 0,
-      skipped: 0,
-      error: 'JOOBLE_API_KEY is not set. Add it to your environment variables to enable scraping.',
-    }
-  }
-
   const activePersonas = personas.filter((p) => p.active)
   if (activePersonas.length === 0) {
     return { inserted: 0, skipped: 0, error: 'No active personas found.' }
@@ -133,70 +148,70 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
 
   type CandidateJob = ScrapeResult & { matchScore: number }
   const candidates: CandidateJob[] = []
-  let totalFetched = 0
+  const seenIds = new Set<string>()
+  let totalFetched   = 0
   let filteredByTitle = 0
 
   for (const persona of activePersonas) {
-    const keywords = persona.target_job_titles.join(' ')
+    // Search once per title × location combo for better precision
     const locations = persona.preferred_locations.length > 0 ? persona.preferred_locations : ['']
 
-    for (const location of locations) {
-      let jobs: JoobleJob[] = []
-      try {
-        jobs = await fetchJoobleJobs(keywords, location, apiKey)
-      } catch {
-        continue
-      }
-
-      totalFetched += jobs.length
-
-      for (const job of jobs) {
-        const description = job.snippet ?? ''
-        const title = job.title ?? ''
-
-        // Title filter: must match at least one target title keyword
-        const { count: titleCount, matched: titleMatched } = countTitleMatches(
-          title,
-          persona.target_job_titles
-        )
-        if (titleCount === 0) {
-          filteredByTitle++
+    for (const title of persona.target_job_titles) {
+      for (const location of locations) {
+        let jobs: LinkedInJob[] = []
+        try {
+          jobs = await fetchLinkedInJobs(title, location)
+        } catch {
           continue
         }
 
-        // Skills: soft filter only — used for scoring + reasoning, not hard rejection
-        // (Jooble snippets are short and rarely contain all skill keywords)
-        const { matched: skillsMatched } = countSkillMatches(description, persona.required_skills)
+        totalFetched += jobs.length
 
-        // Experience: best-effort, pass through if can't determine
-        const expOk = checkExperienceMatch(description, persona.experience_min, persona.experience_max)
-        if (!expOk) continue
+        for (const job of jobs) {
+          // Deduplicate within this scrape run
+          const dedupeKey = `linkedin:${job.id ?? job.title + job.company}`
+          if (seenIds.has(dedupeKey)) continue
+          seenIds.add(dedupeKey)
 
-        const matchScore = titleCount * 2 + skillsMatched.length
-        const matchReasoning = buildMatchReasoning(titleMatched, skillsMatched, job.location ?? location)
+          // Title must match at least one of the persona's target titles
+          const { count: titleCount, matched: titleMatched } = countTitleMatches(
+            job.title, persona.target_job_titles
+          )
+          if (titleCount === 0) { filteredByTitle++; continue }
 
-        candidates.push({
-          job_title: title,
-          company_name: job.company ?? 'Unknown',
-          location: job.location || location || null,
-          source_platform: 'jooble',
-          date_posted: parseDate(job.updated),
-          job_description: description || null,
-          match_reasoning: matchReasoning,
-          original_url: job.link || null,
-          external_id: job.id || null,
-          persona_id: persona.id,
-          status: 'discovered',
-          matchScore,
-        })
+          // Skills soft match (against title since we have no description from search results)
+          const { matched: skillsMatched } = countSkillMatches(job.title, persona.required_skills)
+
+          // Experience: best-effort from title text only
+          const expOk = checkExperienceMatch(job.title, persona.experience_min, persona.experience_max)
+          if (!expOk) continue
+
+          const matchScore     = titleCount * 2 + skillsMatched.length
+          const matchReasoning = buildMatchReasoning(titleMatched, skillsMatched, job.location ?? location)
+
+          candidates.push({
+            job_title:       job.title,
+            company_name:    job.company || 'Unknown',
+            location:        job.location || location || null,
+            source_platform: 'linkedin',
+            date_posted:     parseDate(job.dateStr),
+            job_description: null, // full description requires a separate page fetch
+            match_reasoning: matchReasoning,
+            original_url:    job.link,
+            external_id:     job.id,
+            persona_id:      persona.id,
+            status:          'discovered',
+            matchScore,
+          })
+        }
       }
     }
   }
 
   return {
     inserted: candidates.length,
-    skipped: 0,
-    fetched: totalFetched,
+    skipped:  0,
+    fetched:  totalFetched,
     filteredByTitle,
     candidates,
   } as ScrapeOutcome & { candidates: CandidateJob[] }

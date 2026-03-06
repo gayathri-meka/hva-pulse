@@ -371,6 +371,8 @@ export default function PlacementFunnel({
       <FunnelStage
         label="Applications"
         count={totalApps}
+        metaLabel="avg / role"
+        metaValue={totalRoles > 0 ? (totalApps / totalRoles).toFixed(1) : '—'}
         href="/placements/applications"
         bg="bg-blue-50" border="border-blue-100"
         accent="text-blue-500" countColor="text-blue-900"

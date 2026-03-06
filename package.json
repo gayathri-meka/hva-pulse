@@ -17,6 +17,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.96.0",
     "@tanstack/react-table": "^8.21.3",
+    "cheerio": "^1.2.0",
     "googleapis": "^171.4.0",
     "next": "^16.1.6",
     "react": "^18",
