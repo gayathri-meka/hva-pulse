@@ -125,21 +125,6 @@ function countSkillMatches(text: string, skills: string[]): { count: number; mat
   return { count: matched.length, matched }
 }
 
-function checkExperienceMatch(text: string, min: number | null, max: number | null): boolean {
-  if (min === null && max === null) return true
-  const hits = text.match(/(\d+)\s*(?:\+\s*)?years?/gi)
-  if (!hits) return true // can't determine, pass through
-  for (const m of hits) {
-    const n = parseInt(m.replace(/\D+/g, ''), 10)
-    if (!isNaN(n)) {
-      if (min !== null && n < min) return false
-      if (max !== null && n > max) return false
-      return true
-    }
-  }
-  return true
-}
-
 function buildMatchReasoning(titleMatched: string[], skillsMatched: string[], location: string): string {
   const parts: string[] = []
   if (titleMatched.length > 0)  parts.push(`Title matched: ${titleMatched.slice(0, 3).join(', ')}`)
@@ -194,11 +179,8 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
           if (seenIds.has(dedupeKey)) continue
           seenIds.add(dedupeKey)
 
-          // Experience: best-effort from title text (pass through if undetermined)
-          const expOk = checkExperienceMatch(job.title, persona.experience_min, persona.experience_max)
-          if (!expOk) continue
-
-          // Soft scoring — title + skill matches contribute to reasoning but don't hard-reject
+          // No hard filtering — skills are already in the search keywords so
+          // LinkedIn handles relevance. Soft-match title/skills for reasoning only.
           const { matched: titleMatched } = countTitleMatches(job.title, persona.target_job_titles)
           const { matched: skillsMatched } = countSkillMatches(job.title, persona.required_skills)
           const matchScore = titleMatched.length * 2 + skillsMatched.length

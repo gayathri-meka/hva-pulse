@@ -14,10 +14,10 @@ export default function RunScrapeButton() {
       const data = await res.json()
       if (data.error) {
         setResult(`Error: ${data.error}`)
-      } else if (data.inserted === 0 && data.fetched === 0) {
+      } else if (data.inserted === 0 && (data.fetched ?? 0) === 0) {
         setResult('LinkedIn returned 0 jobs — try different keywords or locations in your personas')
       } else if (data.inserted === 0) {
-        setResult(`Fetched ${data.fetched} jobs from LinkedIn — all filtered out by title (${data.filteredByTitle} title mismatches). Try broader job titles in your persona.`)
+        setResult(`Fetched ${data.fetched} jobs from LinkedIn — all were duplicates already in the database`)
       } else {
         setResult(`Scrape complete: ${data.inserted} new job${data.inserted !== 1 ? 's' : ''} found, ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''} skipped (${data.fetched} fetched from LinkedIn)`)
       }
