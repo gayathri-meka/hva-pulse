@@ -115,6 +115,7 @@ export default function PersonaFormModal({ persona }: Props) {
   const [expMax, setExpMax] = useState(persona?.experience_max?.toString() ?? '')
   const [locations, setLocations] = useState<string[]>(persona?.preferred_locations ?? [])
   const [remoteAllowed, setRemoteAllowed] = useState(persona?.remote_allowed ?? false)
+  const [entryLevelOnly, setEntryLevelOnly] = useState(persona?.entry_level_only ?? false)
   const [platforms, setPlatforms] = useState<string[]>(persona?.platforms ?? [])
 
   function resetForm() {
@@ -125,6 +126,7 @@ export default function PersonaFormModal({ persona }: Props) {
     setExpMax(persona?.experience_max?.toString() ?? '')
     setLocations(persona?.preferred_locations ?? [])
     setRemoteAllowed(persona?.remote_allowed ?? false)
+    setEntryLevelOnly(persona?.entry_level_only ?? false)
     setPlatforms(persona?.platforms ?? [])
   }
 
@@ -142,6 +144,7 @@ export default function PersonaFormModal({ persona }: Props) {
     formData.set('experience_max', expMax)
     formData.set('preferred_locations', JSON.stringify(locations))
     formData.set('remote_allowed', String(remoteAllowed))
+    formData.set('entry_level_only', String(entryLevelOnly))
     formData.set('platforms', JSON.stringify(platforms))
 
     startTransition(async () => {
@@ -263,15 +266,30 @@ export default function PersonaFormModal({ persona }: Props) {
                 placeholder="e.g. Bangalore, Mumbai…"
               />
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="remote_allowed"
-                  checked={remoteAllowed}
-                  onChange={(e) => setRemoteAllowed(e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-300"
-                />
-                <label htmlFor="remote_allowed" className="text-sm text-zinc-700">Remote allowed</label>
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="remote_allowed"
+                    checked={remoteAllowed}
+                    onChange={(e) => setRemoteAllowed(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                  <label htmlFor="remote_allowed" className="text-sm text-zinc-700">Remote allowed</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="entry_level_only"
+                    checked={entryLevelOnly}
+                    onChange={(e) => setEntryLevelOnly(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                  <label htmlFor="entry_level_only" className="text-sm text-zinc-700">
+                    Entry level only
+                    <span className="ml-1 text-xs text-zinc-400">(LinkedIn f_E=2 filter)</span>
+                  </label>
+                </div>
               </div>
 
               <div>

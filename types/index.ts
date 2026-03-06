@@ -78,7 +78,7 @@ export type JobPersona = {
   target_job_titles: string[]; required_skills: string[]
   experience_min: number | null; experience_max: number | null
   preferred_locations: string[]; remote_allowed: boolean
-  platforms: string[]; active: boolean
+  platforms: string[]; active: boolean; entry_level_only: boolean
   created_by: string | null; created_at: string; updated_at: string
 }
 

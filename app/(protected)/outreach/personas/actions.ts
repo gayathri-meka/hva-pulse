@@ -16,6 +16,7 @@ export async function createPersona(formData: FormData) {
   const experience_max = formData.get('experience_max') ? parseInt(formData.get('experience_max') as string, 10) : null
   const preferred_locations = JSON.parse((formData.get('preferred_locations') as string) || '[]')
   const remote_allowed = formData.get('remote_allowed') === 'true'
+  const entry_level_only = formData.get('entry_level_only') === 'true'
   const platforms = JSON.parse((formData.get('platforms') as string) || '[]')
 
   const supabase = await createServerSupabaseClient()
@@ -27,6 +28,7 @@ export async function createPersona(formData: FormData) {
     experience_max,
     preferred_locations,
     remote_allowed,
+    entry_level_only,
     platforms,
     created_by: appUser.id,
   })
@@ -44,6 +46,7 @@ export async function updatePersona(id: string, formData: FormData) {
   const experience_max = formData.get('experience_max') ? parseInt(formData.get('experience_max') as string, 10) : null
   const preferred_locations = JSON.parse((formData.get('preferred_locations') as string) || '[]')
   const remote_allowed = formData.get('remote_allowed') === 'true'
+  const entry_level_only = formData.get('entry_level_only') === 'true'
   const platforms = JSON.parse((formData.get('platforms') as string) || '[]')
 
   const supabase = await createServerSupabaseClient()
@@ -55,6 +58,7 @@ export async function updatePersona(id: string, formData: FormData) {
     experience_max,
     preferred_locations,
     remote_allowed,
+    entry_level_only,
     platforms,
     updated_at: new Date().toISOString(),
   }).eq('id', id)

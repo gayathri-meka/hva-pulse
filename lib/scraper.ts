@@ -24,23 +24,30 @@ export type ScrapeOutcome = {
 }
 
 type LinkedInJob = {
-  title:   string
-  company: string
+  title:    string
+  company:  string
   location: string
-  dateStr: string | null
-  link:    string | null
-  id:      string | null
+  dateStr:  string | null
+  link:     string | null
+  id:       string | null
 }
 
 // ── LinkedIn scraper ──────────────────────────────────────────────────────────
 // Uses the public jobs-guest API endpoint — no login required.
-async function fetchLinkedInJobs(keywords: string, location: string): Promise<LinkedInJob[]> {
+// f_E=2 = Entry level filter; omit for all experience levels.
+async function fetchLinkedInPage(
+  keywords: string,
+  location: string,
+  start: number,
+  entryLevel: boolean,
+): Promise<LinkedInJob[]> {
   const params = new URLSearchParams({
     keywords,
     f_TPR: 'r2592000', // last 30 days
-    start:  '0',
+    start:  String(start),
   })
-  if (location) params.set('location', location)
+  if (location)   params.set('location', location)
+  if (entryLevel) params.set('f_E', '2')
 
   const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?${params}`
 
@@ -56,12 +63,12 @@ async function fetchLinkedInJobs(keywords: string, location: string): Promise<Li
       signal: AbortSignal.timeout(15_000),
     })
   } catch (e) {
-    console.error(`LinkedIn fetch error for "${keywords}" in "${location}":`, e)
+    console.error(`LinkedIn fetch error (start=${start}) for "${keywords}" in "${location}":`, e)
     return []
   }
 
   if (!res.ok) {
-    console.error(`LinkedIn returned ${res.status} for "${keywords}" in "${location}"`)
+    console.error(`LinkedIn returned ${res.status} (start=${start}) for "${keywords}" in "${location}"`)
     return []
   }
 
@@ -88,7 +95,20 @@ async function fetchLinkedInJobs(keywords: string, location: string): Promise<Li
   return jobs
 }
 
-// ── Filtering helpers ─────────────────────────────────────────────────────────
+async function fetchLinkedInJobs(
+  keywords: string,
+  location: string,
+  entryLevel: boolean,
+): Promise<LinkedInJob[]> {
+  // Fetch 2 pages (≈50 results) per search
+  const [page1, page2] = await Promise.all([
+    fetchLinkedInPage(keywords, location, 0,  entryLevel),
+    fetchLinkedInPage(keywords, location, 25, entryLevel),
+  ])
+  return [...page1, ...page2]
+}
+
+// ── Filtering + scoring helpers ───────────────────────────────────────────────
 function countTitleMatches(title: string, targetTitles: string[]): { count: number; matched: string[] } {
   const lower   = title.toLowerCase()
   const matched = targetTitles.filter((t) => {
@@ -108,7 +128,7 @@ function countSkillMatches(text: string, skills: string[]): { count: number; mat
 function checkExperienceMatch(text: string, min: number | null, max: number | null): boolean {
   if (min === null && max === null) return true
   const hits = text.match(/(\d+)\s*(?:\+\s*)?years?/gi)
-  if (!hits) return true
+  if (!hits) return true // can't determine, pass through
   for (const m of hits) {
     const n = parseInt(m.replace(/\D+/g, ''), 10)
     if (!isNaN(n)) {
@@ -125,7 +145,7 @@ function buildMatchReasoning(titleMatched: string[], skillsMatched: string[], lo
   if (titleMatched.length > 0)  parts.push(`Title matched: ${titleMatched.slice(0, 3).join(', ')}`)
   if (skillsMatched.length > 0) parts.push(`Skills found: ${skillsMatched.slice(0, 5).join(', ')}`)
   if (location)                  parts.push(`Location: ${location}`)
-  return parts.join('. ') || 'Generic match'
+  return parts.join('. ') || 'LinkedIn search match'
 }
 
 function parseDate(dateStr: string | null): string | null {
@@ -149,18 +169,19 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
   type CandidateJob = ScrapeResult & { matchScore: number }
   const candidates: CandidateJob[] = []
   const seenIds = new Set<string>()
-  let totalFetched   = 0
-  let filteredByTitle = 0
+  let totalFetched = 0
 
   for (const persona of activePersonas) {
-    // Search once per title × location combo for better precision
     const locations = persona.preferred_locations.length > 0 ? persona.preferred_locations : ['']
 
     for (const title of persona.target_job_titles) {
+      // Include top skills in the query so LinkedIn does the semantic matching
+      const keywords = [title, ...persona.required_skills.slice(0, 3)].join(' ')
+
       for (const location of locations) {
         let jobs: LinkedInJob[] = []
         try {
-          jobs = await fetchLinkedInJobs(title, location)
+          jobs = await fetchLinkedInJobs(keywords, location, persona.entry_level_only ?? false)
         } catch {
           continue
         }
@@ -169,25 +190,18 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
 
         for (const job of jobs) {
           // Deduplicate within this scrape run
-          const dedupeKey = `linkedin:${job.id ?? job.title + job.company}`
+          const dedupeKey = `linkedin:${job.id ?? `${job.title}|${job.company}`}`
           if (seenIds.has(dedupeKey)) continue
           seenIds.add(dedupeKey)
 
-          // Title must match at least one of the persona's target titles
-          const { count: titleCount, matched: titleMatched } = countTitleMatches(
-            job.title, persona.target_job_titles
-          )
-          if (titleCount === 0) { filteredByTitle++; continue }
-
-          // Skills soft match (against title since we have no description from search results)
-          const { matched: skillsMatched } = countSkillMatches(job.title, persona.required_skills)
-
-          // Experience: best-effort from title text only
+          // Experience: best-effort from title text (pass through if undetermined)
           const expOk = checkExperienceMatch(job.title, persona.experience_min, persona.experience_max)
           if (!expOk) continue
 
-          const matchScore     = titleCount * 2 + skillsMatched.length
-          const matchReasoning = buildMatchReasoning(titleMatched, skillsMatched, job.location ?? location)
+          // Soft scoring — title + skill matches contribute to reasoning but don't hard-reject
+          const { matched: titleMatched } = countTitleMatches(job.title, persona.target_job_titles)
+          const { matched: skillsMatched } = countSkillMatches(job.title, persona.required_skills)
+          const matchScore = titleMatched.length * 2 + skillsMatched.length
 
           candidates.push({
             job_title:       job.title,
@@ -195,8 +209,8 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
             location:        job.location || location || null,
             source_platform: 'linkedin',
             date_posted:     parseDate(job.dateStr),
-            job_description: null, // full description requires a separate page fetch
-            match_reasoning: matchReasoning,
+            job_description: null,
+            match_reasoning: buildMatchReasoning(titleMatched, skillsMatched, job.location ?? location),
             original_url:    job.link,
             external_id:     job.id,
             persona_id:      persona.id,
@@ -209,10 +223,10 @@ export async function scrapeJobsForPersonas(personas: JobPersona[]): Promise<Scr
   }
 
   return {
-    inserted: candidates.length,
-    skipped:  0,
-    fetched:  totalFetched,
-    filteredByTitle,
+    inserted:        candidates.length,
+    skipped:         0,
+    fetched:         totalFetched,
+    filteredByTitle: 0,
     candidates,
   } as ScrapeOutcome & { candidates: CandidateJob[] }
 }
