@@ -46,11 +46,15 @@ describe('updateApplicationStatus', () => {
 
     await updateApplicationStatus('app-1', 'not_shortlisted', 'Stronger candidates selected')
 
-    expect(mockUpdate).toHaveBeenCalledWith({
-      status:                 'not_shortlisted',
-      not_shortlisted_reason: 'Stronger candidates selected',
-      rejection_feedback:     null,
-    })
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status:                  'not_shortlisted',
+        not_shortlisted_reason:  'Stronger candidates selected',
+        not_shortlisted_reasons: [],
+        rejection_feedback:      null,
+        rejection_reasons:       [],
+      }),
+    )
   })
 
   test('sets rejection_feedback and clears not_shortlisted_reason', async () => {
@@ -59,11 +63,15 @@ describe('updateApplicationStatus', () => {
 
     await updateApplicationStatus('app-1', 'rejected', 'Needs more experience')
 
-    expect(mockUpdate).toHaveBeenCalledWith({
-      status:                 'rejected',
-      rejection_feedback:     'Needs more experience',
-      not_shortlisted_reason: null,
-    })
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status:                  'rejected',
+        rejection_feedback:      'Needs more experience',
+        rejection_reasons:       [],
+        not_shortlisted_reason:  null,
+        not_shortlisted_reasons: [],
+      }),
+    )
   })
 
   test('clears both note fields for any other status', async () => {
@@ -72,11 +80,52 @@ describe('updateApplicationStatus', () => {
 
     await updateApplicationStatus('app-1', 'shortlisted')
 
-    expect(mockUpdate).toHaveBeenCalledWith({
-      status:                 'shortlisted',
-      not_shortlisted_reason: null,
-      rejection_feedback:     null,
-    })
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status:                  'shortlisted',
+        not_shortlisted_reason:  null,
+        not_shortlisted_reasons: [],
+        rejection_feedback:      null,
+        rejection_reasons:       [],
+      }),
+    )
+  })
+
+  test('passes reasons array through to update', async () => {
+    const { mockClient, mockUpdate } = makeSupabaseMock()
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+
+    await updateApplicationStatus('app-1', 'not_shortlisted', 'See notes', ['Skill Mismatch', 'Location Mismatch'])
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status:                  'not_shortlisted',
+        not_shortlisted_reasons: ['Skill Mismatch', 'Location Mismatch'],
+        not_shortlisted_reason:  'See notes',
+      }),
+    )
+  })
+
+  test('sets TAT timestamp for shortlisting decision', async () => {
+    const { mockClient, mockUpdate } = makeSupabaseMock()
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+
+    await updateApplicationStatus('app-1', 'shortlisted')
+
+    const call = mockUpdate.mock.calls[0][0] as Record<string, unknown>
+    expect(call.shortlisting_decision_taken_at).toBeDefined()
+    expect(typeof call.shortlisting_decision_taken_at).toBe('string')
+  })
+
+  test('sets TAT timestamp for hiring decision', async () => {
+    const { mockClient, mockUpdate } = makeSupabaseMock()
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+
+    await updateApplicationStatus('app-1', 'hired')
+
+    const call = mockUpdate.mock.calls[0][0] as Record<string, unknown>
+    expect(call.hiring_decision_taken_at).toBeDefined()
+    expect(typeof call.hiring_decision_taken_at).toBe('string')
   })
 
   test('note defaults to null when not provided for not_shortlisted', async () => {

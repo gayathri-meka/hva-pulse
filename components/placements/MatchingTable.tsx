@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import ExpandableNote from '@/components/ui/ExpandableNote'
+import { updateApplicationStatus } from '@/app/(protected)/placements/actions'
 import {
   useReactTable,
   getCoreRowModel,
@@ -25,28 +26,32 @@ export type MatchingStatus =
   | 'not_applied' | 'not_interested'
 
 export type MatchingRow = {
-  learner_id:             string
-  name:                   string
-  batch:                  string
-  lf:                     string
-  year_of_graduation:     number | null
-  degree:                 string | null
-  specialisation:         string | null
-  readiness:              string | null
-  prs_score:              number | null
-  proactiveness:          number | null
-  articulation:           number | null
-  comprehension:          number | null
-  tech_score:             number | null
-  current_location:       string | null
-  is_blacklisted:         'Yes' | 'No'
-  blacklisted_date:       string | null
-  status:                 MatchingStatus
-  reasons:                string[]
-  not_shortlisted_reason: string | null
-  rejection_feedback:     string | null
+  learner_id:              string
+  name:                    string
+  batch:                   string
+  lf:                      string
+  year_of_graduation:      number | null
+  degree:                  string | null
+  specialisation:          string | null
+  readiness:               string | null
+  prs_score:               number | null
+  proactiveness:           number | null
+  articulation:            number | null
+  comprehension:           number | null
+  tech_score:              number | null
+  current_location:        string | null
+  is_blacklisted:          'Yes' | 'No'
+  blacklisted_date:        string | null
+  app_id:                  string | null
+  status:                  MatchingStatus
+  reasons:                 string[]
+  not_shortlisted_reason:  string | null
+  not_shortlisted_reasons: string[]
+  rejection_feedback:      string | null
+  rejection_reasons:       string[]
 }
 
+// ── Status display ────────────────────────────────────────────────────────────
 const STATUS_BADGE: Record<MatchingStatus, string> = {
   applied:            'bg-blue-100 text-blue-700',
   shortlisted:        'bg-amber-100 text-amber-700',
@@ -71,7 +76,22 @@ const STATUS_LABEL: Record<MatchingStatus, string> = {
   not_interested:     'Not Interested',
 }
 
-// Shared multi-select filterFn: filter value is string[], cell value coerced to string
+// Application statuses available in the dropdown (excludes non-application statuses)
+const APP_STATUS_OPTIONS = [
+  'applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired',
+] as const
+
+const NS_REASONS = [
+  'Skill Mismatch', 'Eligibility Mismatch', 'Location Mismatch',
+  'Blacklisted', 'Joining Date Mismatch', 'Other',
+]
+const REJECTION_REASONS = [
+  'Gap in technical skills', 'Gap in communication skills', 'Copied', 'Other',
+]
+
+type PendingChange = { id: string; newStatus: 'not_shortlisted' | 'rejected' } | null
+
+// ── Shared multi-select filterFn ──────────────────────────────────────────────
 const multiSelectFilter: FilterFn<MatchingRow> = (row, colId, filterValues: string[]) =>
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
@@ -156,139 +176,6 @@ function FilterDropdown({ column }: { column: Column<MatchingRow, unknown> }) {
   )
 }
 
-// ── Column definitions ────────────────────────────────────────────────────────
-const col = createColumnHelper<MatchingRow>()
-
-const columns = [
-  col.accessor('name', {
-    header: 'Learner',
-    size: 200,
-    enableColumnFilter: false,
-    cell: (info) => (
-      <Link
-        href={`/learners?tab=snapshot&learner=${info.row.original.learner_id}`}
-        className="font-medium text-zinc-900 hover:text-[#5BAE5B] hover:underline"
-      >
-        {info.getValue()}
-      </Link>
-    ),
-  }),
-  col.accessor('batch', {
-    header: 'Batch',
-    size: 140,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-  }),
-  col.accessor('lf', {
-    header: 'LF',
-    size: 140,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-  }),
-  col.accessor('year_of_graduation', {
-    header: 'Grad Year',
-    size: 110,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="tabular-nums text-zinc-500">{info.getValue() ?? '—'}</span>,
-  }),
-  col.accessor('degree', {
-    header: 'Degree',
-    size: 140,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-  }),
-  col.accessor('specialisation', {
-    header: 'Specialisation',
-    size: 170,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-  }),
-  col.accessor('readiness', {
-    header: 'Readiness',
-    size: 130,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-  }),
-  col.accessor('prs_score', {
-    header: 'PRS',
-    size: 90,
-    filterFn: multiSelectFilter,
-    cell: (info) => numCell(info.getValue()),
-  }),
-  col.accessor('proactiveness', {
-    header: 'Proactiveness',
-    size: 130,
-    filterFn: multiSelectFilter,
-    cell: (info) => numCell(info.getValue()),
-  }),
-  col.accessor('articulation', {
-    header: 'Articulation',
-    size: 120,
-    filterFn: multiSelectFilter,
-    cell: (info) => numCell(info.getValue()),
-  }),
-  col.accessor('comprehension', {
-    header: 'Comprehension',
-    size: 130,
-    filterFn: multiSelectFilter,
-    cell: (info) => numCell(info.getValue()),
-  }),
-  col.accessor('tech_score', {
-    header: 'Tech Score',
-    size: 110,
-    filterFn: multiSelectFilter,
-    cell: (info) => numCell(info.getValue()),
-  }),
-  col.accessor('current_location', {
-    header: 'Location',
-    size: 140,
-    filterFn: multiSelectFilter,
-    cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-  }),
-  col.accessor('is_blacklisted', {
-    header: 'Blacklisted?',
-    size: 120,
-    enableSorting: false,
-    filterFn: multiSelectFilter,
-    cell: (info) => {
-      const v    = info.getValue() === 'Yes'
-      const date = info.row.original.blacklisted_date
-      return (
-        <span
-          title={v && date ? `Blacklisted on ${date}` : undefined}
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            v ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-500'
-          }`}
-        >
-          {v ? 'Yes' : 'No'}
-        </span>
-      )
-    },
-  }),
-  col.accessor('status', {
-    header: 'Status',
-    size: 160,
-    enableColumnFilter: false,
-    cell: (info) => {
-      const s   = info.getValue()
-      const row = info.row.original
-      const note =
-        s === 'not_interested'  ? (row.reasons.length > 0 ? row.reasons.join(', ') : null)
-        : s === 'not_shortlisted' ? row.not_shortlisted_reason
-        : s === 'rejected'        ? row.rejection_feedback
-        : null
-      return (
-        <div>
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[s]}`}>
-            {STATUS_LABEL[s]}
-          </span>
-          {note && <ExpandableNote note={note} />}
-        </div>
-      )
-    },
-  }),
-]
-
 // ── Column ordering ───────────────────────────────────────────────────────────
 const BASE_ORDER: ColumnOrderState = [
   'name', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
@@ -313,6 +200,225 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
   const [sorting, setSorting]             = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [statusMap, setStatusMap]         = useState<Record<string, string>>(() =>
+    Object.fromEntries(rows.filter((r) => r.app_id).map((r) => [r.app_id!, r.status]))
+  )
+  const [pendingChange, setPendingChange]   = useState<PendingChange>(null)
+  const [noteText, setNoteText]             = useState('')
+  const [checkedReasons, setCheckedReasons] = useState<Set<string>>(new Set())
+  const [reasonsError, setReasonsError]     = useState(false)
+  const [, startTransition] = useTransition()
+
+  function handleStatusChange(appId: string, newStatus: string) {
+    if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
+      setPendingChange({ id: appId, newStatus })
+      setNoteText('')
+      setCheckedReasons(new Set())
+      setReasonsError(false)
+      return
+    }
+    setStatusMap((prev) => ({ ...prev, [appId]: newStatus }))
+    startTransition(() => updateApplicationStatus(appId, newStatus))
+  }
+
+  function handleModalConfirm() {
+    if (!pendingChange) return
+    if (checkedReasons.size === 0) { setReasonsError(true); return }
+    const reasons = Array.from(checkedReasons)
+    const note    = noteText.trim() || undefined
+    setStatusMap((prev) => ({ ...prev, [pendingChange.id]: pendingChange.newStatus }))
+    startTransition(() => updateApplicationStatus(pendingChange.id, pendingChange.newStatus, note, reasons))
+    setPendingChange(null)
+    setNoteText('')
+    setCheckedReasons(new Set())
+    setReasonsError(false)
+  }
+
+  function handleModalCancel() {
+    setPendingChange(null)
+    setNoteText('')
+    setCheckedReasons(new Set())
+    setReasonsError(false)
+  }
+
+  const col = createColumnHelper<MatchingRow>()
+
+  const columns = useMemo(() => [
+    col.accessor('name', {
+      header: 'Learner',
+      size: 200,
+      enableColumnFilter: false,
+      cell: (info) => (
+        <Link
+          href={`/learners?tab=snapshot&learner=${info.row.original.learner_id}`}
+          className="font-medium text-zinc-900 hover:text-[#5BAE5B] hover:underline"
+        >
+          {info.getValue()}
+        </Link>
+      ),
+    }),
+    col.accessor('batch', {
+      header: 'Batch',
+      size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('lf', {
+      header: 'LF',
+      size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('year_of_graduation', {
+      header: 'Grad Year',
+      size: 110,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="tabular-nums text-zinc-500">{info.getValue() ?? '—'}</span>,
+    }),
+    col.accessor('degree', {
+      header: 'Degree',
+      size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('specialisation', {
+      header: 'Specialisation',
+      size: 170,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('readiness', {
+      header: 'Readiness',
+      size: 130,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('prs_score', {
+      header: 'PRS',
+      size: 90,
+      filterFn: multiSelectFilter,
+      cell: (info) => numCell(info.getValue()),
+    }),
+    col.accessor('proactiveness', {
+      header: 'Proactiveness',
+      size: 130,
+      filterFn: multiSelectFilter,
+      cell: (info) => numCell(info.getValue()),
+    }),
+    col.accessor('articulation', {
+      header: 'Articulation',
+      size: 120,
+      filterFn: multiSelectFilter,
+      cell: (info) => numCell(info.getValue()),
+    }),
+    col.accessor('comprehension', {
+      header: 'Comprehension',
+      size: 130,
+      filterFn: multiSelectFilter,
+      cell: (info) => numCell(info.getValue()),
+    }),
+    col.accessor('tech_score', {
+      header: 'Tech Score',
+      size: 110,
+      filterFn: multiSelectFilter,
+      cell: (info) => numCell(info.getValue()),
+    }),
+    col.accessor('current_location', {
+      header: 'Location',
+      size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('is_blacklisted', {
+      header: 'Blacklisted?',
+      size: 120,
+      enableSorting: false,
+      filterFn: multiSelectFilter,
+      cell: (info) => {
+        const v    = info.getValue() === 'Yes'
+        const date = info.row.original.blacklisted_date
+        return (
+          <span
+            title={v && date ? `Blacklisted on ${date}` : undefined}
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              v ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-500'
+            }`}
+          >
+            {v ? 'Yes' : 'No'}
+          </span>
+        )
+      },
+    }),
+    col.accessor('status', {
+      header: 'Status',
+      size: 180,
+      enableColumnFilter: false,
+      cell: (info) => {
+        const row    = info.row.original
+        const appId  = row.app_id
+        const currentStatus = appId
+          ? ((statusMap[appId] ?? row.status) as MatchingStatus)
+          : row.status
+
+        const note = (() => {
+          if (currentStatus === 'not_shortlisted') {
+            const reasons = row.not_shortlisted_reasons
+            const comment = row.not_shortlisted_reason
+            if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
+            return comment
+          }
+          if (currentStatus === 'rejected') {
+            const reasons = row.rejection_reasons
+            const comment = row.rejection_feedback
+            if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
+            return comment
+          }
+          if (currentStatus === 'not_interested') {
+            return row.reasons.length > 0 ? row.reasons.join(', ') : null
+          }
+          return null
+        })()
+
+        // No application — show badge only
+        if (!appId) {
+          return (
+            <div>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[currentStatus]}`}>
+                {STATUS_LABEL[currentStatus]}
+              </span>
+              {note && <ExpandableNote note={note} />}
+            </div>
+          )
+        }
+
+        // Has application — show editable dropdown
+        return (
+          <div>
+            <div className="relative inline-flex">
+              <select
+                value={currentStatus}
+                onChange={(e) => handleStatusChange(appId, e.target.value)}
+                className={`appearance-none cursor-pointer rounded-full border-0 pl-2.5 pr-6 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
+                  STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
+                }`}
+              >
+                {APP_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            {note && <ExpandableNote note={note} />}
+          </div>
+        )
+      },
+    }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [statusMap])
 
   const columnOrder = useMemo<ColumnOrderState>(
     () => (roleSelected ? ROLE_ORDER : BASE_ORDER),
@@ -342,64 +448,138 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
   })
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table
-          className="border-collapse text-sm"
-          style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
-        >
-          <thead>
-            <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-              {table.getFlatHeaders().map((header) => (
-                <th
-                  key={header.id}
-                  style={{ width: header.getSize() }}
-                  className="relative select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400"
-                >
-                  <div
-                    className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
-                    onClick={header.column.getToggleSortingHandler()}
+    <>
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table
+            className="border-collapse text-sm"
+            style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
+          >
+            <thead>
+              <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
+                {table.getFlatHeaders().map((header) => (
+                  <th
+                    key={header.id}
+                    style={{ width: header.getSize() }}
+                    className="relative select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                   >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
-                    {header.column.getIsSorted() === 'desc' && <span>↓</span>}
-                  </div>
-                  {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
-                  {header.column.getCanResize() && (
                     <div
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
-                    />
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-zinc-50">
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    style={{ width: cell.column.getSize() }}
-                    className="px-4 py-3"
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
+                      className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
+                      {header.column.getIsSorted() === 'desc' && <span>↓</span>}
+                    </div>
+                    {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
+                      />
+                    )}
+                  </th>
                 ))}
               </tr>
-            ))}
-            {table.getRowModel().rows.length === 0 && (
-              <tr>
-                <td colSpan={columns.length} className="px-6 py-12 text-center text-sm text-zinc-400">
-                  No learners match the current filters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {table.getRowModel().rows.map((row) => (
+                <tr key={row.id} className="hover:bg-zinc-50">
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      style={{ width: cell.column.getSize() }}
+                      className="px-4 py-3"
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {table.getRowModel().rows.length === 0 && (
+                <tr>
+                  <td colSpan={columns.length} className="px-6 py-12 text-center text-sm text-zinc-400">
+                    No learners match the current filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+
+      {/* Reasons modal */}
+      {pendingChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={handleModalCancel} />
+          <div className="relative w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
+            <h3 className="mb-1 text-base font-semibold text-zinc-900">
+              {pendingChange.newStatus === 'not_shortlisted' ? 'Not Shortlisted' : 'Rejected'}
+            </h3>
+            <p className="mb-4 text-sm text-zinc-500">
+              {pendingChange.newStatus === 'not_shortlisted'
+                ? "Why wasn't this candidate shortlisted?"
+                : 'Why was this candidate rejected?'}
+            </p>
+            {(() => {
+              const reasons     = pendingChange.newStatus === 'not_shortlisted' ? NS_REASONS : REJECTION_REASONS
+              const placeholder = pendingChange.newStatus === 'not_shortlisted'
+                ? 'e.g. Stronger candidates were selected for this round'
+                : 'e.g. Needs more depth in system design'
+              return (
+                <>
+                  <div className={`space-y-2.5 rounded-lg border p-3 ${reasonsError ? 'border-red-300 bg-red-50' : 'border-zinc-200'}`}>
+                    {reasons.map((reason) => (
+                      <label key={reason} className="flex cursor-pointer items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={checkedReasons.has(reason)}
+                          onChange={(e) => {
+                            setCheckedReasons((prev) => {
+                              const next = new Set(prev)
+                              e.target.checked ? next.add(reason) : next.delete(reason)
+                              return next
+                            })
+                            setReasonsError(false)
+                          }}
+                          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        />
+                        <span className="text-sm text-zinc-700">{reason}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {reasonsError && <p className="mt-1 text-xs text-red-600">Select at least one reason.</p>}
+                  <label className="mt-3 block text-xs font-medium text-zinc-500">
+                    Additional details <span className="text-zinc-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    rows={2}
+                    placeholder={placeholder}
+                    className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                  />
+                </>
+              )
+            })()}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={handleModalCancel}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleModalConfirm}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

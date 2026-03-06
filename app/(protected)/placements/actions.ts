@@ -170,7 +170,18 @@ export async function updateApplicationStatus(id: string, status: string, note?:
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
+  const now = new Date().toISOString()
   const updates: Record<string, unknown> = { status }
+
+  // TAT timestamps
+  if (status === 'shortlisted' || status === 'not_shortlisted') {
+    updates.shortlisting_decision_taken_at = now
+  } else if (status === 'interviews_ongoing') {
+    updates.interviews_started_at = now
+  } else if (status === 'hired' || status === 'rejected') {
+    updates.hiring_decision_taken_at = now
+  }
+
   if (status === 'not_shortlisted') {
     updates.not_shortlisted_reasons = reasons ?? []
     updates.not_shortlisted_reason  = note ?? null
@@ -201,7 +212,18 @@ export async function bulkUpdateApplicationStatus(ids: string[], status: string,
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
+  const now = new Date().toISOString()
   const updates: Record<string, unknown> = { status }
+
+  // TAT timestamps
+  if (status === 'shortlisted' || status === 'not_shortlisted') {
+    updates.shortlisting_decision_taken_at = now
+  } else if (status === 'interviews_ongoing') {
+    updates.interviews_started_at = now
+  } else if (status === 'hired' || status === 'rejected') {
+    updates.hiring_decision_taken_at = now
+  }
+
   if (status === 'not_shortlisted') {
     updates.not_shortlisted_reasons = reasons ?? []
     updates.not_shortlisted_reason  = note ?? null

@@ -152,7 +152,7 @@ export default async function LearnersPage({ searchParams }: Props) {
       </div>
 
       {/* Tab nav */}
-      <div className="mb-6 border-b border-zinc-200">
+      <div className="mb-6 overflow-x-auto border-b border-zinc-200">
         <nav className="flex gap-6">
           <Link
             href="/learners"

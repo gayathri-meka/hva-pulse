@@ -5,12 +5,11 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import MatchingControls from '@/components/placements/MatchingControls'
 import MatchingStatusFilter from '@/components/placements/MatchingStatusFilter'
 import MatchingTable, { type MatchingRow, type MatchingStatus } from '@/components/placements/MatchingTable'
-import NotInterestedTable, { type NotInterestedRow } from '@/components/placements/NotInterestedTable'
 
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ role?: string; status?: string; learner?: string; mode?: string }>
+  searchParams: Promise<{ role?: string; status?: string; learner?: string }>
 }
 
 export default async function MatchingPage({ searchParams }: Props) {
@@ -18,8 +17,7 @@ export default async function MatchingPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
-  const { role: roleId, status: statusFilter, learner: learnerFilter, mode } = await searchParams
-  const isNotInterestedMode = mode === 'not_interested'
+  const { role: roleId, status: statusFilter, learner: learnerFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -29,19 +27,15 @@ export default async function MatchingPage({ searchParams }: Props) {
     { data: rawLearners },
     { data: rawApplications },
     { data: rawPreferences },
-    { data: rawNotInterested },
   ] = await Promise.all([
     supabase.from('roles').select('id, company_id, role_title, status').order('created_at', { ascending: false }),
     supabase.from('companies').select('id, company_name'),
     supabase.from('learners').select('*, users!learners_user_id_fkey(name, email)'),
     roleId
-      ? supabase.from('applications').select('user_id, status, not_shortlisted_reason, rejection_feedback').eq('role_id', roleId)
+      ? supabase.from('applications').select('id, user_id, status, not_shortlisted_reason, not_shortlisted_reasons, rejection_feedback, rejection_reasons').eq('role_id', roleId)
       : Promise.resolve({ data: null, error: null }),
     roleId
       ? supabase.from('role_preferences').select('user_id, reasons').eq('role_id', roleId).eq('preference', 'not_interested')
-      : Promise.resolve({ data: null, error: null }),
-    isNotInterestedMode
-      ? supabase.from('role_preferences').select('user_id, role_id, reasons').eq('preference', 'not_interested')
       : Promise.resolve({ data: null, error: null }),
   ])
 
@@ -99,28 +93,6 @@ export default async function MatchingPage({ searchParams }: Props) {
     blacklisted_date:   l.blacklisted_date,
   }))
 
-  // ── Not-interested mode: build flat list of all declined role preferences ──
-  const userIdToLearner = new Map(allLearners.map((l) => [l.user_id, l]))
-  const roleInfoMap     = new Map((roles ?? []).map((r) => [r.id, { role_title: r.role_title, company_name: companyMap[r.company_id] ?? '' }]))
-
-  const notInterestedRows: NotInterestedRow[] = (rawNotInterested ?? [])
-    .filter((p) => p.user_id && roleInfoMap.has(p.role_id))
-    .map((p) => {
-      const learner  = userIdToLearner.get(p.user_id!)
-      const roleInfo = roleInfoMap.get(p.role_id)!
-      return {
-        user_id:      p.user_id!,
-        role_id:      p.role_id,
-        learner_name: learner?.name ?? '',
-        batch:        learner?.batch ?? '',
-        lf:           learner?.lf   ?? '',
-        company_name: roleInfo.company_name,
-        role_title:   roleInfo.role_title,
-        reasons:      (p.reasons as string[]) ?? [],
-      }
-    })
-    .sort((a, b) => a.learner_name.localeCompare(b.learner_name))
-
   // ── Apply learner filter (server-side; batch/LF handled by column filters) ─
   const filtered = allLearners
     .filter((l) => !learnerFilter || l.learner_id === learnerFilter)
@@ -132,9 +104,12 @@ export default async function MatchingPage({ searchParams }: Props) {
     (rawApplications ?? [])
       .filter((a) => a.user_id)
       .map((a) => [a.user_id!, {
-        status:                 a.status as MatchingStatus,
-        not_shortlisted_reason: (a.not_shortlisted_reason as string | null) ?? null,
-        rejection_feedback:     (a.rejection_feedback     as string | null) ?? null,
+        id:                      a.id as string,
+        status:                  a.status as MatchingStatus,
+        not_shortlisted_reason:  (a.not_shortlisted_reason  as string | null)   ?? null,
+        not_shortlisted_reasons: (a.not_shortlisted_reasons as string[] | null) ?? [],
+        rejection_feedback:      (a.rejection_feedback      as string | null)   ?? null,
+        rejection_reasons:       (a.rejection_reasons       as string[] | null) ?? [],
       }])
   )
   // Set of user_ids who marked not_interested + their reasons
@@ -165,15 +140,18 @@ export default async function MatchingPage({ searchParams }: Props) {
   const rows: MatchingRow[] = filtered.map((l) => {
     if (!roleId) {
       return {
-        learner_id:             l.learner_id,
-        name:                   l.name,
-        batch:                  l.batch,
-        lf:                     l.lf,
+        learner_id:              l.learner_id,
+        name:                    l.name,
+        batch:                   l.batch,
+        lf:                      l.lf,
         ...sharedLearnerFields(l),
-        status:                 'not_applied' as MatchingStatus, // placeholder; Status column hidden
-        reasons:                [],
-        not_shortlisted_reason: null,
-        rejection_feedback:     null,
+        app_id:                  null,
+        status:                  'not_applied' as MatchingStatus,
+        reasons:                 [],
+        not_shortlisted_reason:  null,
+        not_shortlisted_reasons: [],
+        rejection_feedback:      null,
+        rejection_reasons:       [],
       }
     }
     let status: MatchingStatus
@@ -186,15 +164,18 @@ export default async function MatchingPage({ searchParams }: Props) {
       status = 'not_applied'
     }
     return {
-      learner_id:             l.learner_id,
-      name:                   l.name,
-      batch:                  l.batch,
-      lf:                     l.lf,
+      learner_id:              l.learner_id,
+      name:                    l.name,
+      batch:                   l.batch,
+      lf:                      l.lf,
       ...sharedLearnerFields(l),
+      app_id:                  appDetail?.id ?? null,
       status,
-      reasons:                status === 'not_interested' && l.user_id ? (reasonsMap[l.user_id] ?? []) : [],
-      not_shortlisted_reason: appDetail?.not_shortlisted_reason ?? null,
-      rejection_feedback:     appDetail?.rejection_feedback     ?? null,
+      reasons:                 status === 'not_interested' && l.user_id ? (reasonsMap[l.user_id] ?? []) : [],
+      not_shortlisted_reason:  appDetail?.not_shortlisted_reason  ?? null,
+      not_shortlisted_reasons: appDetail?.not_shortlisted_reasons ?? [],
+      rejection_feedback:      appDetail?.rejection_feedback      ?? null,
+      rejection_reasons:       appDetail?.rejection_reasons       ?? [],
     }
   })
 
@@ -218,18 +199,13 @@ export default async function MatchingPage({ searchParams }: Props) {
         />
       </Suspense>
 
-      {isNotInterestedMode ? (
-        <NotInterestedTable rows={notInterestedRows} />
-      ) : (
-        <>
-          {roleId && (
-            <Suspense>
-              <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
-            </Suspense>
-          )}
-          <MatchingTable rows={filteredRows} roleSelected={!!roleId} />
-        </>
+      {roleId && (
+        <Suspense>
+          <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
+        </Suspense>
       )}
+
+      <MatchingTable key={roleId ?? 'all'} rows={filteredRows} roleSelected={!!roleId} />
 
     </div>
   )

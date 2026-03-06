@@ -94,6 +94,7 @@ export async function uploadResume(formData: FormData): Promise<{ error?: string
 
   if (!file || file.size === 0) return { error: 'No file selected.' }
   if (file.type !== 'application/pdf') return { error: 'Only PDF files are allowed.' }
+  if (file.size > 5 * 1024 * 1024) return { error: 'File size must be under 5 MB.' }
   if (!versionName) return { error: 'Version name is required.' }
 
   const supabase = await createServerSupabaseClient()

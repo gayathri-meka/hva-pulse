@@ -202,7 +202,7 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
                   {[learner.phone_number, learner.current_location].filter(Boolean).join(' · ')}
                 </p>
               )}
-              <p className="mt-0.5 font-mono text-xs text-zinc-400">{learner.learner_id}</p>
+              <p className="mt-0.5 text-xs text-zinc-400">Learner ID: <span className="font-mono">{learner.learner_id}</span></p>
             </div>
           </div>
           <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${LEARNER_STATUS_BADGE[learner.status] ?? 'bg-zinc-100 text-zinc-600'}`}>
@@ -220,12 +220,12 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
       </div>
 
       {/* ── Academic + Assessment (left) | Programme (right) ──────────── */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Left column: Academic stacked above Assessment */}
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Academic</h3>
-            <div className="grid grid-cols-3 gap-x-6 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
               <InfoItem label="Degree"          value={learner.degree} />
               <InfoItem label="Specialisation"  value={learner.specialisation} />
               <InfoItem label="Graduation Year" value={learner.year_of_graduation} />
@@ -270,7 +270,7 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
         {/* Right column: Programme */}
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Programme</h3>
-          <div className="grid grid-cols-3 gap-x-6 gap-y-3">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
             <InfoItem label="Batch"              value={learner.batch_name} />
             <InfoItem label="Track"              value={learner.track} />
             <InfoItem label="LF"                 value={learner.lf_name} />
@@ -285,7 +285,7 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
       {/* ── Placement summary ───────────────────────────────────────────── */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-400">Placement Summary</h3>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <StatTile label="Applied"          count={totalApps}   border="border-blue-100"    bg="bg-blue-50"    text="text-blue-700" />
           <StatTile label="Shortlisted"      count={shortlisted} border="border-amber-100"   bg="bg-amber-50"   text="text-amber-700" />
           <StatTile label="In Process"       count={inProcess}   border="border-orange-100"  bg="bg-orange-50"  text="text-orange-700" />
@@ -332,36 +332,36 @@ export default function LearnerSnapshot({ learner, apps, declinedRoles, resume }
                     <span className="text-zinc-500">{app.role_title}</span>
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
+                    {/* Not-shortlisted reasons */}
+                    {app.status === 'not_shortlisted' && app.not_shortlisted_reasons.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {app.not_shortlisted_reasons.map((r) => (
+                          <span key={r} className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{r}</span>
+                        ))}
+                      </div>
+                    )}
+                    {app.status === 'not_shortlisted' && app.not_shortlisted_reason && app.not_shortlisted_reasons.length === 0 && (
+                      <span className="text-xs text-zinc-500">{app.not_shortlisted_reason}</span>
+                    )}
+
+                    {/* Rejection reasons */}
+                    {app.status === 'rejected' && app.rejection_reasons.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {app.rejection_reasons.map((r) => (
+                          <span key={r} className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-500">{r}</span>
+                        ))}
+                      </div>
+                    )}
+                    {app.status === 'rejected' && app.rejection_feedback && (
+                      <span className="text-xs text-zinc-500">{app.rejection_feedback}</span>
+                    )}
+
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${APP_STATUS_BADGE[app.status] ?? 'bg-zinc-100 text-zinc-600'}`}>
                       {APP_STATUS_LABEL[app.status] ?? app.status}
                     </span>
                     <span className="text-xs text-zinc-400">{fmtDate(app.created_at)}</span>
                   </div>
                 </div>
-
-                {/* Not-shortlisted reasons — only for not_shortlisted status */}
-                {app.status === 'not_shortlisted' && app.not_shortlisted_reasons.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {app.not_shortlisted_reasons.map((r) => (
-                      <span key={r} className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{r}</span>
-                    ))}
-                  </div>
-                )}
-                {app.status === 'not_shortlisted' && app.not_shortlisted_reason && app.not_shortlisted_reasons.length === 0 && (
-                  <p className="mt-1.5 text-xs text-zinc-500">{app.not_shortlisted_reason}</p>
-                )}
-
-                {/* Rejection feedback — only for rejected status */}
-                {app.status === 'rejected' && app.rejection_reasons.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {app.rejection_reasons.map((r) => (
-                      <span key={r} className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-500">{r}</span>
-                    ))}
-                  </div>
-                )}
-                {app.status === 'rejected' && app.rejection_feedback && (
-                  <p className="mt-1.5 text-xs text-zinc-500">{app.rejection_feedback}</p>
-                )}
               </div>
             ))}
           </div>

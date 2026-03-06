@@ -152,7 +152,7 @@ export default async function DashboardPage() {
         <p className="mt-1 text-sm text-zinc-500">Overview of all learners</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <div className="col-span-2 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:col-span-1 xl:col-span-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Total</p>
           <p className="mt-3 text-4xl font-bold text-zinc-900">{total}</p>

@@ -196,7 +196,16 @@ function WeeklyModal({
   weeklyRoles: { label: string; count: number }[]
   onClose: () => void
 }) {
-  const maxCount = Math.max(...weeklyRoles.map((w) => w.count), 1)
+  const allCounts = weeklyRoles.map((w) => w.count)
+  const maxCount  = Math.max(...allCounts, 1)
+
+  // Stats
+  const last4   = weeklyRoles.slice(0, 4)
+  const avg4    = last4.length > 0 ? Math.round(last4.reduce((s, w) => s + w.count, 0) / last4.length) : 0
+  const highest = allCounts.length > 0 ? Math.max(...allCounts) : 0
+  const nonZero = allCounts.filter((c) => c > 0)
+  const lowest  = nonZero.length > 0 ? Math.min(...nonZero) : null
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -206,15 +215,34 @@ function WeeklyModal({
         className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-sm font-semibold text-zinc-900">Roles Added by Week</p>
-        <p className="mt-0.5 text-xs text-zinc-500">How many roles were posted each week</p>
-        <div className="mt-4 max-h-72 space-y-3 overflow-y-auto">
+        <p className="text-sm font-semibold text-zinc-900">Role Posting Momentum</p>
+        <p className="mt-0.5 text-xs text-zinc-500">Roles added each week (week starts Monday)</p>
+
+        {/* Summary stats */}
+        <div className="mt-4 grid grid-cols-3 divide-x divide-zinc-200 rounded-xl bg-zinc-50 py-3">
+          <div className="px-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-zinc-900">{avg4}</p>
+            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">Avg / week<br />(last 4)</p>
+          </div>
+          <div className="px-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-emerald-600">{highest}</p>
+            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">Highest<br />week</p>
+          </div>
+          <div className="px-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-zinc-600">{lowest ?? '—'}</p>
+            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">Lowest<br />week</p>
+          </div>
+        </div>
+
+        {/* Bar chart */}
+        <div className="mt-4 max-h-64 overflow-x-auto overflow-y-auto">
+          <div className="min-w-[240px] space-y-3">
           {weeklyRoles.length === 0 ? (
             <p className="text-xs text-zinc-400">No data available.</p>
           ) : (
             weeklyRoles.map((w) => (
               <div key={w.label} className="flex items-center gap-3">
-                <span className="w-20 shrink-0 text-right text-xs text-zinc-500">{w.label}</span>
+                <span className="w-12 shrink-0 text-right text-xs text-zinc-500 md:w-16">{w.label}</span>
                 <div className="flex flex-1 items-center gap-2">
                   <div
                     className="h-5 rounded bg-[#5BAE5B]/25"
@@ -225,6 +253,7 @@ function WeeklyModal({
               </div>
             ))
           )}
+          </div>
         </div>
         <button
           onClick={onClose}
