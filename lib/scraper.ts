@@ -196,76 +196,60 @@ async function fetchInternshalaJobs(keywords: string, location: string): Promise
 }
 
 // ── Indeed ────────────────────────────────────────────────────────────────────
-// Uses Indeed's RSS feed which returns proper XML (no JS rendering required).
+// Scrapes Indeed's search HTML page. Indeed embeds all job card data as JSON
+// inside window.mosaic.providerData["mosaic-provider-jobcards"]. The RSS feed
+// was shut down in 2023 so we parse this JSON blob instead.
 async function fetchIndeedJobs(keywords: string, location: string, entryLevel: boolean): Promise<ScrapedJob[]> {
-  const params = new URLSearchParams({ q: keywords, l: location, sort: 'date' })
+  const params = new URLSearchParams({ q: keywords, l: location, sort: 'date', fromage: '30' })
   if (entryLevel) params.set('explvl', 'entry_level')
-  const url = `https://in.indeed.com/rss?${params}`
+  const url = `https://in.indeed.com/jobs?${params}`
 
   const res = await safeFetch(url, {
-    'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    'Accept':          'application/rss+xml,text/xml,*/*',
+    'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-IN,en;q=0.9',
+    'Referer':         'https://in.indeed.com/',
   })
   if (!res) return []
 
-  const $ = cheerio.load(await res.text(), { xmlMode: true })
-  const jobs: ScrapedJob[] = []
+  const html = await res.text()
 
-  $('item').each((_, el) => {
-    const $el    = $(el)
-    const raw    = $el.find('title').text().trim()          // "Job Title - Company Name"
-    const link   = $el.find('link').text().trim() || $el.find('guid').text().trim()
-    const pubDate = $el.find('pubDate').text().trim() || null
+  // Extract the JSON blob Indeed embeds: window.mosaic.providerData["mosaic-provider-jobcards"] = {...};
+  const match = html.match(/window\.mosaic\.providerData\["mosaic-provider-jobcards"\]\s*=\s*(\{[\s\S]*?\});\s*(?:window|if)/)
+  if (!match) return []
 
-    // Indeed RSS title format: "Job Title - Company Name"
-    const dashIdx = raw.lastIndexOf(' - ')
-    const title   = dashIdx > 0 ? raw.slice(0, dashIdx).trim() : raw
-    const company = dashIdx > 0 ? raw.slice(dashIdx + 3).trim() : 'Unknown'
+  try {
+    const data = JSON.parse(match[1]) as {
+      metaData?: { mosaicProviderJobCardsModel?: { results?: Record<string, unknown>[] } }
+    }
+    const results = data?.metaData?.mosaicProviderJobCardsModel?.results ?? []
 
-    // Extract job key from URL for dedup
-    const jkMatch = link.match(/jk=([a-f0-9]+)/)
-    const id      = jkMatch?.[1] ?? extractJobId(link)
-
-    if (!title) return
-    jobs.push({ title, company, location, dateStr: pubDate, link, id, platform: 'indeed', description: null })
-  })
-  return jobs
+    return results.map((j) => {
+      const jobkey  = String(j.jobkey ?? '')
+      const dateMs  = typeof j.date === 'number' ? j.date : null
+      const dateStr = dateMs ? new Date(dateMs).toISOString().split('T')[0] : null
+      return {
+        title:       String(j.title ?? ''),
+        company:     String(j.company ?? 'Unknown'),
+        location:    String(j.formattedLocation ?? location),
+        dateStr,
+        link:        jobkey ? `https://in.indeed.com/viewjob?jk=${jobkey}` : null,
+        id:          jobkey || extractJobId(null),
+        platform:    'indeed',
+        description: null,
+      } satisfies ScrapedJob
+    }).filter((j) => j.title)
+  } catch (e) {
+    console.error('Indeed JSON parse error:', e)
+    return []
+  }
 }
 
 // ── Naukri ────────────────────────────────────────────────────────────────────
-// Uses Naukri's public RSS feed — more reliable than the internal JSON API
-// which requires session cookies. RSS item <source> contains the company name.
-async function fetchNaukriJobs(keywords: string, location: string): Promise<ScrapedJob[]> {
-  const params = new URLSearchParams({ q: keywords, l: location, experience: '0', noOfResults: '20' })
-  const url = `https://www.naukri.com/rss/jobsearch.php?${params}`
-
-  const res = await safeFetch(url, {
-    'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    'Accept':          'application/rss+xml,text/xml,*/*',
-    'Accept-Language': 'en-IN,en;q=0.9',
-  })
-  if (!res) return []
-
-  const $ = cheerio.load(await res.text(), { xmlMode: true })
-  const jobs: ScrapedJob[] = []
-
-  $('item').each((_, el) => {
-    const $el    = $(el)
-    const title  = $el.find('title').text().trim()
-    const link   = $el.find('link').text().trim() || $el.find('guid').text().trim()
-    // Naukri RSS puts company name in <source>
-    const company  = $el.find('source').text().trim() || 'Unknown'
-    const pubDate  = $el.find('pubDate').text().trim() || null
-
-    // Naukri job URLs look like: /job-listings-...-{id}.html or contain jid= param
-    const jidMatch = link.match(/jid=([^&]+)/) ?? link.match(/-(\d+)\.html$/)
-    const id       = jidMatch?.[1] ?? extractJobId(link)
-
-    if (!title) return
-    jobs.push({ title, company, location, dateStr: pubDate, link: link || null, id, platform: 'naukri', description: null })
-  })
-  return jobs
+// Naukri blocks all server-side requests (RSS redirects to homepage, internal
+// API requires session cookies, HTML returns a bot-trap page). Not supported.
+async function fetchNaukriJobs(_keywords: string, _location: string): Promise<ScrapedJob[]> {
+  return []
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
