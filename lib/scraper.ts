@@ -234,58 +234,38 @@ async function fetchIndeedJobs(keywords: string, location: string, entryLevel: b
 }
 
 // ── Naukri ────────────────────────────────────────────────────────────────────
-// Uses Naukri's internal search JSON API (no authentication required for basic search).
+// Uses Naukri's public RSS feed — more reliable than the internal JSON API
+// which requires session cookies. RSS item <source> contains the company name.
 async function fetchNaukriJobs(keywords: string, location: string): Promise<ScrapedJob[]> {
-  const params = new URLSearchParams({
-    noOfResults: '20',
-    urlType:     'search_by_keyword',
-    searchType:  'adv',
-    keyword:     keywords,
-    location:    location,
-    experience:  '0',
-    pageNo:      '1',
-  })
-  const url = `https://www.naukri.com/jobapi/v3/search?${params}`
+  const params = new URLSearchParams({ q: keywords, l: location, experience: '0', noOfResults: '20' })
+  const url = `https://www.naukri.com/rss/jobsearch.php?${params}`
 
   const res = await safeFetch(url, {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    'Accept':     'application/json',
-    'appid':      '109',
-    'systemid':   '109',
+    'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    'Accept':          'application/rss+xml,text/xml,*/*',
+    'Accept-Language': 'en-IN,en;q=0.9',
   })
   if (!res) return []
 
-  try {
-    const data = await res.json() as { jobDetails?: unknown[] }
-    if (!Array.isArray(data?.jobDetails)) return []
+  const $ = cheerio.load(await res.text(), { xmlMode: true })
+  const jobs: ScrapedJob[] = []
 
-    return (data.jobDetails as Record<string, unknown>[]).map((j) => {
-      const loc = (() => {
-        const ph = j.placeholders
-        if (Array.isArray(ph)) {
-          const loc = ph.find((p: Record<string, unknown>) => p.label === 'location')
-          return String(loc?.value ?? location)
-        }
-        return location
-      })()
-      const rawUrl = String(j.jdURL ?? '')
-      const link   = rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `https://www.naukri.com${rawUrl}`) : null
-      const id     = String(j.jobId ?? extractJobId(link))
-      return {
-        title:       String(j.title ?? ''),
-        company:     String(j.companyName ?? 'Unknown'),
-        location:    loc,
-        dateStr:     String(j.createdDate ?? ''),
-        link,
-        id,
-        platform:    'naukri',
-        description: String(j.jobDescription ?? '') || null,
-      } satisfies ScrapedJob
-    }).filter((j) => j.title)
-  } catch (e) {
-    console.error('Naukri JSON parse error:', e)
-    return []
-  }
+  $('item').each((_, el) => {
+    const $el    = $(el)
+    const title  = $el.find('title').text().trim()
+    const link   = $el.find('link').text().trim() || $el.find('guid').text().trim()
+    // Naukri RSS puts company name in <source>
+    const company  = $el.find('source').text().trim() || 'Unknown'
+    const pubDate  = $el.find('pubDate').text().trim() || null
+
+    // Naukri job URLs look like: /job-listings-...-{id}.html or contain jid= param
+    const jidMatch = link.match(/jid=([^&]+)/) ?? link.match(/-(\d+)\.html$/)
+    const id       = jidMatch?.[1] ?? extractJobId(link)
+
+    if (!title) return
+    jobs.push({ title, company, location, dateStr: pubDate, link: link || null, id, platform: 'naukri', description: null })
+  })
+  return jobs
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ const LOCATION_SUGGESTIONS = [
   'Remote', 'Noida', 'Gurgaon',
 ]
 
-const PLATFORM_OPTIONS = ['linkedin', 'naukri', 'internshala']
+const PLATFORM_OPTIONS = ['linkedin', 'naukri', 'internshala', 'indeed']
 
 type TagInputProps = {
   label: string
