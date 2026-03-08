@@ -45,12 +45,7 @@ export async function POST() {
 
   const candidates = (result as { candidates?: Array<Record<string, unknown>> }).candidates ?? []
   if (candidates.length === 0) {
-    return NextResponse.json({
-      inserted: 0,
-      skipped: 0,
-      fetched: result.fetched ?? 0,
-      filteredByTitle: result.filteredByTitle ?? 0,
-    })
+    return NextResponse.json({ inserted: 0, skipped: 0, fetched: result.fetched ?? 0 })
   }
 
   let inserted = 0
@@ -71,10 +66,5 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({
-    inserted,
-    skipped,
-    fetched: result.fetched ?? candidates.length,
-    filteredByTitle: result.filteredByTitle ?? 0,
-  })
+  return NextResponse.json({ inserted, skipped, fetched: result.fetched ?? candidates.length })
 }

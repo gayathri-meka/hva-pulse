@@ -1,8 +1,30 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import * as cheerio from 'cheerio'
 
+// ── isLocationRelevant ────────────────────────────────────────────────────────
+describe('isLocationRelevant', () => {
+  test('passes when preferred is empty', () => {
+    expect(isLocationRelevant('Sofia, Bulgaria', [])).toBe(true)
+  })
+  test('passes when jobLoc is null', () => {
+    expect(isLocationRelevant(null, ['Bangalore'])).toBe(true)
+  })
+  test('matches city name (case-insensitive)', () => {
+    expect(isLocationRelevant('Bangalore, Karnataka, India', ['Bangalore'])).toBe(true)
+    expect(isLocationRelevant('Hyderabad, Telangana', ['Bangalore', 'Hyderabad'])).toBe(true)
+  })
+  test('filters out wrong country', () => {
+    expect(isLocationRelevant('Sofia, Bulgaria', ['Bangalore', 'Hyderabad'])).toBe(false)
+    expect(isLocationRelevant('London, United Kingdom', ['Bangalore'])).toBe(false)
+  })
+  test('remote pref matches remote location', () => {
+    expect(isLocationRelevant('Work From Home', ['Remote'])).toBe(true)
+    expect(isLocationRelevant('Remote / Bangalore', ['Remote'])).toBe(true)
+  })
+})
+
 // ── extractJobId ──────────────────────────────────────────────────────────────
-import { extractJobId } from '@/lib/scraper'
+import { extractJobId, isLocationRelevant } from '@/lib/scraper'
 
 describe('extractJobId', () => {
   test('extracts numeric ID from plain LinkedIn URL', () => {
