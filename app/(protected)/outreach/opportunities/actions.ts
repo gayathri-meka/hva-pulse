@@ -90,7 +90,7 @@ export async function promoteToPlacement(id: string): Promise<{ error?: string }
       company_id:      companyId,
       role_title:      opp.job_title,
       location:        opp.location ?? null,
-      job_description: opp.job_description ?? null,
+      job_description: opp.job_description ?? '',
       status:          'open',
     })
 

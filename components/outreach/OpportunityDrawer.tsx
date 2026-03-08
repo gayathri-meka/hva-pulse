@@ -3,22 +3,22 @@
 import { useTransition, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { JobOpportunityWithPersona } from '@/types'
-import { updateOpportunityStatus, updateOpportunityNotes, deleteOpportunity, promoteToPlacement } from '@/app/(protected)/outreach/opportunities/actions'
+import { updateOpportunityStatus, updateOpportunityNotes, promoteToPlacement } from '@/app/(protected)/outreach/opportunities/actions'
 
 const STATUS_OPTIONS = ['discovered', 'reviewed', 'approved', 'rejected'] as const
 
 const STATUS_LABELS: Record<string, string> = {
   discovered: 'Discovered',
-  reviewed: 'Reviewed',
-  approved: 'Approved',
-  rejected: 'Rejected',
+  reviewed:   'Reviewed',
+  approved:   'Approved',
+  rejected:   'Rejected',
 }
 
 const STATUS_BADGE: Record<string, string> = {
   discovered: 'bg-zinc-100 text-zinc-600',
-  reviewed: 'bg-blue-100 text-blue-700',
-  approved: 'bg-emerald-100 text-emerald-700',
-  rejected: 'bg-red-100 text-red-700',
+  reviewed:   'bg-blue-100 text-blue-700',
+  approved:   'bg-emerald-100 text-emerald-700',
+  rejected:   'bg-red-100 text-red-700',
 }
 
 type Props = {
@@ -26,14 +26,14 @@ type Props = {
 }
 
 export default function OpportunityDrawer({ opportunity }: Props) {
-  const router = useRouter()
-  const pathname = usePathname()
+  const router       = useRouter()
+  const pathname     = usePathname()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
-  const [notes, setNotes] = useState(opportunity.notes ?? '')
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [notes, setNotes]             = useState(opportunity.notes ?? '')
   const [confirmPromote, setConfirmPromote] = useState(false)
-  const [promoteError, setPromoteError] = useState<string | null>(null)
+  const [promoteError, setPromoteError]     = useState<string | null>(null)
+  const [promoted, setPromoted]             = useState(false)
 
   function closeDrawer() {
     const params = new URLSearchParams(searchParams.toString())
@@ -49,17 +49,6 @@ export default function OpportunityDrawer({ opportunity }: Props) {
     startTransition(() => updateOpportunityNotes(opportunity.id, notes))
   }
 
-  function handleDelete() {
-    if (!confirmDelete) {
-      setConfirmDelete(true)
-      return
-    }
-    startTransition(async () => {
-      await deleteOpportunity(opportunity.id)
-      closeDrawer()
-    })
-  }
-
   function handlePromote() {
     if (!confirmPromote) {
       setConfirmPromote(true)
@@ -72,18 +61,17 @@ export default function OpportunityDrawer({ opportunity }: Props) {
         setPromoteError(result.error)
         setConfirmPromote(false)
       } else {
-        closeDrawer()
+        setPromoted(true)
       }
     })
   }
 
+  const isApproved = opportunity.status === 'approved'
+
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/20"
-        onClick={closeDrawer}
-      />
+      <div className="fixed inset-0 z-40 bg-black/20" onClick={closeDrawer} />
 
       {/* Slide-over panel */}
       <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl">
@@ -153,7 +141,7 @@ export default function OpportunityDrawer({ opportunity }: Props) {
             </div>
           )}
 
-          {/* Status Change */}
+          {/* Status */}
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Status
@@ -187,38 +175,40 @@ export default function OpportunityDrawer({ opportunity }: Props) {
               onBlur={handleNotesSave}
               rows={3}
               placeholder="Add notes about this opportunity…"
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 resize-none"
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 resize-none"
             />
           </div>
-        </div>
 
-        {/* Footer actions */}
-        <div className="border-t border-zinc-200 px-6 py-4 flex items-center justify-between gap-3">
-          <button
-            onClick={handlePromote}
-            disabled={isPending || opportunity.status !== 'approved'}
-            onBlur={() => setConfirmPromote(false)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              confirmPromote
-                ? 'bg-emerald-600 text-white'
-                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-            }`}
-          >
-            {confirmPromote ? 'Confirm: Send to Placements' : 'Send to Placements'}
-          </button>
-          {promoteError && (
-            <span className="text-xs text-red-500">{promoteError}</span>
-          )}
-          <button
-            onClick={handleDelete}
-            disabled={isPending}
-            className={`ml-auto text-sm font-medium transition-colors disabled:opacity-50 ${
-              confirmDelete ? 'text-red-600 underline' : 'text-zinc-400 hover:text-red-600'
-            }`}
-            onBlur={() => setConfirmDelete(false)}
-          >
-            {confirmDelete ? 'Confirm Delete' : 'Delete'}
-          </button>
+          {/* Send to Placements */}
+          <div className="rounded-md border border-zinc-200 p-4">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">Send to Placements</p>
+            <p className="mb-3 text-xs text-zinc-500">
+              {isApproved
+                ? 'Creates a company and open role in the Placements tab.'
+                : 'Mark this opportunity as Approved first.'}
+            </p>
+            {promoted ? (
+              <p className="text-sm font-medium text-emerald-600">Added to Placements ✓</p>
+            ) : (
+              <>
+                <button
+                  onClick={handlePromote}
+                  disabled={isPending || !isApproved}
+                  onBlur={() => setConfirmPromote(false)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                    confirmPromote
+                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                      : 'border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50'
+                  }`}
+                >
+                  {confirmPromote ? 'Confirm — send to Placements' : 'Send to Placements'}
+                </button>
+                {promoteError && (
+                  <p className="mt-1.5 text-xs text-red-500">{promoteError}</p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </>
