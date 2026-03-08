@@ -3,7 +3,7 @@
 import { useTransition, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { JobOpportunityWithPersona } from '@/types'
-import { updateOpportunityStatus, updateOpportunityNotes, deleteOpportunity } from '@/app/(protected)/outreach/opportunities/actions'
+import { updateOpportunityStatus, updateOpportunityNotes, deleteOpportunity, promoteToPlacement } from '@/app/(protected)/outreach/opportunities/actions'
 
 const STATUS_OPTIONS = ['discovered', 'reviewed', 'approved', 'rejected'] as const
 
@@ -32,6 +32,8 @@ export default function OpportunityDrawer({ opportunity }: Props) {
   const [isPending, startTransition] = useTransition()
   const [notes, setNotes] = useState(opportunity.notes ?? '')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmPromote, setConfirmPromote] = useState(false)
+  const [promoteError, setPromoteError] = useState<string | null>(null)
 
   function closeDrawer() {
     const params = new URLSearchParams(searchParams.toString())
@@ -55,6 +57,23 @@ export default function OpportunityDrawer({ opportunity }: Props) {
     startTransition(async () => {
       await deleteOpportunity(opportunity.id)
       closeDrawer()
+    })
+  }
+
+  function handlePromote() {
+    if (!confirmPromote) {
+      setConfirmPromote(true)
+      return
+    }
+    setPromoteError(null)
+    startTransition(async () => {
+      const result = await promoteToPlacement(opportunity.id)
+      if (result.error) {
+        setPromoteError(result.error)
+        setConfirmPromote(false)
+      } else {
+        closeDrawer()
+      }
     })
   }
 
@@ -174,11 +193,26 @@ export default function OpportunityDrawer({ opportunity }: Props) {
         </div>
 
         {/* Footer actions */}
-        <div className="border-t border-zinc-200 px-6 py-4 flex justify-end">
+        <div className="border-t border-zinc-200 px-6 py-4 flex items-center justify-between gap-3">
+          <button
+            onClick={handlePromote}
+            disabled={isPending || opportunity.status !== 'approved'}
+            onBlur={() => setConfirmPromote(false)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              confirmPromote
+                ? 'bg-emerald-600 text-white'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            {confirmPromote ? 'Confirm: Send to Placements' : 'Send to Placements'}
+          </button>
+          {promoteError && (
+            <span className="text-xs text-red-500">{promoteError}</span>
+          )}
           <button
             onClick={handleDelete}
             disabled={isPending}
-            className={`text-sm font-medium transition-colors disabled:opacity-50 ${
+            className={`ml-auto text-sm font-medium transition-colors disabled:opacity-50 ${
               confirmDelete ? 'text-red-600 underline' : 'text-zinc-400 hover:text-red-600'
             }`}
             onBlur={() => setConfirmDelete(false)}

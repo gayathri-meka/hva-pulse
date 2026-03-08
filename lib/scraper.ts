@@ -92,6 +92,20 @@ function parseDate(dateStr: string | null | undefined): string | null {
   } catch { return null }
 }
 
+// Parses relative date strings like "2 days ago", "1 week ago", "3 months ago"
+function parseRelativeDate(text: string | null | undefined): string | null {
+  if (!text) return null
+  const t = text.toLowerCase().trim()
+  const now = new Date()
+  const m = t.match(/(\d+)\s+(day|week|month)s?\s+ago/)
+  if (!m) return null
+  const n = parseInt(m[1])
+  if (m[2] === 'day')   now.setDate(now.getDate() - n)
+  if (m[2] === 'week')  now.setDate(now.getDate() - n * 7)
+  if (m[2] === 'month') now.setMonth(now.getMonth() - n)
+  return now.toISOString().split('T')[0]
+}
+
 async function safeFetch(url: string, headers: Record<string, string> = {}, timeoutMs = 15_000): Promise<Response | null> {
   try {
     const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) })
@@ -168,13 +182,15 @@ async function fetchInternshalaJobs(keywords: string, location: string): Promise
     const numId   = rawId.replace(/\D/g, '') || `is-${Date.now()}-${Math.random()}`
     const title   = ($el.find('.profile, .job-internship-name').first().text()).trim()
     const company = ($el.find('.company_name, .company-name').first().text()).trim()
-    const loc     = ($el.find('.location_link, .location-name').first().text()).trim()
-    const link    = (() => {
+    const loc       = ($el.find('.location_link, .location-name').first().text()).trim()
+    const dateText  = $el.find('.status-inactive, .posted_by_container, [class*="posted"]').first().text().trim() || null
+    const dateStr   = parseRelativeDate(dateText)
+    const link      = (() => {
       const href = $el.find('a.view_detail_button, a[href*="/internship/detail/"]').first().attr('href')
       return href ? `https://internshala.com${href.startsWith('/') ? href : '/' + href}` : null
     })()
     if (!title || !company) return
-    jobs.push({ title, company, location: loc, dateStr: null, link, id: numId, platform: 'internshala', description: null })
+    jobs.push({ title, company, location: loc, dateStr, link, id: numId, platform: 'internshala', description: null })
   })
   return jobs
 }
