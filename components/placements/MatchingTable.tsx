@@ -42,6 +42,7 @@ export type MatchingRow = {
   current_location:        string | null
   is_blacklisted:          'Yes' | 'No'
   blacklisted_date:        string | null
+  new_lf:                  string | null
   app_id:                  string | null
   status:                  MatchingStatus
   reasons:                 string[]
@@ -178,12 +179,12 @@ function FilterDropdown({ column }: { column: Column<MatchingRow, unknown> }) {
 
 // ── Column ordering ───────────────────────────────────────────────────────────
 const BASE_ORDER: ColumnOrderState = [
-  'name', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
+  'name', 'batch', 'lf', 'new_lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
   'current_location', 'is_blacklisted', 'status',
 ]
 const ROLE_ORDER: ColumnOrderState = [
-  'name', 'status', 'batch', 'lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
+  'name', 'status', 'batch', 'lf', 'new_lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
   'current_location', 'is_blacklisted',
 ]
@@ -269,6 +270,12 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
       filterFn: multiSelectFilter,
       cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
     }),
+    col.accessor('new_lf', {
+      header: 'New LF',
+      size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
     col.accessor('year_of_graduation', {
       header: 'Grad Year',
       size: 110,
@@ -338,13 +345,20 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
         const v    = info.getValue() === 'Yes'
         const date = info.row.original.blacklisted_date
         return (
-          <span
-            title={v && date ? `Blacklisted on ${date}` : undefined}
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-              v ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-500'
-            }`}
-          >
-            {v ? 'Yes' : 'No'}
+          <span className="relative group/bl inline-flex">
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                v ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-500'
+              }`}
+            >
+              {v ? 'Yes' : 'No'}
+            </span>
+            {v && date && (
+              <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover/bl:opacity-100 z-30">
+                Blacklisted on {date}
+                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-800" />
+              </span>
+            )}
           </span>
         )
       },

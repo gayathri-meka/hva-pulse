@@ -3,7 +3,7 @@
 import { useTransition, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { JobOpportunityWithPersona } from '@/types'
-import { updateOpportunityStatus, updateOpportunityNotes, promoteToPlacement } from '@/app/(protected)/outreach/opportunities/actions'
+import { updateOpportunityStatus, updateOpportunityNotes, promoteToPlacement } from '@/app/(protected)/placements/opportunities/actions'
 
 const STATUS_OPTIONS = ['discovered', 'reviewed', 'approved', 'rejected'] as const
 

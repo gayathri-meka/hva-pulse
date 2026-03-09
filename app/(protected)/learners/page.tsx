@@ -39,7 +39,7 @@ export default async function LearnersPage({ searchParams }: Props) {
 
   type RawLearner = {
     learner_id: string; user_id: string | null; lf_user_id: string | null
-    phone_number: string; category: string; lf_name: string; status: string
+    phone_number: string; category: string; lf_name: string; new_lf: string | null; status: string
     batch_name: string; tech_mentor_name: string; core_skills_mentor_name: string
     track: string; join_date: string | null
     year_of_graduation: number | null; degree: string | null; specialisation: string | null

@@ -23,6 +23,7 @@ function loadSizing(): ColumnSizingState {
 }
 
 const DEFAULT_VISIBILITY: ColumnVisibilityState = {
+  new_lf:             false,
   year_of_graduation: false,
   degree:             false,
   specialisation:     false,
@@ -61,6 +62,7 @@ type LearnerRow = {
   batch_name:         string
   status:             string
   lf_name:            string
+  new_lf:             string | null
   track:              string
   join_date:          string | null
   year_of_graduation: number | null
@@ -80,6 +82,7 @@ const col = createColumnHelper<LearnerRow>()
 
 // Column metadata for the visibility toggle menu
 const TOGGLEABLE_COLUMNS = [
+  { id: 'new_lf',             label: 'New LF'            },
   { id: 'prs',                label: 'PRS'               },
   { id: 'readiness',          label: 'Readiness'         },
   { id: 'current_location',   label: 'Location'          },
@@ -134,6 +137,11 @@ const columns = [
     header: 'LF',
     size: 160,
     cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
+  }),
+  col.accessor('new_lf', {
+    header: 'New LF',
+    size: 160,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('track', {
     header: 'Track',

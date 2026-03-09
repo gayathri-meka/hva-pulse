@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef } from 'react'
 import type { JobPersona } from '@/types'
-import { createPersona, updatePersona } from '@/app/(protected)/outreach/personas/actions'
+import { createPersona, updatePersona } from '@/app/(protected)/placements/personas/actions'
 
 const SKILL_SUGGESTIONS = [
   'React', 'Next.js', 'TypeScript', 'JavaScript', 'Python', 'Node.js',

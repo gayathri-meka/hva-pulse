@@ -11,7 +11,7 @@ export default async function PlacementsLayout({ children }: { children: React.R
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-zinc-900">Placements</h1>
-        <p className="mt-1 text-sm text-zinc-500">Manage companies, applications, and track hiring outcomes</p>
+        <p className="mt-1 text-sm text-zinc-500">Manage companies, applications, track hiring outcomes, and discover job opportunities</p>
       </div>
       <div className="mb-6">
         <PlacementsNav />

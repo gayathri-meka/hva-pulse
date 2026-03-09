@@ -73,6 +73,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     current_location:   string | null
     readiness:          string | null
     blacklisted_date:   string | null
+    new_lf:             string | null
   }
   const allLearners = ((rawLearners ?? []) as RawLearner[]).map((l) => ({
     learner_id:         l.learner_id,
@@ -80,6 +81,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     name:               l.users?.name ?? '',
     batch:              l.batch_name ?? '',
     lf:                 l.lf_name ?? '',
+    new_lf:             l.new_lf ?? null,
     year_of_graduation: l.year_of_graduation,
     degree:             l.degree,
     specialisation:     l.specialisation,
@@ -135,6 +137,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     readiness:          l.readiness,
     is_blacklisted:     (l.blacklisted_date !== null ? 'Yes' : 'No') as 'Yes' | 'No',
     blacklisted_date:   l.blacklisted_date,
+    new_lf:             l.new_lf,
   })
 
   const rows: MatchingRow[] = filtered.map((l) => {

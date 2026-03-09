@@ -2,7 +2,7 @@
 
 import { useTransition, useState } from 'react'
 import type { JobPersona } from '@/types'
-import { togglePersonaActive, deletePersona } from '@/app/(protected)/outreach/personas/actions'
+import { togglePersonaActive, deletePersona } from '@/app/(protected)/placements/personas/actions'
 import PersonaFormModal from './PersonaFormModal'
 
 function Badge({ children }: { children: React.ReactNode }) {

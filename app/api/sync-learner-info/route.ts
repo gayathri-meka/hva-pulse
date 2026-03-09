@@ -89,6 +89,7 @@ export async function POST() {
           prs:                parseNum(row['prs']),
           readiness:          row['readiness']?.trim()        || null,
           blacklisted_date:   parseDate(row['blacklisted_date']),
+          new_lf:             row['new_lf']?.trim()           || null,
           proactiveness:      parseNum(row['proactiveness']),
           articulation:       parseNum(row['articulation']),
           comprehension:      parseNum(row['comprehension']),

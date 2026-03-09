@@ -57,8 +57,7 @@ type NavItem = {
 const ADMIN_LINKS: NavItem[] = [
   { href: '/dashboard',  label: 'Dashboard',       Icon: DashboardIcon  },
   { href: '/learners',   label: 'Learners Master',  Icon: LearnersIcon   },
-  { href: '/placements', label: 'Placements',       Icon: PlacementsIcon },
-  { href: '/outreach',   label: 'Job Outreach',     Icon: OutreachIcon   },
+  { href: '/placements', label: 'Placements',       Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
   {
     href:  '/settings',
     label: 'Settings',
@@ -74,8 +73,7 @@ const ADMIN_LINKS: NavItem[] = [
 const LF_LINKS: NavItem[] = [
   { href: '/dashboard',  label: 'Dashboard',   Icon: DashboardIcon  },
   { href: '/learners',   label: 'My Learners', Icon: LearnersIcon   },
-  { href: '/placements', label: 'Placements',  Icon: PlacementsIcon },
-  { href: '/outreach',   label: 'Job Outreach', Icon: OutreachIcon  },
+  { href: '/placements', label: 'Placements',  Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
 ]
 
 export default function NavLinks({ role }: { role: 'admin' | 'LF' }) {
