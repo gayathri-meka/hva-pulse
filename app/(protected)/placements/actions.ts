@@ -30,6 +30,40 @@ async function uploadJdAttachment(file: File, roleId: string): Promise<string | 
 
 const requireAdmin = requireStaff
 
+// ── Shared helper ──────────────────────────────────────────────────────────────
+
+function buildStatusUpdate(status: string, note?: string, reasons?: string[]): Record<string, unknown> {
+  const now = new Date().toISOString()
+  const updates: Record<string, unknown> = { status }
+
+  if (status === 'shortlisted' || status === 'not_shortlisted') {
+    updates.shortlisting_decision_taken_at = now
+  } else if (status === 'interviews_ongoing') {
+    updates.interviews_started_at = now
+  } else if (status === 'hired' || status === 'rejected') {
+    updates.hiring_decision_taken_at = now
+  }
+
+  if (status === 'not_shortlisted') {
+    updates.not_shortlisted_reasons = reasons ?? []
+    updates.not_shortlisted_reason  = note ?? null
+    updates.rejection_reasons       = []
+    updates.rejection_feedback      = null
+  } else if (status === 'rejected') {
+    updates.rejection_reasons       = reasons ?? []
+    updates.rejection_feedback      = note ?? null
+    updates.not_shortlisted_reasons = []
+    updates.not_shortlisted_reason  = null
+  } else {
+    updates.not_shortlisted_reasons = []
+    updates.not_shortlisted_reason  = null
+    updates.rejection_reasons       = []
+    updates.rejection_feedback      = null
+  }
+
+  return updates
+}
+
 export async function createCompany(formData: FormData) {
   await requireAdmin()
 
@@ -170,36 +204,7 @@ export async function updateApplicationStatus(id: string, status: string, note?:
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
-  const now = new Date().toISOString()
-  const updates: Record<string, unknown> = { status }
-
-  // TAT timestamps
-  if (status === 'shortlisted' || status === 'not_shortlisted') {
-    updates.shortlisting_decision_taken_at = now
-  } else if (status === 'interviews_ongoing') {
-    updates.interviews_started_at = now
-  } else if (status === 'hired' || status === 'rejected') {
-    updates.hiring_decision_taken_at = now
-  }
-
-  if (status === 'not_shortlisted') {
-    updates.not_shortlisted_reasons = reasons ?? []
-    updates.not_shortlisted_reason  = note ?? null
-    updates.rejection_reasons       = []
-    updates.rejection_feedback      = null
-  } else if (status === 'rejected') {
-    updates.rejection_reasons       = reasons ?? []
-    updates.rejection_feedback      = note ?? null
-    updates.not_shortlisted_reasons = []
-    updates.not_shortlisted_reason  = null
-  } else {
-    updates.not_shortlisted_reasons = []
-    updates.not_shortlisted_reason  = null
-    updates.rejection_reasons       = []
-    updates.rejection_feedback      = null
-  }
-
-  const { error } = await supabase.from('applications').update(updates).eq('id', id)
+  const { error } = await supabase.from('applications').update(buildStatusUpdate(status, note, reasons)).eq('id', id)
   if (error) throw new Error(`Failed to update status: ${error.message}`)
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
@@ -212,36 +217,7 @@ export async function bulkUpdateApplicationStatus(ids: string[], status: string,
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
-  const now = new Date().toISOString()
-  const updates: Record<string, unknown> = { status }
-
-  // TAT timestamps
-  if (status === 'shortlisted' || status === 'not_shortlisted') {
-    updates.shortlisting_decision_taken_at = now
-  } else if (status === 'interviews_ongoing') {
-    updates.interviews_started_at = now
-  } else if (status === 'hired' || status === 'rejected') {
-    updates.hiring_decision_taken_at = now
-  }
-
-  if (status === 'not_shortlisted') {
-    updates.not_shortlisted_reasons = reasons ?? []
-    updates.not_shortlisted_reason  = note ?? null
-    updates.rejection_reasons       = []
-    updates.rejection_feedback      = null
-  } else if (status === 'rejected') {
-    updates.rejection_reasons       = reasons ?? []
-    updates.rejection_feedback      = note ?? null
-    updates.not_shortlisted_reasons = []
-    updates.not_shortlisted_reason  = null
-  } else {
-    updates.not_shortlisted_reasons = []
-    updates.not_shortlisted_reason  = null
-    updates.rejection_reasons       = []
-    updates.rejection_feedback      = null
-  }
-
-  const { error } = await supabase.from('applications').update(updates).in('id', ids)
+  const { error } = await supabase.from('applications').update(buildStatusUpdate(status, note, reasons)).in('id', ids)
   if (error) throw new Error(`Failed to bulk update status: ${error.message}`)
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')

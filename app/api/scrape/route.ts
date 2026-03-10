@@ -40,7 +40,7 @@ export async function POST() {
   const result = await scrapeJobsForPersonas((personas ?? []) as JobPersona[])
 
   if (result.error) {
-    return NextResponse.json({ error: result.error, inserted: 0, skipped: 0, fetched: 0, filteredByTitle: 0 }, { status: 200 })
+    return NextResponse.json({ error: result.error, inserted: 0, skipped: 0, fetched: 0, filteredByTitle: 0 }, { status: 500 })
   }
 
   const candidates = (result as { candidates?: Array<Record<string, unknown>> }).candidates ?? []

@@ -1,16 +1,19 @@
 'use client'
 
+import { useActionState } from 'react'
 import { addUser } from './actions'
 
-export default function UserForm({ error }: { error?: string }) {
+export default function UserForm() {
+  const [state, action, pending] = useActionState(addUser, {})
+
   return (
     <div>
-      {error && (
+      {state.error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
-          {error}
+          {state.error}
         </div>
       )}
-      <form action={addUser} className="flex flex-wrap items-end gap-3">
+      <form action={action} className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-zinc-500">Name</label>
           <input
@@ -56,9 +59,10 @@ export default function UserForm({ error }: { error?: string }) {
 
         <button
           type="submit"
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 transition-colors"
+          disabled={pending}
+          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 transition-colors disabled:opacity-50"
         >
-          Add user
+          {pending ? 'Adding…' : 'Add user'}
         </button>
       </form>
     </div>

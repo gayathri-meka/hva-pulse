@@ -5,7 +5,10 @@ import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 
-export async function addUser(formData: FormData) {
+export async function addUser(
+  _prevState: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
   const appUser = await getAppUser()
   if (!appUser || appUser.role !== 'admin') redirect('/dashboard')
 
@@ -21,12 +24,13 @@ export async function addUser(formData: FormData) {
     .eq('email', email)
     .single()
 
-  if (existing) {
-    redirect('/users?error=User+already+exists')
-  }
+  if (existing) return { error: 'A user with this email already exists.' }
 
-  await supabase.from('users').insert({ email, name: name || null, role })
+  const { error } = await supabase.from('users').insert({ email, name: name || null, role })
+  if (error) return { error: error.message }
+
   revalidatePath('/users')
+  return {}
 }
 
 export async function updateUser(

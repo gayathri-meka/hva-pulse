@@ -7,7 +7,7 @@ import UsersTable from './UsersTable'
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ role?: string; error?: string }>
+  searchParams: Promise<{ role?: string }>
 }
 
 export default async function UsersPage({ searchParams }: Props) {
@@ -15,7 +15,7 @@ export default async function UsersPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin') redirect('/dashboard')
 
-  const { role: roleFilter, error } = await searchParams
+  const { role: roleFilter } = await searchParams
 
   const supabase = await createServerSupabaseClient()
 
@@ -71,7 +71,7 @@ export default async function UsersPage({ searchParams }: Props) {
       {/* Add user form */}
       <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold text-zinc-700">Add user</h2>
-        <UserForm error={error} />
+        <UserForm />
       </div>
 
       <UsersTable users={filtered} currentUserId={appUser.id} />

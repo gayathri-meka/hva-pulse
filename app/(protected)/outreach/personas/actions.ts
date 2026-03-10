@@ -6,18 +6,26 @@ import { requireStaff } from '@/lib/auth'
 
 const requireAdmin = requireStaff
 
+function parseJsonField(value: FormDataEntryValue | null, fallback: unknown[] = []): unknown[] {
+  try {
+    return JSON.parse((value as string) || JSON.stringify(fallback))
+  } catch {
+    return fallback
+  }
+}
+
 export async function createPersona(formData: FormData) {
   const appUser = await requireAdmin()
 
   const name = (formData.get('name') as string).trim()
-  const target_job_titles = JSON.parse((formData.get('target_job_titles') as string) || '[]')
-  const required_skills = JSON.parse((formData.get('required_skills') as string) || '[]')
+  const target_job_titles = parseJsonField(formData.get('target_job_titles'))
+  const required_skills = parseJsonField(formData.get('required_skills'))
   const experience_min = formData.get('experience_min') ? parseInt(formData.get('experience_min') as string, 10) : null
   const experience_max = formData.get('experience_max') ? parseInt(formData.get('experience_max') as string, 10) : null
-  const preferred_locations = JSON.parse((formData.get('preferred_locations') as string) || '[]')
+  const preferred_locations = parseJsonField(formData.get('preferred_locations'))
   const remote_allowed = formData.get('remote_allowed') === 'true'
   const entry_level_only = formData.get('entry_level_only') === 'true'
-  const platforms = JSON.parse((formData.get('platforms') as string) || '[]')
+  const platforms = parseJsonField(formData.get('platforms'))
 
   const supabase = await createServerSupabaseClient()
   await supabase.from('job_personas').insert({
@@ -40,14 +48,14 @@ export async function updatePersona(id: string, formData: FormData) {
   await requireAdmin()
 
   const name = (formData.get('name') as string).trim()
-  const target_job_titles = JSON.parse((formData.get('target_job_titles') as string) || '[]')
-  const required_skills = JSON.parse((formData.get('required_skills') as string) || '[]')
+  const target_job_titles = parseJsonField(formData.get('target_job_titles'))
+  const required_skills = parseJsonField(formData.get('required_skills'))
   const experience_min = formData.get('experience_min') ? parseInt(formData.get('experience_min') as string, 10) : null
   const experience_max = formData.get('experience_max') ? parseInt(formData.get('experience_max') as string, 10) : null
-  const preferred_locations = JSON.parse((formData.get('preferred_locations') as string) || '[]')
+  const preferred_locations = parseJsonField(formData.get('preferred_locations'))
   const remote_allowed = formData.get('remote_allowed') === 'true'
   const entry_level_only = formData.get('entry_level_only') === 'true'
-  const platforms = JSON.parse((formData.get('platforms') as string) || '[]')
+  const platforms = parseJsonField(formData.get('platforms'))
 
   const supabase = await createServerSupabaseClient()
   await supabase.from('job_personas').update({
