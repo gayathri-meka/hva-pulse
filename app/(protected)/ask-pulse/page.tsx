@@ -185,14 +185,16 @@ function AssistantBubble({ content, isStreaming }: { content: string; isStreamin
       <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm">
         <SparklesIcon />
       </div>
-      <div className="min-w-0 flex-1 pt-0.5">
+      <div className="min-w-0 flex-1">
         {content ? (
-          <>
+          <div className="pt-0.5">
             <MarkdownText content={content} />
             {isStreaming && <span className="ml-0.5 animate-pulse text-[#5BAE5B]">▋</span>}
-          </>
+          </div>
         ) : (
-          <ThinkingDots />
+          <div className="flex h-6 items-center">
+            <ThinkingDots />
+          </div>
         )}
       </div>
     </div>
