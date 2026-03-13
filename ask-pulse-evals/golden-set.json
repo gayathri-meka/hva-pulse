@@ -1,0 +1,92 @@
+[
+  {
+    "id": "hired-count-overall",
+    "query": "How many learners have been hired in total?",
+    "expected_tools": ["get_pipeline_summary"],
+    "must_mention": ["hired"]
+  },
+  {
+    "id": "pipeline-funnel",
+    "query": "Show me the full placement pipeline — how many are at each stage?",
+    "expected_tools": ["get_pipeline_summary"],
+    "must_mention": ["applied", "shortlisted", "hired"]
+  },
+  {
+    "id": "companies-list",
+    "query": "Which companies are we working with and how many open roles do they have?",
+    "expected_tools": ["get_companies"],
+    "must_mention": []
+  },
+  {
+    "id": "open-roles",
+    "query": "Show me all currently open roles.",
+    "expected_tools": ["get_roles"],
+    "must_mention": ["open"]
+  },
+  {
+    "id": "hired-learners-list",
+    "query": "List all learners who have been placed so far.",
+    "expected_tools": ["get_hired_learners"],
+    "must_mention": []
+  },
+  {
+    "id": "rejected-applications",
+    "query": "Show me learners who were rejected after an interview.",
+    "expected_tools": ["get_applications"],
+    "must_mention": ["rejected"]
+  },
+  {
+    "id": "not-shortlisted-applications",
+    "query": "Which learners were not shortlisted by companies?",
+    "expected_tools": ["get_applications"],
+    "must_mention": ["not_shortlisted"]
+  },
+  {
+    "id": "tat-overall",
+    "query": "What is the average time it takes for companies to make a shortlisting decision?",
+    "expected_tools": ["get_tat_metrics"],
+    "must_mention": ["days"]
+  },
+  {
+    "id": "learner-detail",
+    "query": "Give me the full profile for learner HVA001.",
+    "expected_tools": ["get_learner_detail"],
+    "must_mention": ["HVA001"]
+  },
+  {
+    "id": "learner-applications",
+    "query": "What companies has HVA001 applied to?",
+    "expected_tools": ["get_learner_applications"],
+    "must_mention": []
+  },
+  {
+    "id": "ready-learners",
+    "query": "Show me all learners who are marked as ready for placement.",
+    "expected_tools": ["get_learners"],
+    "must_mention": ["ready"]
+  },
+  {
+    "id": "job-personas",
+    "query": "What job outreach personas do we have?",
+    "expected_tools": ["get_job_personas"],
+    "must_mention": []
+  },
+  {
+    "id": "approved-opportunities",
+    "query": "Show me all approved job opportunities from the outreach engine.",
+    "expected_tools": ["get_job_opportunities"],
+    "must_mention": ["approved"]
+  },
+  {
+    "id": "batch-ambiguity",
+    "query": "How many learners from batch 10 have been hired?",
+    "expected_tools": ["get_batches", "get_pipeline_summary"],
+    "must_mention": ["hired"]
+  },
+  {
+    "id": "placement-rate",
+    "query": "What is the overall placement rate so far?",
+    "expected_tools": ["get_pipeline_summary"],
+    "must_mention": ["%"]
+  }
+]
