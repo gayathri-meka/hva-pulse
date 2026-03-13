@@ -83,6 +83,7 @@ const ADMIN_LINKS: NavItem[] = [
     extraPrefixes: ['/users'],
     children: [
       { href: '/settings/sheets', label: 'Sheets' },
+      { href: '/settings/export', label: 'Export' },
       { href: '/users',           label: 'Users'  },
     ],
   },
