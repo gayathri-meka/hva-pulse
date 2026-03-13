@@ -87,12 +87,17 @@ function focusMessage(weakest: string, h: HealthData): { title: string; body: st
       + '. Learners may need encouragement to engage with more opportunities.',
   }
 
+  const slLow = h.shortlistRate < 0.5
   return {
     title: 'Conversion',
     href:  '/placements/applications',
-    body:  `Only ${slPct}% of applications result in a shortlist`
-      + (hirePct < 50 && h.hireRate > 0 ? `, and only ${hirePct}% of completed interview processes end in a hire` : '')
-      + '. There may be a gap between learner profiles and what companies are looking for.',
+    body:  slLow
+      ? `Only ${slPct}% of applications result in a shortlist`
+          + (h.hireRate > 0 ? `, and only ${hirePct}% of completed interview processes end in a hire` : '')
+          + '. There may be a gap between learner profiles and what companies are looking for.'
+      : `Only ${hirePct}% of completed interview processes end in a hire`
+          + ` — learners are getting shortlisted (${slPct}%) but not converting through interviews.`
+          + ' Focus on interview preparation and follow-up.',
   }
 }
 
