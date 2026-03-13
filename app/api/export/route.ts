@@ -19,7 +19,7 @@ function toCsv(rows: Record<string, unknown>[]): string {
 async function exportAlumni(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
   const { data, error } = await supabase
     .from('alumni')
-    .select('id, name, email, cohort_fy, placed_fy, employment_status, contact_number, alumni_jobs(company, role, salary, placement_month, is_current)')
+    .select('id, name, email, cohort_fy, placed_fy, employment_status, contact_number, alumni_jobs(company, role, starting_salary, salary, placement_month, is_current)')
     .order('name')
   if (error) throw error
 
@@ -33,10 +33,11 @@ async function exportAlumni(supabase: Awaited<ReturnType<typeof createServerSupa
       placed_fy:         a.placed_fy ?? '',
       employment_status: a.employment_status ?? '',
       contact_number:    a.contact_number ?? '',
-      company:           job?.company ?? '',
-      role:              job?.role ?? '',
-      salary_lpa:        job?.salary ?? '',
-      placement_month:   job?.placement_month ?? '',
+      company:           job?.company          ?? '',
+      role:              job?.role              ?? '',
+      starting_salary:   job?.starting_salary  ?? '',
+      current_salary:    job?.salary            ?? '',
+      placement_month:   job?.placement_month   ?? '',
     }
   })
 }

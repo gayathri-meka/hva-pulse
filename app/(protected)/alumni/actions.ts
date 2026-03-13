@@ -14,6 +14,7 @@ export async function updateAlumniRow(
     company:           string | null
     role:              string | null
     salary:            number | null
+    starting_salary:   number | null
   }
 ) {
   await requireAdmin()
@@ -32,11 +33,12 @@ export async function updateAlumniRow(
   if (data.company && data.role) {
     await supabase.from('alumni_jobs').delete().eq('alumni_id', alumniId).eq('is_current', true)
     await supabase.from('alumni_jobs').insert({
-      alumni_id:  alumniId,
-      company:    data.company,
-      role:       data.role,
-      salary:     data.salary,
-      is_current: true,
+      alumni_id:       alumniId,
+      company:         data.company,
+      role:            data.role,
+      salary:          data.salary,
+      starting_salary: data.starting_salary,
+      is_current:      true,
     })
   }
 

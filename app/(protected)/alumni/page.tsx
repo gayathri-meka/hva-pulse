@@ -11,6 +11,7 @@ type AlumniJob = {
   company:         string
   role:            string
   salary:          number | null
+  starting_salary: number | null
   placement_month: string | null
   is_current:      boolean
 }
@@ -42,7 +43,7 @@ export default async function AlumniPage({
 
   const { data: rawAlumni } = await supabase
     .from('alumni')
-    .select('*, alumni_jobs(company, role, salary, placement_month, is_current)')
+    .select('*, alumni_jobs(company, role, salary, starting_salary, placement_month, is_current)')
     .order('name')
 
   const alumni = (rawAlumni ?? []) as AlumniRow[]
@@ -60,10 +61,11 @@ export default async function AlumniPage({
       placed_fy:         a.placed_fy,
       employment_status: a.employment_status,
       contact_number:    a.contact_number,
-      company:           job?.company ?? null,
-      role:              job?.role ?? null,
-      salary:            job?.salary ?? null,
-      placement_month:   job?.placement_month ?? null,
+      company:           job?.company         ?? null,
+      role:              job?.role             ?? null,
+      salary:            job?.salary           ?? null,
+      starting_salary:   job?.starting_salary  ?? null,
+      placement_month:   job?.placement_month  ?? null,
     }
   })
 

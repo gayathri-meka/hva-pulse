@@ -30,7 +30,7 @@ describe('updateAlumniRow', () => {
       return Promise.resolve(adminUser)
     })
     await expect(
-      updateAlumniRow('alumni-1', { employment_status: 'employed', placed_fy: null, company: null, role: null, salary: null })
+      updateAlumniRow('alumni-1', { employment_status: 'employed', placed_fy: null, company: null, role: null, salary: null, starting_salary: null })
     ).rejects.toThrow('NEXT_REDIRECT:/dashboard')
     expect(redirect).toHaveBeenCalledWith('/dashboard')
   })
@@ -49,7 +49,7 @@ describe('updateAlumniRow', () => {
       placed_fy:         '2024-25',
       company:           null,
       role:              null,
-      salary:            null,
+      salary:            null, starting_salary:   null,
     })
 
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
@@ -74,7 +74,7 @@ describe('updateAlumniRow', () => {
       placed_fy:         '2025-26',
       company:           'Acme Corp',
       role:              'Engineer',
-      salary:            8.5,
+      salary:            8.5, starting_salary:   null,
     })
 
     expect(mockDelete).toHaveBeenCalled()
@@ -100,7 +100,7 @@ describe('updateAlumniRow', () => {
       placed_fy:         null,
       company:           null,
       role:              null,
-      salary:            null,
+      salary:            null, starting_salary:   null,
     })
 
     expect(mockDelete).not.toHaveBeenCalled()
@@ -118,7 +118,7 @@ describe('updateAlumniRow', () => {
       placed_fy:         null,
       company:           null,
       role:              null,
-      salary:            null,
+      salary:            null, starting_salary:   null,
     })
 
     expect(revalidatePath).toHaveBeenCalledWith('/alumni')

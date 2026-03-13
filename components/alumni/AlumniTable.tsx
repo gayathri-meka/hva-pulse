@@ -40,6 +40,7 @@ export type AlumniTableRow = {
   company:           string | null
   role:              string | null
   salary:            number | null
+  starting_salary:   number | null
   placement_month:   string | null
 }
 
@@ -48,6 +49,7 @@ const DEFAULT_VISIBILITY: ColumnVisibilityState = {
   placed_fy:       false,
   contact_number:  false,
   placement_month: false,
+  starting_salary: false,
 }
 
 function loadVisibility(): ColumnVisibilityState {
@@ -144,7 +146,8 @@ const TOGGLEABLE_COLUMNS = [
   { id: 'employment_status',  label: 'Status'       },
   { id: 'company',            label: 'Company'      },
   { id: 'role',               label: 'Role'         },
-  { id: 'salary',             label: 'Salary'       },
+  { id: 'starting_salary',    label: 'Starting Salary (LPA)' },
+  { id: 'salary',             label: 'Current Salary (LPA)' },
   { id: 'placement_month',    label: 'Placed Month' },
   { id: 'contact_number',     label: 'Contact'      },
 ]
@@ -204,9 +207,18 @@ const columns = [
     filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
+  col.accessor('starting_salary', {
+    header: 'Starting Salary',
+    size: 130,
+    enableSorting: true,
+    cell: (info) => {
+      const val = info.getValue()
+      return <span className="tabular-nums text-zinc-700">{val != null ? `${val} LPA` : '—'}</span>
+    },
+  }),
   col.accessor('salary', {
-    header: 'Salary',
-    size: 100,
+    header: 'Current Salary',
+    size: 130,
     enableSorting: true,
     cell: (info) => {
       const val = info.getValue()
@@ -235,6 +247,7 @@ type EditForm = {
   placed_fy:         string
   company:           string
   role:              string
+  starting_salary:   string
   salary:            string
 }
 
@@ -247,16 +260,17 @@ export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
   const [showColMenu, setShowColMenu]       = useState(false)
   const colMenuRef                          = useRef<HTMLDivElement>(null)
   const [editingRow, setEditingRow]         = useState<AlumniTableRow | null>(null)
-  const [editForm, setEditForm]             = useState<EditForm>({ employment_status: 'employed', placed_fy: '', company: '', role: '', salary: '' })
+  const [editForm, setEditForm]             = useState<EditForm>({ employment_status: 'employed', placed_fy: '', company: '', role: '', starting_salary: '', salary: '' })
   const [, startTransition]                 = useTransition()
 
   function openEdit(row: AlumniTableRow) {
     setEditForm({
       employment_status: row.employment_status,
-      placed_fy:         row.placed_fy ?? '',
-      company:           row.company ?? '',
-      role:              row.role ?? '',
-      salary:            row.salary != null ? String(row.salary) : '',
+      placed_fy:         row.placed_fy        ?? '',
+      company:           row.company           ?? '',
+      role:              row.role              ?? '',
+      starting_salary:   row.starting_salary  != null ? String(row.starting_salary) : '',
+      salary:            row.salary           != null ? String(row.salary)           : '',
     })
     setEditingRow(row)
   }
@@ -266,10 +280,11 @@ export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
     startTransition(() =>
       updateAlumniRow(editingRow.id, {
         employment_status: editForm.employment_status,
-        placed_fy:         editForm.placed_fy.trim() || null,
-        company:           editForm.company.trim() || null,
-        role:              editForm.role.trim() || null,
-        salary:            editForm.salary ? parseFloat(editForm.salary) : null,
+        placed_fy:         editForm.placed_fy.trim()       || null,
+        company:           editForm.company.trim()          || null,
+        role:              editForm.role.trim()             || null,
+        starting_salary:   editForm.starting_salary        ? parseFloat(editForm.starting_salary) : null,
+        salary:            editForm.salary                  ? parseFloat(editForm.salary)          : null,
       })
     )
     setEditingRow(null)
@@ -500,7 +515,19 @@ export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500">Salary (LPA)</label>
+                  <label className="block text-xs font-medium text-zinc-500">Starting Salary (LPA)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={editForm.starting_salary}
+                    onChange={(e) => setEditForm((f) => ({ ...f, starting_salary: e.target.value }))}
+                    placeholder="e.g. 4.5"
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500">Current Salary (LPA)</label>
                   <input
                     type="number"
                     min="0"
@@ -511,16 +538,17 @@ export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
                     className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-500">Placed FY</label>
-                  <input
-                    type="text"
-                    value={editForm.placed_fy}
-                    onChange={(e) => setEditForm((f) => ({ ...f, placed_fy: e.target.value }))}
-                    placeholder="e.g. 2025-26"
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
-                  />
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-500">Placed FY</label>
+                <input
+                  type="text"
+                  value={editForm.placed_fy}
+                  onChange={(e) => setEditForm((f) => ({ ...f, placed_fy: e.target.value }))}
+                  placeholder="e.g. 2025-26"
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                />
               </div>
             </div>
 
