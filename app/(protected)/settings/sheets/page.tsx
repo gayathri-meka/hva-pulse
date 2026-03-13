@@ -31,6 +31,13 @@ const SHEETS = [
     tab:         'Learner info',
     apiRoute:    '/api/sync-learner-info',
   },
+  {
+    key:         'alumni_roster',
+    name:        'Alumni Roster',
+    description: 'Placed learners with employment status, company, role and salary.',
+    tab:         'Master',
+    apiRoute:    '/api/sync-alumni',
+  },
 ]
 
 export default async function SheetsPage() {

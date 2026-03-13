@@ -400,6 +400,12 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
         </div>
       </div>
 
+      <div className="mb-2 text-sm text-zinc-500">
+        {table.getFilteredRowModel().rows.length === learners.length
+          ? `${learners.length} learner${learners.length !== 1 ? 's' : ''}`
+          : `${table.getFilteredRowModel().rows.length} of ${learners.length} learners`}
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table

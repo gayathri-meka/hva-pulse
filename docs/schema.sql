@@ -92,6 +92,7 @@ CREATE TABLE public.learners (
   comprehension numeric,
   tech_score numeric,
   new_lf text,
+  fy_year text,
   CONSTRAINT learners_pkey PRIMARY KEY (user_id),
   CONSTRAINT learners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
   CONSTRAINT learners_lf_user_id_fkey FOREIGN KEY (lf_user_id) REFERENCES public.users(id)
@@ -134,6 +135,35 @@ CREATE TABLE public.sync_logs (
   last_synced_at timestamp with time zone NOT NULL DEFAULT now(),
   records_synced integer NOT NULL DEFAULT 0,
   CONSTRAINT sync_logs_pkey PRIMARY KEY (sheet_key)
+);
+CREATE TABLE public.alumni (
+  id                uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id           uuid,
+  learner_id        text UNIQUE,
+  name              text NOT NULL,
+  email             text,
+  fy_year           text NOT NULL,
+  employment_status text NOT NULL DEFAULT 'employed'::text CHECK (employment_status = ANY (ARRAY['employed'::text, 'unemployed'::text])),
+  contact_number    text,
+  created_at        timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at        timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT alumni_pkey PRIMARY KEY (id),
+  CONSTRAINT alumni_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT alumni_learner_id_fkey FOREIGN KEY (learner_id) REFERENCES public.learners(learner_id)
+);
+CREATE TABLE public.alumni_jobs (
+  id              uuid NOT NULL DEFAULT gen_random_uuid(),
+  alumni_id       uuid NOT NULL,
+  company         text NOT NULL,
+  role            text NOT NULL,
+  salary          numeric,
+  placement_month date,
+  is_current      boolean NOT NULL DEFAULT true,
+  start_date      date,
+  end_date        date,
+  created_at      timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT alumni_jobs_pkey PRIMARY KEY (id),
+  CONSTRAINT alumni_jobs_alumni_id_fkey FOREIGN KEY (alumni_id) REFERENCES public.alumni(id) ON DELETE CASCADE
 );
 CREATE TABLE public.users (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

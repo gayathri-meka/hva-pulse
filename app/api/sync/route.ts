@@ -78,6 +78,7 @@ export async function POST() {
         core_skills_mentor_name: row['core_skills_mentor'] ?? '',
         track: row['track'] ?? '',
         join_date: row['join_date'] || null,
+        fy_year: '2025-26',
       }
     }).filter((l) => l.user_id !== null)
 
@@ -87,6 +88,26 @@ export async function POST() {
 
     if (learnersError) {
       return NextResponse.json({ success: false, error: learnersError.message }, { status: 500 })
+    }
+
+    // ── Step 6: Auto-create alumni rows for placed learners ───────────────────
+    const placedStatuses = ['Placed - HVA', 'Placed - Self']
+    const placedRows = validRows.filter(r => placedStatuses.includes(r['status'] ?? ''))
+    if (placedRows.length > 0) {
+      const alumniRows = placedRows
+        .filter(r => r['learner_id'] && r['name'])
+        .map(r => ({
+          learner_id: r['learner_id'],
+          user_id: emailToUserId.get(r['email']) ?? null,
+          name: r['name'] ?? '',
+          email: r['email'] || null,
+          fy_year: '2025-26',
+          employment_status: 'employed',
+        }))
+      if (alumniRows.length > 0) {
+        // ignoreDuplicates: don't overwrite if admin manually changed employment_status
+        await supabase.from('alumni').upsert(alumniRows, { onConflict: 'learner_id', ignoreDuplicates: true })
+      }
     }
 
     // ── Step 5: Delete learners no longer in the sheet ────────────────────────

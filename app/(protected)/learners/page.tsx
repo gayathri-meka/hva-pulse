@@ -15,11 +15,11 @@ import LearnerSnapshot, {
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ status?: string; batch?: string; lf?: string; viewAll?: string; tab?: string; learner?: string }>
+  searchParams: Promise<{ status?: string; batch?: string; lf?: string; viewAll?: string; tab?: string; learner?: string; fy?: string }>
 }
 
 export default async function LearnersPage({ searchParams }: Props) {
-  const { status, batch, lf, viewAll, tab, learner: learnerParam } = await searchParams
+  const { status, batch, lf, viewAll, tab, learner: learnerParam, fy } = await searchParams
 
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
@@ -37,6 +37,10 @@ export default async function LearnersPage({ searchParams }: Props) {
   }
   if (batch)  query = query.eq('batch_name', batch)
   if (lf)     query = query.eq('lf_name', lf)
+
+  // FY year filter — default to '2025-26' unless explicitly set to 'all'
+  const activeFy = fy !== 'all' ? (fy ?? '2025-26') : null
+  if (activeFy) query = query.eq('fy_year', activeFy)
 
   const { data: rawLearners } = await query
 
@@ -57,10 +61,11 @@ export default async function LearnersPage({ searchParams }: Props) {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Filter options (for All Learners tab) ─────────────────────────────────
-  const { data: allLearners } = await supabase.from('learners').select('status, batch_name, lf_name')
+  const { data: allLearners } = await supabase.from('learners').select('status, batch_name, lf_name, fy_year')
   const statuses = Array.from(new Set(allLearners?.map((l) => l.status).filter(Boolean))).sort() as string[]
   const batches  = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
   const lfs      = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort() as string[]
+  const fyYears  = Array.from(new Set(allLearners?.map((l) => l.fy_year).filter(Boolean))).sort() as string[]
 
   // ── Snapshot tab: fetch placement data for the selected learner ───────────
   let snapshotLearner: SnapshotLearner | null = null
@@ -184,9 +189,7 @@ export default async function LearnersPage({ searchParams }: Props) {
           <div className="mb-5">
             <Suspense>
               <LearnersFilters
-                statuses={statuses}
-                batches={batches}
-                lfs={lfs}
+                fyYears={fyYears}
                 isLF={appUser.role === 'LF'}
                 viewAll={viewAll === '1'}
               />

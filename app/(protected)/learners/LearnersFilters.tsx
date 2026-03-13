@@ -13,14 +13,12 @@ const Chevron = () => (
 const selectCls = 'appearance-none rounded-lg border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm text-zinc-700 shadow-sm hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1'
 
 interface Props {
-  statuses: string[]
-  batches:  string[]
-  lfs:      string[]
-  isLF:     boolean
-  viewAll:  boolean
+  fyYears: string[]
+  isLF:    boolean
+  viewAll: boolean
 }
 
-export default function LearnersFilters({ statuses, batches, lfs, isLF, viewAll }: Props) {
+export default function LearnersFilters({ fyYears, isLF, viewAll }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -41,55 +39,36 @@ export default function LearnersFilters({ statuses, batches, lfs, isLF, viewAll 
     } else {
       params.set('viewAll', '1')
     }
-    params.delete('status')
-    params.delete('batch')
-    params.delete('lf')
+    params.delete('fy')
     router.push(`/learners?${params.toString()}`)
   }
+
+  const activeFy = searchParams.get('fy') ?? ''
 
   return (
     <div className="flex flex-wrap gap-2">
       <div className="relative">
         <select
-          value={searchParams.get('status') ?? ''}
-          onChange={(e) => update('status', e.target.value)}
+          value={activeFy}
+          onChange={(e) => update('fy', e.target.value)}
           className={selectCls}
         >
-          <option value="">All Statuses</option>
-          {statuses.map((s) => (
-            <option key={s} value={s}>{s}</option>
+          <option value="">All Years</option>
+          {fyYears.map((y) => (
+            <option key={y} value={y}>{y}</option>
           ))}
         </select>
         <Chevron />
       </div>
 
-      <div className="relative">
-        <select
-          value={searchParams.get('batch') ?? ''}
-          onChange={(e) => update('batch', e.target.value)}
-          className={selectCls}
+      {activeFy && (
+        <button
+          onClick={() => update('fy', '')}
+          className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-600"
         >
-          <option value="">All Batches</option>
-          {batches.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-        <Chevron />
-      </div>
-
-      <div className="relative">
-        <select
-          value={searchParams.get('lf') ?? ''}
-          onChange={(e) => update('lf', e.target.value)}
-          className={selectCls}
-        >
-          <option value="">All LFs</option>
-          {lfs.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </select>
-        <Chevron />
-      </div>
+          Clear filters
+        </button>
+      )}
 
       {isLF && (
         <button

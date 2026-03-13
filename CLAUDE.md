@@ -26,6 +26,7 @@ GOOGLE_PRIVATE_KEY              # Multiline PEM key
 GOOGLE_SHEET_ID
 JOOBLE_API_KEY                  # Required for Job Outreach scraper
 OPENAI_API_KEY                  # Required for Ask Pulse (chat AI)
+GOOGLE_ALUMNI_SHEET_ID          # Alumni roster Google Sheet ID
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must be added manually to Vercel — it is not a `NEXT_PUBLIC_` var and won't be auto-detected.
