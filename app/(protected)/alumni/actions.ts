@@ -42,3 +42,15 @@ export async function updateAlumniRow(
 
   revalidatePath('/alumni')
 }
+
+export async function upsertCohortStat(cohortFy: string, onboarded: number, dropouts: number) {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+  await supabase
+    .from('cohort_stats')
+    .upsert(
+      { cohort_fy: cohortFy, onboarded, dropouts, updated_at: new Date().toISOString() },
+      { onConflict: 'cohort_fy' }
+    )
+  revalidatePath('/alumni')
+}

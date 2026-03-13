@@ -78,6 +78,37 @@ export default async function AlumniPage({
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([placed_fy, count]) => ({ placed_fy, count }))
 
+  // Cohort view: merge manually-entered cohort_stats with live placed counts from alumni
+  const { data: rawCohortStats } = await supabase
+    .from('cohort_stats')
+    .select('id, cohort_fy, onboarded, dropouts')
+    .order('cohort_fy')
+
+  const cohortPlacedMap = new Map<string, number>()
+  for (const a of alumni) {
+    if (a.cohort_fy) {
+      cohortPlacedMap.set(a.cohort_fy, (cohortPlacedMap.get(a.cohort_fy) ?? 0) + 1)
+    }
+  }
+
+  const allCohortFys = new Set([
+    ...(rawCohortStats ?? []).map((r) => r.cohort_fy as string),
+    ...Array.from(cohortPlacedMap.keys()),
+  ])
+
+  const cohortRows = Array.from(allCohortFys)
+    .sort()
+    .map((cohort_fy) => {
+      const stat = (rawCohortStats ?? []).find((r) => r.cohort_fy === cohort_fy)
+      return {
+        cohort_fy,
+        id:        stat?.id        ?? null,
+        onboarded: stat?.onboarded ?? null,
+        dropouts:  stat?.dropouts  ?? null,
+        placed:    cohortPlacedMap.get(cohort_fy) ?? 0,
+      }
+    })
+
   const tabs = [
     { key: 'roster',    label: 'Roster',    href: '/alumni' },
     { key: 'analytics', label: 'Analytics', href: '/alumni?view=analytics' },
@@ -131,7 +162,7 @@ export default async function AlumniPage({
 
       {/* Content */}
       {activeTab === 'roster' && <AlumniTable alumni={alumniRows} />}
-      {activeTab === 'analytics' && <AlumniAnalytics fyRows={fyRows} />}
+      {activeTab === 'analytics' && <AlumniAnalytics fyRows={fyRows} cohortRows={cohortRows} />}
     </div>
   )
 }
