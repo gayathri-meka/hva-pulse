@@ -7,6 +7,7 @@ import ActionCentre from '@/components/placements/ActionCentre'
 import TatDeepDive from '@/components/placements/TatDeepDive'
 import AnalyticsFilters from '@/components/placements/AnalyticsFilters'
 import PlacementHealth from '@/components/placements/PlacementHealth'
+import type { PlacementThresholds } from './actions'
 
 // ── TAT Deep Dive cutoff ──────────────────────────────────────────────────────
 // Only applications created on or after this date are counted for TAT metrics.
@@ -62,12 +63,16 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     tatQuery   = tatQuery.in('user_id',   filterUserIds)
   }
 
-  const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps }] = await Promise.all([
+  const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps }, { data: settingsRow }] = await Promise.all([
     supabase.from('roles').select('id, created_at, status'), // roles are not learner-specific
     appsQuery,
     prefsQuery,
     tatQuery,
+    supabase.from('settings').select('value').eq('key', 'placement_thresholds').single(),
   ])
+
+  const DEFAULT_THRESHOLDS: PlacementThresholds = { demand_target: 10, engagement_target: 5, conversion_target: 0.5 }
+  const thresholds: PlacementThresholds = (settingsRow?.value as PlacementThresholds) ?? DEFAULT_THRESHOLDS
 
   const allApps       = applications ?? []
   const allPrefs      = preferences ?? []
@@ -234,6 +239,8 @@ export default async function AnalyticsPage({ searchParams }: Props) {
       hireRate={hireRate}
       totalRoles={totalRoles}
       totalApps={totalApps}
+      thresholds={thresholds}
+      isAdmin={appUser.role === 'admin'}
     />
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:gap-10">
       {/* Left: vertical funnel */}

@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import ThresholdEditor from './ThresholdEditor'
+import type { PlacementThresholds } from '@/app/(protected)/placements/analytics/actions'
 
 export interface HealthData {
   openRoles:         number
@@ -9,16 +11,18 @@ export interface HealthData {
   hireRate:          number   // 0–1
   totalRoles:        number
   totalApps:         number
+  thresholds:        PlacementThresholds
+  isAdmin:           boolean
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
-// Each score is 0–1 (higher = healthier). Targets are calibrated to the
-// programme scale — adjust as the cohort grows.
+// Each score is 0–1 (higher = healthier). Targets are read from DB settings
+// so admins can tune them as the programme scales.
 function computeScores(h: HealthData) {
   return {
-    demand:     Math.min(h.openRoles / 10, 1),
-    engagement: Math.min(h.appsPerRole / 5, 1),
-    conversion: Math.min(h.hireRate / 0.5, 1),
+    demand:     Math.min(h.openRoles / h.thresholds.demand_target, 1),
+    engagement: Math.min(h.appsPerRole / h.thresholds.engagement_target, 1),
+    conversion: Math.min(h.hireRate / h.thresholds.conversion_target, 1),
   }
 }
 
@@ -123,6 +127,12 @@ export default function PlacementHealth(h: HealthData) {
 
   return (
     <div className="mb-8 space-y-3">
+
+      {/* ── Section header with benchmark editor ── */}
+      <div className="relative flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Placement Health</p>
+        <ThresholdEditor thresholds={h.thresholds} isAdmin={h.isAdmin} />
+      </div>
 
       {/* ── Option A: three diagnostic cards ── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
