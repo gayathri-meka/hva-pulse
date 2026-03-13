@@ -46,7 +46,8 @@ export const TOOLS: ChatCompletionTool[] = [
       description:
         'Lists learners with optional filters. Returns name, email, batch, track, ' +
         'readiness, and LF name. Use this to answer questions like "who are the ' +
-        'ready learners in Batch 10?" or "show me blacklisted learners".',
+        'ready learners in Batch 10?" or "show me blacklisted learners". ' +
+        'Readiness values are exactly: "Ready", "Almost Ready", "Not Ready".',
       parameters: {
         type: 'object',
         properties: {
@@ -62,9 +63,9 @@ export const TOOLS: ChatCompletionTool[] = [
             type: 'array',
             items: {
               type: 'string',
-              enum: ['ready', 'almost_ready', 'not_ready'],
+              enum: ['Ready', 'Almost Ready', 'Not Ready'],
             },
-            description: 'Filter by one or more readiness values.',
+            description: 'Filter by one or more readiness values. Use exact casing.',
           },
           blacklisted: {
             type: 'boolean',
