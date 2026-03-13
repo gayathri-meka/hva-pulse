@@ -159,6 +159,9 @@ export default async function DashboardPage({ searchParams }: Props) {
                     .join(' · ')}
                 </span>
               )}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="ml-1 h-3 w-3 text-red-300">
+                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
+              </svg>
             </Link>
           </div>
         </div>
@@ -181,33 +184,54 @@ export default async function DashboardPage({ searchParams }: Props) {
         <div className="mt-2 grid grid-cols-3 gap-3">
           <Link
             href={learnersUrl('Placed - Self')}
-            className="rounded-lg border border-blue-100 bg-blue-50 p-3 transition-opacity hover:opacity-75"
+            className="flex flex-col justify-between rounded-lg border border-blue-100 bg-blue-50 p-3 transition-opacity hover:opacity-75"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-500">Placed — Self</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedSelf}</p>
-            <p className="mt-0.5 text-xs text-zinc-400">
-              {continued > 0 ? Math.round((placedSelf / continued) * 100) : 0}% of continued
-            </p>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-500">Placed — Self</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedSelf}</p>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                {continued > 0 ? Math.round((placedSelf / continued) * 100) : 0}% of continued
+              </p>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-blue-300">
+                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
+              </svg>
+            </div>
           </Link>
           <Link
             href={learnersUrl('Placed - HVA')}
-            className="rounded-lg border border-violet-100 bg-violet-50 p-3 transition-opacity hover:opacity-75"
+            className="flex flex-col justify-between rounded-lg border border-violet-100 bg-violet-50 p-3 transition-opacity hover:opacity-75"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500">Placed — HVA</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedHVA}</p>
-            <p className="mt-0.5 text-xs text-zinc-400">
-              {continued > 0 ? Math.round((placedHVA / continued) * 100) : 0}% of continued
-            </p>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500">Placed — HVA</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedHVA}</p>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                {continued > 0 ? Math.round((placedHVA / continued) * 100) : 0}% of continued
+              </p>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-violet-300">
+                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
+              </svg>
+            </div>
           </Link>
           <Link
             href={learnersUrl('Ongoing')}
-            className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 transition-opacity hover:opacity-75"
+            className="flex flex-col justify-between rounded-lg border border-emerald-100 bg-emerald-50 p-3 transition-opacity hover:opacity-75"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">Ongoing</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{ongoing}</p>
-            <p className="mt-0.5 text-xs text-zinc-400">
-              {continued > 0 ? Math.round((ongoing / continued) * 100) : 0}% of continued
-            </p>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">Ongoing</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{ongoing}</p>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                {continued > 0 ? Math.round((ongoing / continued) * 100) : 0}% of continued
+              </p>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-emerald-300">
+                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
+              </svg>
+            </div>
           </Link>
         </div>
       </div>

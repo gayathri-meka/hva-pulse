@@ -64,7 +64,7 @@ type NavItem = {
 
 const ADMIN_LINKS: NavItem[] = [
   { href: '/dashboard',  label: 'Dashboard',       Icon: DashboardIcon  },
-  { href: '/learners',   label: 'Learners Master',  Icon: LearnersIcon   },
+  { href: '/learners',   label: 'Learners',          Icon: LearnersIcon   },
   { href: '/placements', label: 'Placements',       Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
   { href: '/ask-pulse',  label: 'Ask Pulse',        Icon: AskPulseIcon   },
   {

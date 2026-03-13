@@ -6,10 +6,16 @@ import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
   type SortingState,
   type ColumnSizingState,
+  type ColumnFiltersState,
+  type Column,
+  type FilterFn,
 } from '@tanstack/react-table'
 
 type ColumnVisibilityState = Record<string, boolean>
@@ -78,6 +84,83 @@ type LearnerRow = {
   tech_score:         number | null
 }
 
+// ── Multi-select filter ───────────────────────────────────────────────────────
+const multiSelectFilter: FilterFn<LearnerRow> = (row, colId, filterValues: string[]) =>
+  !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
+multiSelectFilter.autoRemove = (val: string[]) => !val?.length
+
+function FilterDropdown({ column }: { column: Column<LearnerRow, unknown> }) {
+  const [open, setOpen]  = useState(false)
+  const containerRef     = useRef<HTMLDivElement>(null)
+  const selected         = (column.getFilterValue() as string[]) ?? []
+
+  useEffect(() => {
+    if (!open) return
+    function onOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [open])
+
+  const options = Array.from(column.getFacetedUniqueValues().keys())
+    .filter((v) => v != null && v !== '')
+    .map(String)
+    .sort()
+
+  function toggle(val: string) {
+    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
+    column.setFilterValue(next.length ? next : undefined)
+  }
+
+  const label =
+    selected.length === 0 ? 'All'
+    : selected.length === 1 ? selected[0]
+    : `${selected.length} selected`
+
+  return (
+    <div ref={containerRef} className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-xs font-normal normal-case tracking-normal focus:outline-none ${
+          selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-0.5 max-h-52 min-w-[140px] overflow-y-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { column.setFilterValue(undefined); setOpen(false) }}
+              className="w-full border-b border-zinc-100 px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50"
+            >
+              Clear filter
+            </button>
+          )}
+          {options.map((opt) => (
+            <label key={opt} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={() => toggle(opt)}
+                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+          {options.length === 0 && <p className="px-3 py-1 text-xs text-zinc-400">No values</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const col = createColumnHelper<LearnerRow>()
 
 // Column metadata for the visibility toggle menu
@@ -122,11 +205,13 @@ const columns = [
   col.accessor('batch_name', {
     header: 'Batch',
     size: 140,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
   }),
   col.accessor('status', {
     header: 'Status',
     size: 130,
+    filterFn: multiSelectFilter,
     cell: (info) => (
       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[info.getValue()] ?? 'bg-zinc-100 text-zinc-600'}`}>
         {info.getValue()}
@@ -136,16 +221,19 @@ const columns = [
   col.accessor('lf_name', {
     header: 'LF',
     size: 160,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
   }),
   col.accessor('new_lf', {
     header: 'New LF',
     size: 160,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('track', {
     header: 'Track',
     size: 140,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
   }),
   col.accessor('join_date', {
@@ -161,6 +249,7 @@ const columns = [
   col.accessor('readiness', {
     header: 'Readiness',
     size: 130,
+    filterFn: multiSelectFilter,
     cell: (info) => {
       const val = info.getValue()
       if (!val) return <span className="text-zinc-400">—</span>
@@ -174,6 +263,7 @@ const columns = [
   col.accessor('current_location', {
     header: 'Location',
     size: 150,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('blacklisted_date', {
@@ -193,16 +283,19 @@ const columns = [
   col.accessor('year_of_graduation', {
     header: 'Grad Year',
     size: 100,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="tabular-nums text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('degree', {
     header: 'Degree',
     size: 150,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('specialisation', {
     header: 'Specialisation',
     size: 160,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('proactiveness', {
@@ -226,6 +319,7 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
   const [sorting, setSorting]               = useState<SortingState>([])
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(loadVisibility)
+  const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [showColMenu, setShowColMenu]       = useState(false)
   const colMenuRef                          = useRef<HTMLDivElement>(null)
 
@@ -242,8 +336,9 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
   const table = useReactTable({
     data: learners,
     columns,
-    state: { sorting, columnSizing, columnVisibility },
+    state: { sorting, columnSizing, columnVisibility, columnFilters },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater) => {
       setColumnVisibility((old: ColumnVisibilityState) => {
         const next = typeof updater === 'function' ? updater(old) : updater
@@ -260,6 +355,9 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     columnResizeMode: 'onChange',
     getRowId: (row) => row.learner_id,
   })
@@ -324,6 +422,7 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
                       {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
                       {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                     </div>
+                    {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
                     {header.column.getCanResize() && (
                       <div
                         onMouseDown={header.getResizeHandler()}
