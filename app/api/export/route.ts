@@ -42,29 +42,36 @@ async function exportAlumni(supabase: Awaited<ReturnType<typeof createServerSupa
 }
 
 async function exportApplications(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
-  const { data, error } = await supabase
-    .from('applications')
-    .select(`
-      id, learner_id, status, resume_url, salary_lpa,
-      not_shortlisted_reason, not_shortlisted_reasons,
-      rejection_feedback, rejection_reasons,
-      created_at, shortlisting_decision_taken_at,
-      interviews_started_at, hiring_decision_taken_at,
-      roles(role_title, location, salary_range, companies(company_name)),
-      learners(users!learners_user_id_fkey(name, email))
-    `)
-    .order('created_at', { ascending: false })
-  if (error) throw error
+  const [
+    { data: apps,      error: appsErr  },
+    { data: users,     error: usersErr },
+    { data: roles,     error: rolesErr },
+    { data: companies, error: coErr    },
+  ] = await Promise.all([
+    supabase.from('applications').select('*').order('created_at', { ascending: false }),
+    supabase.from('users').select('id, name, email'),
+    supabase.from('roles').select('id, role_title, location, salary_range, company_id'),
+    supabase.from('companies').select('id, company_name'),
+  ])
+  if (appsErr)  throw appsErr
+  if (usersErr) throw usersErr
+  if (rolesErr) throw rolesErr
+  if (coErr)    throw coErr
 
-  return (data ?? []).map((app) => {
-    const role    = app.roles    as { role_title: string; location: string; salary_range: string | null; companies: { company_name: string } | null } | null
-    const learner = app.learners as { users: { name: string; email: string } | null } | null
+  const userMap    = Object.fromEntries((users    ?? []).map((u) => [u.id, u]))
+  const roleMap    = Object.fromEntries((roles    ?? []).map((r) => [r.id, r]))
+  const companyMap = Object.fromEntries((companies ?? []).map((c) => [c.id, c.company_name]))
+
+  return (apps ?? []).map((app) => {
+    const user    = userMap[app.user_id ?? '']
+    const role    = roleMap[app.role_id ?? '']
+    const company = role ? companyMap[role.company_id] ?? '' : ''
     return {
       id:                              app.id,
       learner_id:                      app.learner_id ?? '',
-      learner_name:                    learner?.users?.name  ?? '',
-      learner_email:                   learner?.users?.email ?? '',
-      company:                         role?.companies?.company_name ?? '',
+      learner_name:                    user?.name  ?? '',
+      learner_email:                   user?.email ?? '',
+      company,
       role_title:                      role?.role_title  ?? '',
       location:                        role?.location    ?? '',
       salary_range:                    role?.salary_range ?? '',
