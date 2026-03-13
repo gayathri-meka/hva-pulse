@@ -106,7 +106,7 @@ async function exportRoles(supabase: Awaited<ReturnType<typeof createServerSupab
   if (error) throw error
 
   return (data ?? []).map((r) => {
-    const company = r.companies as { company_name: string } | null
+    const company = r.companies as unknown as { company_name: string } | null
     return {
       id:            r.id,
       company_name:  company?.company_name ?? '',
