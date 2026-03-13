@@ -20,8 +20,7 @@ export default function AlumniAnalytics({
   fyRows:     FyRow[]
   cohortRows: CohortRow[]
 }) {
-  const [tab, setTab]         = useState<'fy' | 'cohort'>('fy')
-  const [editRow, setEditRow] = useState<CohortRow | null>(null)
+  const [editRow, setEditRow]        = useState<CohortRow | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const fyTotal = fyRows.reduce((s, r) => s + r.count, 0)
@@ -46,66 +45,48 @@ export default function AlumniAnalytics({
 
   return (
     <>
-      {/* Sub-tabs */}
-      <div className="relative mb-5 border-b border-zinc-200">
-        <nav className="flex gap-5">
-          {(['fy', 'cohort'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`relative pb-2.5 text-sm font-medium transition-colors ${
-                tab === t ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
-              }`}
-            >
-              {t === 'fy' ? 'By FY' : 'By Cohort'}
-              {tab === t && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5BAE5B]" />}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <div className="flex flex-wrap items-start gap-8">
 
-      {/* ── By FY ── */}
-      {tab === 'fy' && (
-        <div className="w-full max-w-xs rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50">
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">FY</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Learners Placed</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {fyRows.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="px-4 py-8 text-center text-zinc-400">No placement data yet</td>
-                </tr>
-              )}
-              {fyRows.map((r) => (
-                <tr key={r.placed_fy} className="hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-medium text-zinc-900">{r.placed_fy}</td>
-                  <td className="px-4 py-3 text-right text-zinc-700">{r.count}</td>
-                </tr>
-              ))}
-            </tbody>
-            {fyRows.length > 0 && (
-              <tfoot>
-                <tr className="border-t border-zinc-200 bg-zinc-50">
-                  <td className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Total</td>
-                  <td className="px-4 py-3 text-right font-semibold text-zinc-900">{fyTotal}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
-
-      {/* ── By Cohort ── */}
-      {tab === 'cohort' && (
+        {/* ── By FY ── */}
         <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">By FY Placed</p>
+          <div className="w-64 rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50">
+                  <th className="px-4 py-3 text-left   text-xs font-medium uppercase tracking-wide text-zinc-500">FY</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium uppercase tracking-wide text-zinc-500">Placed</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {fyRows.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="px-4 py-6 text-center text-zinc-400">No data yet</td>
+                  </tr>
+                )}
+                {fyRows.map((r) => (
+                  <tr key={r.placed_fy} className="hover:bg-zinc-50">
+                    <td className="px-4 py-2.5 font-medium text-zinc-900">{r.placed_fy}</td>
+                    <td className="px-4 py-2.5 text-right text-zinc-700">{r.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {fyRows.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-zinc-200 bg-zinc-50">
+                    <td className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">Total</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{fyTotal}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+
+        {/* ── By Cohort ── */}
+        <div className="flex-1 min-w-0">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs text-zinc-400">
-              Onboarded &amp; Dropouts are manually entered. Placed is live from the alumni table.
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">By Cohort</p>
             <button
               onClick={openAdd}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
@@ -114,15 +95,15 @@ export default function AlumniAnalytics({
             </button>
           </div>
 
-          <div className="w-full max-w-2xl rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50">
-                  <th className="px-4 py-3 text-left   text-xs font-medium uppercase tracking-wide text-zinc-500">Cohort FY</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium uppercase tracking-wide text-zinc-500">Onboarded</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium uppercase tracking-wide text-zinc-500">Dropouts</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium uppercase tracking-wide text-zinc-500">Placed</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium uppercase tracking-wide text-zinc-500">Placement %</th>
+                  <th className="px-4 py-3 text-left  text-xs font-medium uppercase tracking-wide text-zinc-500">Cohort FY</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Onboarded</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Dropouts</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Placed</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Placement %</th>
                   <th className="w-10" />
                 </tr>
               </thead>
@@ -130,7 +111,7 @@ export default function AlumniAnalytics({
                 {cohortRows.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
-                      No cohort data yet. Click &ldquo;+ Add cohort&rdquo; to get started.
+                      No cohort data yet — click &ldquo;+ Add cohort&rdquo; to get started.
                     </td>
                   </tr>
                 )}
@@ -143,18 +124,18 @@ export default function AlumniAnalytics({
                     : null
                   return (
                     <tr key={row.cohort_fy} className="hover:bg-zinc-50">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{row.cohort_fy}</td>
-                      <td className="px-4 py-3 text-right text-zinc-700">
+                      <td className="px-4 py-2.5 font-medium text-zinc-900">{row.cohort_fy}</td>
+                      <td className="px-4 py-2.5 text-right text-zinc-700">
                         {row.onboarded !== null ? row.onboarded : <span className="text-zinc-300">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-right text-zinc-700">
+                      <td className="px-4 py-2.5 text-right text-zinc-700">
                         {row.dropouts !== null ? row.dropouts : <span className="text-zinc-300">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-right text-zinc-700">{row.placed}</td>
-                      <td className="px-4 py-3 text-right text-zinc-700">
+                      <td className="px-4 py-2.5 text-right text-zinc-700">{row.placed}</td>
+                      <td className="px-4 py-2.5 text-right text-zinc-700">
                         {rate !== null ? `${rate}%` : <span className="text-zinc-300">—</span>}
                       </td>
-                      <td className="px-2 py-3 text-center">
+                      <td className="px-2 py-2.5 text-center">
                         <button onClick={() => openEdit(row)} className="text-zinc-400 hover:text-zinc-600" title="Edit">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
                             <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.263a1.75 1.75 0 0 0 0-2.474Z" />
@@ -168,8 +149,11 @@ export default function AlumniAnalytics({
               </tbody>
             </table>
           </div>
+          <p className="mt-2 text-xs text-zinc-400">
+            Onboarded &amp; Dropouts are manually entered. Placed is live from the alumni table.
+          </p>
         </div>
-      )}
+      </div>
 
       {/* Add / Edit modal */}
       {editRow && (

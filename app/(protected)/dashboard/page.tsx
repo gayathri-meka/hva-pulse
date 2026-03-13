@@ -234,6 +234,17 @@ export default async function DashboardPage({ searchParams }: Props) {
             </div>
           </Link>
         </div>
+
+        {/* Total placed summary */}
+        {(placedSelf + placedHVA) > 0 && (
+          <p className="mt-3 text-xs text-zinc-400">
+            <span className="font-semibold text-zinc-700">{placedSelf + placedHVA}</span> placed in total
+            {' · '}
+            <span className="text-blue-500">{placedSelf} self</span>
+            {' · '}
+            <span className="text-violet-500">{placedHVA} HVA</span>
+          </p>
+        )}
       </div>
 
       {/* ── Placement Health ───────────────────────────────────────────── */}

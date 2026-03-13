@@ -32,7 +32,7 @@ describe('AlumniAnalytics — FY tab (default)', () => {
 
   test('shows empty state when no FY rows', () => {
     render(<AlumniAnalytics fyRows={[]} cohortRows={noCohorts} />)
-    expect(screen.getByText('No placement data yet')).toBeInTheDocument()
+    expect(screen.getByText('No data yet')).toBeInTheDocument()
   })
 
   test('does not render total row when empty', () => {
