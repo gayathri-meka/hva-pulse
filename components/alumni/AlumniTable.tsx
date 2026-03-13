@@ -253,8 +253,8 @@ type EditForm = {
 
 export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
   const [sorting, setSorting]               = useState<SortingState>([])
-  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(loadVisibility)
+  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(DEFAULT_VISIBILITY)
   const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter]     = useState('')
   const [showColMenu, setShowColMenu]       = useState(false)
@@ -312,6 +312,12 @@ export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [])
+
+  // Load persisted sizing + visibility from localStorage after hydration
+  useEffect(() => {
+    setColumnSizing(loadSizing())
+    setColumnVisibility(loadVisibility())
+  }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {

@@ -339,11 +339,17 @@ export default function LearnersTable({ learners, cohorts = [], isLF = false, vi
   const activeCohort   = searchParams.get('fy') ?? ''
 
   const [sorting, setSorting]               = useState<SortingState>([])
-  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(loadVisibility)
+  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(DEFAULT_VISIBILITY)
   const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [showColMenu, setShowColMenu]       = useState(false)
   const colMenuRef                          = useRef<HTMLDivElement>(null)
+
+  // Load persisted sizing + visibility from localStorage after hydration
+  useEffect(() => {
+    setColumnSizing(loadSizing())
+    setColumnVisibility(loadVisibility())
+  }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
