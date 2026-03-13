@@ -6,11 +6,12 @@ import { upsertCohortStat } from '@/app/(protected)/alumni/actions'
 type FyRow = { placed_fy: string; count: number }
 
 export type CohortRow = {
-  cohort_fy: string
-  id:        string | null
-  onboarded: number | null
-  dropouts:  number | null
-  placed:    number
+  cohort_fy:    string
+  id:           string | null
+  onboarded:    number | null
+  dropouts:     number | null
+  placed:       number
+  autoComputed: boolean   // true = live from learners table; false = manual cohort_stats
 }
 
 export default function AlumniAnalytics({
@@ -26,7 +27,7 @@ export default function AlumniAnalytics({
   const fyTotal = fyRows.reduce((s, r) => s + r.count, 0)
 
   function openEdit(row: CohortRow) { setEditRow(row) }
-  function openAdd()                { setEditRow({ cohort_fy: '', id: null, onboarded: null, dropouts: null, placed: 0 }) }
+  function openAdd()                { setEditRow({ cohort_fy: '', id: null, onboarded: null, dropouts: null, placed: 0, autoComputed: false }) }
   function closeModal()             { setEditRow(null) }
 
   function handleSave(e: React.FormEvent<HTMLFormElement>) {
@@ -136,12 +137,16 @@ export default function AlumniAnalytics({
                         {rate !== null ? `${rate}%` : <span className="text-zinc-300">—</span>}
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <button onClick={() => openEdit(row)} className="text-zinc-400 hover:text-zinc-600" title="Edit">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-                            <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.263a1.75 1.75 0 0 0 0-2.474Z" />
-                            <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9a.75.75 0 0 1 1.5 0v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
-                          </svg>
-                        </button>
+                        {row.autoComputed ? (
+                          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600" title="Auto-computed from learners table">live</span>
+                        ) : (
+                          <button onClick={() => openEdit(row)} className="text-zinc-400 hover:text-zinc-600" title="Edit">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                              <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.263a1.75 1.75 0 0 0 0-2.474Z" />
+                              <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9a.75.75 0 0 1 1.5 0v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
+                            </svg>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )

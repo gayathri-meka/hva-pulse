@@ -78,12 +78,7 @@ export default async function AlumniPage({
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([placed_fy, count]) => ({ placed_fy, count }))
 
-  // Cohort view: merge manually-entered cohort_stats with live placed counts from alumni
-  const { data: rawCohortStats } = await supabase
-    .from('cohort_stats')
-    .select('id, cohort_fy, onboarded, dropouts')
-    .order('cohort_fy')
-
+  // Cohort view — placed counts (from alumni table, grouped by cohort_fy)
   const cohortPlacedMap = new Map<string, number>()
   for (const a of alumni) {
     if (a.cohort_fy) {
@@ -91,21 +86,45 @@ export default async function AlumniPage({
     }
   }
 
+  // Cohorts tracked in the learners table → onboarded + dropouts computed live
+  const { data: rawLearners } = await supabase
+    .from('learners')
+    .select('cohort_fy, status')
+
+  const learnerCohortMap = new Map<string, { onboarded: number; dropouts: number }>()
+  for (const l of rawLearners ?? []) {
+    if (!l.cohort_fy) continue
+    const entry = learnerCohortMap.get(l.cohort_fy) ?? { onboarded: 0, dropouts: 0 }
+    entry.onboarded++
+    if (l.status === 'Dropout' || l.status === 'Discontinued') entry.dropouts++
+    learnerCohortMap.set(l.cohort_fy, entry)
+  }
+
+  // Historical cohorts: manually entered via UI
+  const { data: rawCohortStats } = await supabase
+    .from('cohort_stats')
+    .select('id, cohort_fy, onboarded, dropouts')
+    .order('cohort_fy')
+
   const allCohortFys = new Set([
     ...(rawCohortStats ?? []).map((r) => r.cohort_fy as string),
+    ...Array.from(learnerCohortMap.keys()),
     ...Array.from(cohortPlacedMap.keys()),
   ])
 
   const cohortRows = Array.from(allCohortFys)
     .sort()
     .map((cohort_fy) => {
-      const stat = (rawCohortStats ?? []).find((r) => r.cohort_fy === cohort_fy)
+      const fromLearners = learnerCohortMap.get(cohort_fy)
+      const stat         = (rawCohortStats ?? []).find((r) => r.cohort_fy === cohort_fy)
+      // Prefer live learner data; fall back to manual cohort_stats
       return {
         cohort_fy,
-        id:        stat?.id        ?? null,
-        onboarded: stat?.onboarded ?? null,
-        dropouts:  stat?.dropouts  ?? null,
-        placed:    cohortPlacedMap.get(cohort_fy) ?? 0,
+        id:           fromLearners ? null : (stat?.id ?? null),
+        onboarded:    fromLearners?.onboarded ?? stat?.onboarded ?? null,
+        dropouts:     fromLearners?.dropouts  ?? stat?.dropouts  ?? null,
+        placed:       cohortPlacedMap.get(cohort_fy) ?? 0,
+        autoComputed: !!fromLearners,
       }
     })
 
