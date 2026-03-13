@@ -3,7 +3,6 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
-import LearnersFilters from './LearnersFilters'
 import LearnersTable from '@/components/learners/LearnersTable'
 import SnapshotControls from '@/components/learners/SnapshotControls'
 import LearnerSnapshot, {
@@ -40,7 +39,7 @@ export default async function LearnersPage({ searchParams }: Props) {
 
   // FY year filter — default to '2025-26' unless explicitly set to 'all'
   const activeFy = fy !== 'all' ? (fy ?? '2025-26') : null
-  if (activeFy) query = query.eq('fy_year', activeFy)
+  if (activeFy) query = query.eq('cohort_fy', activeFy)
 
   const { data: rawLearners } = await query
 
@@ -61,11 +60,11 @@ export default async function LearnersPage({ searchParams }: Props) {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Filter options (for All Learners tab) ─────────────────────────────────
-  const { data: allLearners } = await supabase.from('learners').select('status, batch_name, lf_name, fy_year')
+  const { data: allLearners } = await supabase.from('learners').select('status, batch_name, lf_name, cohort_fy')
   const statuses = Array.from(new Set(allLearners?.map((l) => l.status).filter(Boolean))).sort() as string[]
   const batches  = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
   const lfs      = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort() as string[]
-  const fyYears  = Array.from(new Set(allLearners?.map((l) => l.fy_year).filter(Boolean))).sort() as string[]
+  const cohorts  = Array.from(new Set(allLearners?.map((l) => l.cohort_fy).filter(Boolean))).sort() as string[]
 
   // ── Snapshot tab: fetch placement data for the selected learner ───────────
   let snapshotLearner: SnapshotLearner | null = null
@@ -185,18 +184,14 @@ export default async function LearnersPage({ searchParams }: Props) {
 
       {/* ── All Learners tab ───────────────────────────────────────────── */}
       {!isSnapshot && (
-        <>
-          <div className="mb-5">
-            <Suspense>
-              <LearnersFilters
-                fyYears={fyYears}
-                isLF={appUser.role === 'LF'}
-                viewAll={viewAll === '1'}
-              />
-            </Suspense>
-          </div>
-          <LearnersTable learners={learners} />
-        </>
+        <Suspense fallback={null}>
+          <LearnersTable
+            learners={learners}
+            cohorts={cohorts}
+            isLF={appUser.role === 'LF'}
+            viewAll={viewAll === '1'}
+          />
+        </Suspense>
       )}
 
       {/* ── Snapshot tab ───────────────────────────────────────────────── */}

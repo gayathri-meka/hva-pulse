@@ -33,7 +33,7 @@ export default function DashboardFilters({ lfs, batches }: Props) {
   }
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-2">
+    <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
       <div className="relative">
         <select value={activeLf} onChange={(e) => update('lf', e.target.value)} className={selectCls}>
           <option value="">All LFs</option>

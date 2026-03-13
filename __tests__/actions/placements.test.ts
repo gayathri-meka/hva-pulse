@@ -124,7 +124,13 @@ describe('updateApplicationStatus', () => {
   })
 
   test('sets TAT timestamp for hiring decision', async () => {
-    const { mockClient, mockUpdate } = makeUpdateMock()
+    // hired path also selects the application + related data for alumni upsert
+    const mockSingle  = vi.fn().mockResolvedValue({ data: null })
+    const mockEqSel   = vi.fn().mockReturnValue({ single: mockSingle })
+    const mockSelect  = vi.fn().mockReturnValue({ eq: mockEqSel })
+    const mockEqUpd   = vi.fn().mockResolvedValue({ error: null })
+    const mockUpdate  = vi.fn().mockReturnValue({ eq: mockEqUpd })
+    const mockClient  = { from: vi.fn().mockReturnValue({ update: mockUpdate, select: mockSelect }) }
     vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
 
     await updateApplicationStatus('app-1', 'hired')

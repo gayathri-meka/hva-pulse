@@ -1,65 +1,87 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Suspense } from 'react'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import AlumniFilters from '@/components/alumni/AlumniFilters'
+import AlumniTable from '@/components/alumni/AlumniTable'
+import AlumniAnalytics from '@/components/alumni/AlumniAnalytics'
 
 export const dynamic = 'force-dynamic'
 
-interface Props {
-  searchParams: Promise<{ fy?: string; status?: string }>
-}
-
 type AlumniJob = {
-  company:        string
-  role:           string
-  salary:         number | null
+  company:         string
+  role:            string
+  salary:          number | null
   placement_month: string | null
-  is_current:     boolean
+  is_current:      boolean
 }
 
 type AlumniRow = {
   id:                string
   name:              string
   email:             string | null
-  fy_year:           string
+  cohort_fy:         string
+  placed_fy:         string | null
   employment_status: string
   contact_number:    string | null
   alumni_jobs:       AlumniJob[]
 }
 
-export default async function AlumniPage({ searchParams }: Props) {
-  const { fy, status } = await searchParams
-
+export default async function AlumniPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>
+}) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
 
+  const { view } = await searchParams
+  const activeTab = view === 'analytics' ? 'analytics' : 'roster'
+
   const supabase = await createServerSupabaseClient()
 
-  // Unfiltered query for FY year options
-  const { data: allAlumni } = await supabase
-    .from('alumni')
-    .select('fy_year')
-
-  const fyYears = Array.from(
-    new Set((allAlumni ?? []).map((a) => a.fy_year).filter(Boolean))
-  ).sort() as string[]
-
-  // Filtered query
-  let query = supabase
+  const { data: rawAlumni } = await supabase
     .from('alumni')
     .select('*, alumni_jobs(company, role, salary, placement_month, is_current)')
     .order('name')
 
-  if (fy)     query = query.eq('fy_year', fy)
-  if (status) query = query.eq('employment_status', status)
-
-  const { data: rawAlumni } = await query
   const alumni = (rawAlumni ?? []) as AlumniRow[]
 
   const employedCount   = alumni.filter((a) => a.employment_status === 'employed').length
   const unemployedCount = alumni.filter((a) => a.employment_status === 'unemployed').length
+
+  const alumniRows = alumni.map((a) => {
+    const job = a.alumni_jobs.find((j) => j.is_current) ?? a.alumni_jobs[0] ?? null
+    return {
+      id:                a.id,
+      name:              a.name,
+      email:             a.email,
+      cohort_fy:         a.cohort_fy,
+      placed_fy:         a.placed_fy,
+      employment_status: a.employment_status,
+      contact_number:    a.contact_number,
+      company:           job?.company ?? null,
+      role:              job?.role ?? null,
+      salary:            job?.salary ?? null,
+      placement_month:   job?.placement_month ?? null,
+    }
+  })
+
+  // Analytics: group placed alumni by placed_fy
+  const fyMap = new Map<string, number>()
+  for (const a of alumni) {
+    if (a.placed_fy) {
+      fyMap.set(a.placed_fy, (fyMap.get(a.placed_fy) ?? 0) + 1)
+    }
+  }
+  const fyRows = Array.from(fyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([placed_fy, count]) => ({ placed_fy, count }))
+
+  const tabs = [
+    { key: 'roster',    label: 'Roster',    href: '/alumni' },
+    { key: 'analytics', label: 'Analytics', href: '/alumni?view=analytics' },
+  ]
 
   return (
     <div>
@@ -68,11 +90,6 @@ export default async function AlumniPage({ searchParams }: Props) {
         <h1 className="text-2xl font-bold text-zinc-900">Alumni</h1>
         <p className="mt-1 text-sm text-zinc-500">Placed learners across all cohorts</p>
       </div>
-
-      {/* Filters */}
-      <Suspense>
-        <AlumniFilters fyYears={fyYears} />
-      </Suspense>
 
       {/* Stats */}
       <div className="mb-6 grid grid-cols-3 gap-4">
@@ -90,65 +107,31 @@ export default async function AlumniPage({ searchParams }: Props) {
         </div>
       </div>
 
-      {/* Table */}
-      <p className="mb-2 text-sm text-zinc-500">
-        {alumni.length} alumni
-      </p>
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Name</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Email</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">FY Year</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Status</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Company</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Role</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Salary</th>
-                <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Contact</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {alumni.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-zinc-400">
-                    No alumni records found.
-                  </td>
-                </tr>
-              ) : (
-                alumni.map((a) => {
-                  const currentJob = a.alumni_jobs.find((j) => j.is_current) ?? a.alumni_jobs[0] ?? null
-                  return (
-                    <tr key={a.id} className="hover:bg-zinc-50">
-                      <td className="px-6 py-3.5 font-medium text-zinc-900">{a.name}</td>
-                      <td className="px-6 py-3.5 text-zinc-500">{a.email ?? '—'}</td>
-                      <td className="px-6 py-3.5 text-zinc-600">{a.fy_year}</td>
-                      <td className="px-6 py-3.5">
-                        {a.employment_status === 'employed' ? (
-                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                            Employed
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                            Unemployed
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-3.5 text-zinc-600">{currentJob?.company ?? '—'}</td>
-                      <td className="px-6 py-3.5 text-zinc-600">{currentJob?.role ?? '—'}</td>
-                      <td className="px-6 py-3.5 text-zinc-600">
-                        {currentJob?.salary != null ? `${currentJob.salary} LPA` : '—'}
-                      </td>
-                      <td className="px-6 py-3.5 text-zinc-500">{a.contact_number ?? '—'}</td>
-                    </tr>
-                  )
-                })
+      {/* Tabs */}
+      <div className="relative mb-6 border-b border-zinc-200">
+        <nav className="flex gap-6">
+          {tabs.map((tab) => (
+            <Link
+              key={tab.key}
+              href={tab.href}
+              className={`relative pb-3 text-sm font-medium transition-colors ${
+                activeTab === tab.key
+                  ? 'text-zinc-900'
+                  : 'text-zinc-500 hover:text-zinc-700'
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5BAE5B]" />
               )}
-            </tbody>
-          </table>
-        </div>
+            </Link>
+          ))}
+        </nav>
       </div>
+
+      {/* Content */}
+      {activeTab === 'roster' && <AlumniTable alumni={alumniRows} />}
+      {activeTab === 'analytics' && <AlumniAnalytics fyRows={fyRows} />}
     </div>
   )
 }

@@ -66,8 +66,8 @@ const REJECTION_REASONS = [
 ]
 
 type PendingChange =
-  | { bulk: false; id: string;       newStatus: 'not_shortlisted' | 'rejected' }
-  | { bulk: true;  ids: string[];    newStatus: 'not_shortlisted' | 'rejected' }
+  | { bulk: false; id: string;       newStatus: 'not_shortlisted' | 'rejected' | 'hired' }
+  | { bulk: true;  ids: string[];    newStatus: 'not_shortlisted' | 'rejected' | 'hired' }
   | null
 
 const col = createColumnHelper<ApplicationWithLearner>()
@@ -89,6 +89,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   const [noteText, setNoteText]             = useState('')
   const [checkedReasons, setCheckedReasons] = useState<Set<string>>(new Set())
   const [reasonsError, setReasonsError]     = useState(false)
+  const [salaryText, setSalaryText]         = useState('')
   const [bulkSelect, setBulkSelect]         = useState('')
   const [, startTransition] = useTransition()
 
@@ -97,11 +98,12 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     setNoteText('')
     setCheckedReasons(new Set())
     setReasonsError(false)
+    setSalaryText('')
   }
 
   function handleStatusChange(id: string, newStatus: string) {
-    if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
-      openModal({ bulk: false, id, newStatus })
+    if (newStatus === 'not_shortlisted' || newStatus === 'rejected' || newStatus === 'hired') {
+      openModal({ bulk: false, id, newStatus: newStatus as 'not_shortlisted' | 'rejected' | 'hired' })
       return
     }
     setStatusMap((prev) => ({ ...prev, [id]: newStatus }))
@@ -111,8 +113,8 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   function handleBulkStatusChange(newStatus: string) {
     if (!newStatus) return
     const ids = selectedApplications.map((a) => a.id)
-    if (newStatus === 'not_shortlisted' || newStatus === 'rejected') {
-      openModal({ bulk: true, ids, newStatus })
+    if (newStatus === 'not_shortlisted' || newStatus === 'rejected' || newStatus === 'hired') {
+      openModal({ bulk: true, ids, newStatus: newStatus as 'not_shortlisted' | 'rejected' | 'hired' })
       setBulkSelect('')
       return
     }
@@ -126,6 +128,25 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
 
   function handleModalConfirm() {
     const change = pendingChange!
+
+    // Hired — no reasons required, just optional salary
+    if (change.newStatus === 'hired') {
+      const salary = salaryText ? parseFloat(salaryText) : undefined
+      if (change.bulk) {
+        setStatusMap((prev) => Object.fromEntries(
+          Object.entries(prev).map(([k, v]) => [k, change.ids.includes(k) ? 'hired' : v])
+        ))
+        startTransition(() => bulkUpdateApplicationStatus(change.ids, 'hired'))
+        setRowSelection({})
+      } else {
+        setStatusMap((prev) => ({ ...prev, [change.id]: 'hired' }))
+        startTransition(() => updateApplicationStatus(change.id, 'hired', undefined, undefined, salary))
+      }
+      setPendingChange(null)
+      setSalaryText('')
+      return
+    }
+
     if (checkedReasons.size === 0) { setReasonsError(true); return }
 
     const reasons = Array.from(checkedReasons)
@@ -152,6 +173,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     setNoteText('')
     setCheckedReasons(new Set())
     setReasonsError(false)
+    setSalaryText('')
   }
 
   const columns = [
@@ -410,72 +432,104 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
         </div>
       </div>
 
-      {/* Reason / feedback modal */}
+      {/* Status modal */}
       {pendingChange && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={handleModalCancel} />
           <div className="relative w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
-            <h3 className="mb-1 text-base font-semibold text-zinc-900">
-              {pendingChange.newStatus === 'not_shortlisted' ? 'Not Shortlisted' : 'Rejected'}
-              {pendingChange.bulk && (
-                <span className="ml-2 text-sm font-normal text-zinc-400">
-                  · {pendingChange.ids.length} learner{pendingChange.ids.length !== 1 ? 's' : ''}
-                </span>
-              )}
-            </h3>
-            <p className="mb-4 text-sm text-zinc-500">
-              {pendingChange.newStatus === 'not_shortlisted'
-                ? pendingChange.bulk
-                  ? "Why weren't these candidates shortlisted?"
-                  : "Why wasn't this candidate shortlisted?"
-                : pendingChange.bulk
-                  ? 'Why were these candidates rejected?'
-                  : 'Why was this candidate rejected?'}
-            </p>
 
-            {(() => {
-              const reasons = pendingChange.newStatus === 'not_shortlisted' ? NS_REASONS : REJECTION_REASONS
-              const placeholder = pendingChange.newStatus === 'not_shortlisted'
-                ? 'e.g. Stronger candidates were selected for this round'
-                : 'e.g. Needs more depth in system design'
-              return (
-                <>
-                  <div className={`space-y-2.5 rounded-lg border p-3 ${reasonsError ? 'border-red-300 bg-red-50' : 'border-zinc-200'}`}>
-                    {reasons.map((reason) => (
-                      <label key={reason} className="flex cursor-pointer items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={checkedReasons.has(reason)}
-                          onChange={(e) => {
-                            setCheckedReasons((prev) => {
-                              const next = new Set(prev)
-                              e.target.checked ? next.add(reason) : next.delete(reason)
-                              return next
-                            })
-                            setReasonsError(false)
-                          }}
-                          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                        />
-                        <span className="text-sm text-zinc-700">{reason}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {reasonsError && (
-                    <p className="mt-1 text-xs text-red-600">Select at least one reason.</p>
+            {pendingChange.newStatus === 'hired' ? (
+              /* ── Hire modal ─────────────────────────────────────── */
+              <>
+                <h3 className="mb-1 text-base font-semibold text-zinc-900">
+                  Mark as Hired
+                  {pendingChange.bulk && (
+                    <span className="ml-2 text-sm font-normal text-zinc-400">
+                      · {pendingChange.ids.length} learner{pendingChange.ids.length !== 1 ? 's' : ''}
+                    </span>
                   )}
-                  <label className="mt-3 block text-xs font-medium text-zinc-500">
-                    Additional details <span className="text-zinc-400">(optional)</span>
-                  </label>
-                  <textarea
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    rows={2}
-                    placeholder={placeholder}
-                    className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
-                  />
-                </>
-              )
-            })()}
+                </h3>
+                <p className="mb-4 text-sm text-zinc-500">
+                  {pendingChange.bulk
+                    ? 'Salary will not be recorded for bulk hires.'
+                    : 'Optionally record the salary — this will appear in the Alumni table.'}
+                </p>
+                {!pendingChange.bulk && (
+                  <>
+                    <label className="block text-xs font-medium text-zinc-500">
+                      Salary (LPA) <span className="text-zinc-400">(optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={salaryText}
+                      onChange={(e) => setSalaryText(e.target.value)}
+                      placeholder="e.g. 8.5"
+                      className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              /* ── Not shortlisted / Rejected modal ───────────────── */
+              <>
+                <h3 className="mb-1 text-base font-semibold text-zinc-900">
+                  {pendingChange.newStatus === 'not_shortlisted' ? 'Not Shortlisted' : 'Rejected'}
+                  {pendingChange.bulk && (
+                    <span className="ml-2 text-sm font-normal text-zinc-400">
+                      · {pendingChange.ids.length} learner{pendingChange.ids.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </h3>
+                <p className="mb-4 text-sm text-zinc-500">
+                  {pendingChange.newStatus === 'not_shortlisted'
+                    ? pendingChange.bulk ? "Why weren't these candidates shortlisted?" : "Why wasn't this candidate shortlisted?"
+                    : pendingChange.bulk ? 'Why were these candidates rejected?' : 'Why was this candidate rejected?'}
+                </p>
+                {(() => {
+                  const reasons = pendingChange.newStatus === 'not_shortlisted' ? NS_REASONS : REJECTION_REASONS
+                  const placeholder = pendingChange.newStatus === 'not_shortlisted'
+                    ? 'e.g. Stronger candidates were selected for this round'
+                    : 'e.g. Needs more depth in system design'
+                  return (
+                    <>
+                      <div className={`space-y-2.5 rounded-lg border p-3 ${reasonsError ? 'border-red-300 bg-red-50' : 'border-zinc-200'}`}>
+                        {reasons.map((reason) => (
+                          <label key={reason} className="flex cursor-pointer items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={checkedReasons.has(reason)}
+                              onChange={(e) => {
+                                setCheckedReasons((prev) => {
+                                  const next = new Set(prev)
+                                  e.target.checked ? next.add(reason) : next.delete(reason)
+                                  return next
+                                })
+                                setReasonsError(false)
+                              }}
+                              className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                            />
+                            <span className="text-sm text-zinc-700">{reason}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {reasonsError && <p className="mt-1 text-xs text-red-600">Select at least one reason.</p>}
+                      <label className="mt-3 block text-xs font-medium text-zinc-500">
+                        Additional details <span className="text-zinc-400">(optional)</span>
+                      </label>
+                      <textarea
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        rows={2}
+                        placeholder={placeholder}
+                        className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                      />
+                    </>
+                  )
+                })()}
+              </>
+            )}
 
             <div className="mt-4 flex justify-end gap-2">
               <button

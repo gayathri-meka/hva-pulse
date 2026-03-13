@@ -197,17 +197,84 @@ export async function createApplication(formData: FormData) {
   revalidatePath('/placements/analytics')
 }
 
-export async function updateApplicationStatus(id: string, status: string, note?: string, reasons?: string[]) {
+export async function updateApplicationStatus(id: string, status: string, note?: string, reasons?: string[], salaryLpa?: number) {
   await requireAdmin()
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   const supabase = key ? createClient(url, key) : await createServerSupabaseClient()
 
-  const { error } = await supabase.from('applications').update(buildStatusUpdate(status, note, reasons)).eq('id', id)
+  const updates = buildStatusUpdate(status, note, reasons)
+  if (status === 'hired' && salaryLpa != null) updates.salary_lpa = salaryLpa
+
+  const { error } = await supabase.from('applications').update(updates).eq('id', id)
   if (error) throw new Error(`Failed to update status: ${error.message}`)
+
+  // ── Auto-upsert alumni when hired ────────────────────────────────────────
+  if (status === 'hired') {
+    const { data: app } = await supabase
+      .from('applications')
+      .select('user_id, role_id, learner_id')
+      .eq('id', id)
+      .single()
+
+    if (app?.user_id) {
+      const [{ data: role }, { data: learnerRow }] = await Promise.all([
+        supabase.from('roles').select('role_title, company_id').eq('id', app.role_id).single(),
+        supabase.from('learners')
+          .select('learner_id, cohort_fy, users!learners_user_id_fkey(name, email)')
+          .eq('user_id', app.user_id)
+          .single(),
+      ])
+
+      const company = role
+        ? (await supabase.from('companies').select('company_name').eq('id', role.company_id).single()).data
+        : null
+
+      type LearnerWithUser = { learner_id: string; cohort_fy: string | null; users: { name: string; email: string } | null }
+      const l = learnerRow as LearnerWithUser | null
+
+      if (l && role && company) {
+        // Find or create alumni row
+        const { data: existing } = await supabase
+          .from('alumni')
+          .select('id')
+          .eq('learner_id', l.learner_id)
+          .maybeSingle()
+
+        let alumniId: string | null = existing?.id ?? null
+
+        if (!alumniId) {
+          const { data: inserted } = await supabase.from('alumni').insert({
+            learner_id:        l.learner_id,
+            user_id:           app.user_id,
+            name:              l.users?.name ?? '',
+            email:             l.users?.email ?? null,
+            cohort_fy:         l.cohort_fy ?? '2025-26',
+            employment_status: 'employed',
+          }).select('id').single()
+          alumniId = inserted?.id ?? null
+        } else {
+          await supabase.from('alumni').update({ employment_status: 'employed', updated_at: new Date().toISOString() }).eq('id', alumniId)
+        }
+
+        if (alumniId) {
+          await supabase.from('alumni_jobs').delete().eq('alumni_id', alumniId).eq('is_current', true)
+          await supabase.from('alumni_jobs').insert({
+            alumni_id: alumniId,
+            company:   company.company_name,
+            role:      role.role_title,
+            salary:    salaryLpa ?? null,
+            is_current: true,
+          })
+        }
+      }
+    }
+  }
+
   revalidatePath('/placements/applications')
   revalidatePath('/placements/analytics')
+  revalidatePath('/alumni')
 }
 
 export async function bulkUpdateApplicationStatus(ids: string[], status: string, note?: string, reasons?: string[]) {

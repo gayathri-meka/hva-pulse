@@ -102,6 +102,15 @@ Active nav state: `bg-zinc-800 text-white` with a left green (`#5BAE5B`) bar ind
 
 `app/api/sync/route.ts` (POST, admin-only) reads a Google Sheet via service account, upserts learners into Supabase, and deletes rows no longer present in the sheet. LF name-to-user_id mapping is resolved at sync time.
 
+### Alumni Data Ownership — Important
+
+Two separate data sources feed the `alumni` table. Do NOT mix them up:
+
+- **Historical cohorts (pre-2025-26)** — managed entirely via the alumni sheet sync (`/api/sync-alumni`). Company/role/salary all come from the Google Sheet. Re-syncing the sheet is safe; it only touches rows present in the sheet.
+- **Current cohort (2025-26 onwards)** — alumni rows are auto-created by the learner sync (step 6) for learners with status "Placed - HVA" or "Placed - Self". Company/role/salary are populated automatically when an admin marks an application as `hired` in the Placements UI (see `updateApplicationStatus` in `actions.ts`). **Do not add these learners to the alumni sheet** — their data lives in Pulse.
+
+The alumni sheet sync will never overwrite Pulse-managed rows because those learners are not in the sheet. The learner sync uses `ignoreDuplicates: true` so it won't overwrite existing alumni rows either.
+
 ### Job Outreach Engine
 
 `app/(protected)/placements/` includes a Job Outreach tab backed by:
@@ -117,6 +126,7 @@ Active nav state: `bg-zinc-800 text-white` with a left green (`#5BAE5B`) bar ind
 - Client components that need optimistic updates use `useTransition` with server actions
 - Modals are rendered inline via the `Modal.tsx` component (fixed backdrop + centered panel), not a portal
 - TanStack Table v8 is used for the learners, applications, and matching tables with column resizing persisted to `localStorage`
+- Data tables: always use TanStack Table v8 (same pattern as LearnersTable / AlumniTable) — column resizing persisted to localStorage, column visibility toggle, multi-select FilterDropdown per column, row count display
 - Status badges follow a consistent color scheme: blue=applied/reviewed, amber=shortlisted/in-process, emerald=hired/open, red=rejected, zinc=closed/not-shortlisted/not-interested
 
 ## Database Schema

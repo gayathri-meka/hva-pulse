@@ -78,7 +78,8 @@ export async function POST() {
         core_skills_mentor_name: row['core_skills_mentor'] ?? '',
         track: row['track'] ?? '',
         join_date: row['join_date'] || null,
-        fy_year: '2025-26',
+        cohort_fy: '2025-26',
+        placed_fy: row['placed_fy'] || null,
       }
     }).filter((l) => l.user_id !== null)
 
@@ -101,7 +102,7 @@ export async function POST() {
           user_id: emailToUserId.get(r['email']) ?? null,
           name: r['name'] ?? '',
           email: r['email'] || null,
-          fy_year: '2025-26',
+          cohort_fy: '2025-26',
           employment_status: 'employed',
         }))
       if (alumniRows.length > 0) {

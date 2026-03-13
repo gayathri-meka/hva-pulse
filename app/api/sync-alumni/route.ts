@@ -20,7 +20,11 @@ export async function POST() {
 
     const rows = await getSheetRows(process.env.GOOGLE_ALUMNI_SHEET_ID!, 'Master')
 
+    // Log detected headers for debugging
+    const detectedHeaders = rows[0] ? Object.keys(rows[0]) : []
+
     let count = 0
+    const errors: string[] = []
 
     for (const row of rows) {
       const name = row['name']?.trim()
@@ -28,7 +32,8 @@ export async function POST() {
 
       const learnerId        = row['learner_id']?.trim() || null
       const email            = row['email']?.trim() || null
-      const fyYear           = row['fy_year']?.trim() || '2025-26'
+      const cohortFy         = row['cohort_fy']?.trim() || row['fy_year']?.trim() || '2025-26'
+      const placedFy         = row['placed_fy']?.trim() || null
       const contactNumber    = row['contact_number']?.trim() || null
 
       const rawStatus        = row['current_status']?.trim() ?? ''
@@ -50,19 +55,22 @@ export async function POST() {
         if (!isNaN(parsed)) salary = parsed
       }
 
-      const company = row['company']?.trim() || null
-      const role    = row['role']?.trim() || null
+      // Try common header variants (sheet headers vary)
+      const companyKey = Object.keys(row).find((k) => k === 'company' || k === 'company_name' || k === 'current_company' || k === 'employer')
+      const roleKey    = Object.keys(row).find((k) => k === 'role' || k === 'role_title' || k === 'designation' || k === 'position' || k === 'job_title')
+      const company = companyKey ? row[companyKey]?.trim() || null : null
+      const role    = roleKey    ? row[roleKey]?.trim()    || null : null
 
       // Upsert alumni
       let alumniId: string | null = null
 
       if (learnerId) {
-        // Upsert on learner_id
         const alumniRow = {
           learner_id:        learnerId,
           name,
           email,
-          fy_year:           fyYear,
+          cohort_fy:         cohortFy,
+          placed_fy:         placedFy,
           employment_status: employmentStatus,
           contact_number:    contactNumber,
           updated_at:        new Date().toISOString(),
@@ -73,24 +81,38 @@ export async function POST() {
           .select('id')
           .single()
 
-        if (upsertErr || !upserted) continue
-        alumniId = upserted.id
-      } else {
-        // No learner_id: check by name + fy_year to avoid duplicates
+        if (upsertErr) {
+          errors.push(`Row "${name}": learner_id upsert failed (${upsertErr.message}), falling back to name+cohort`)
+          // fall through to name+cohort path below (alumniId stays null)
+        } else if (upserted) {
+          alumniId = upserted.id
+        } else {
+          // Conflict resolved but no row returned — fetch it
+          const { data: fetched } = await supabase
+            .from('alumni')
+            .select('id')
+            .eq('learner_id', learnerId)
+            .maybeSingle()
+          if (fetched) alumniId = fetched.id
+        }
+      }
+
+      // name+cohort dedup path (runs if no learnerId OR if learnerId upsert failed)
+      if (!alumniId) {
         const { data: existing } = await supabase
           .from('alumni')
           .select('id')
           .eq('name', name)
-          .eq('fy_year', fyYear)
+          .eq('cohort_fy', cohortFy)
           .maybeSingle()
 
         if (existing) {
           alumniId = existing.id
-          // Update status
           await supabase
             .from('alumni')
             .update({
               email,
+              placed_fy:         placedFy,
               employment_status: employmentStatus,
               contact_number:    contactNumber,
               updated_at:        new Date().toISOString(),
@@ -102,35 +124,36 @@ export async function POST() {
             .insert({
               name,
               email,
-              fy_year:           fyYear,
+              cohort_fy:         cohortFy,
+              placed_fy:         placedFy,
               employment_status: employmentStatus,
               contact_number:    contactNumber,
             })
             .select('id')
             .single()
 
-          if (insertErr || !inserted) continue
+          if (insertErr || !inserted) {
+            errors.push(`Row "${name}": insert failed (${insertErr?.message ?? 'no data returned'})`)
+            continue
+          }
           alumniId = inserted.id
         }
       }
 
-      // Insert job if company + role present
+      // Update or insert current job (never delete before insert — avoids data loss on re-sync)
       if (alumniId && company && role) {
-        // Delete existing is_current=true jobs for this alumni
-        await supabase
+        const { data: existingJob } = await supabase
           .from('alumni_jobs')
-          .delete()
+          .select('id')
           .eq('alumni_id', alumniId)
           .eq('is_current', true)
+          .maybeSingle()
 
-        await supabase.from('alumni_jobs').insert({
-          alumni_id:       alumniId,
-          company,
-          role,
-          salary,
-          placement_month: placementMonth,
-          is_current:      true,
-        })
+        if (existingJob) {
+          await supabase.from('alumni_jobs').update({ company, role, salary, placement_month: placementMonth }).eq('id', existingJob.id)
+        } else {
+          await supabase.from('alumni_jobs').insert({ alumni_id: alumniId, company, role, salary, placement_month: placementMonth, is_current: true })
+        }
       }
 
       count++
@@ -141,7 +164,7 @@ export async function POST() {
       { onConflict: 'sheet_key' }
     )
 
-    return NextResponse.json({ success: true, count })
+    return NextResponse.json({ success: true, count, errors, detectedHeaders })
   } catch (err) {
     return NextResponse.json({ success: false, error: String(err) }, { status: 500 })
   }

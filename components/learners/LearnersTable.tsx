@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useRef, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   useReactTable,
   getCoreRowModel,
@@ -161,6 +162,16 @@ function FilterDropdown({ column }: { column: Column<LearnerRow, unknown> }) {
   )
 }
 
+const Chevron = () => (
+  <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
+      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+    </svg>
+  </div>
+)
+
+const selectCls = 'appearance-none rounded-lg border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm text-zinc-700 shadow-sm hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1'
+
 const col = createColumnHelper<LearnerRow>()
 
 // Column metadata for the visibility toggle menu
@@ -315,7 +326,18 @@ const columns = [
   }),
 ]
 
-export default function LearnersTable({ learners }: { learners: LearnerRow[] }) {
+interface LearnersTableProps {
+  learners:  LearnerRow[]
+  cohorts?:  string[]
+  isLF?:     boolean
+  viewAll?:  boolean
+}
+
+export default function LearnersTable({ learners, cohorts = [], isLF = false, viewAll = false }: LearnersTableProps) {
+  const router         = useRouter()
+  const searchParams   = useSearchParams()
+  const activeCohort   = searchParams.get('fy') ?? ''
+
   const [sorting, setSorting]               = useState<SortingState>([])
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(loadVisibility)
@@ -332,6 +354,21 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  function updateCohort(val: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (val) params.set('fy', val)
+    else params.delete('fy')
+    router.push(`/learners?${params.toString()}`)
+  }
+
+  function toggleViewAll() {
+    const params = new URLSearchParams(searchParams.toString())
+    if (viewAll) params.delete('viewAll')
+    else params.set('viewAll', '1')
+    params.delete('fy')
+    router.push(`/learners?${params.toString()}`)
+  }
 
   const table = useReactTable({
     data: learners,
@@ -362,48 +399,83 @@ export default function LearnersTable({ learners }: { learners: LearnerRow[] }) 
     getRowId: (row) => row.learner_id,
   })
 
+  const filteredCount = table.getFilteredRowModel().rows.length
+  const rowCountText  = filteredCount === learners.length
+    ? `${learners.length} learner${learners.length !== 1 ? 's' : ''}`
+    : `${filteredCount} of ${learners.length} learners`
+
   return (
     <div>
-      {/* Columns toggle */}
-      <div className="mb-3 flex justify-end" ref={colMenuRef}>
-        <div className="relative">
-          <button
-            onClick={() => setShowColMenu((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
-              <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
-              <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" />
-            </svg>
-            Columns
-          </button>
-
-          {showColMenu && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
-              {TOGGLEABLE_COLUMNS.map(({ id, label }) => {
-                const column = table.getColumn(id)
-                if (!column) return null
-                return (
-                  <label key={id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-zinc-50">
-                    <input
-                      type="checkbox"
-                      checked={column.getIsVisible()}
-                      onChange={column.getToggleVisibilityHandler()}
-                      className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900"
-                    />
-                    <span className="text-xs text-zinc-700">{label}</span>
-                  </label>
-                )
-              })}
+      {/* Toolbar: filters left, row count + columns button right */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        {/* Left: FY filter + viewAll toggle + clear */}
+        <div className="flex flex-wrap items-center gap-2">
+          {cohorts.length > 0 && (
+            <div className="relative">
+              <select value={activeCohort} onChange={(e) => updateCohort(e.target.value)} className={selectCls}>
+                <option value="">All Cohorts</option>
+                {cohorts.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <Chevron />
             </div>
           )}
+          {isLF && (
+            <button
+              onClick={toggleViewAll}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:border-zinc-300 hover:bg-zinc-50"
+            >
+              {viewAll ? 'My Learners' : 'View All'}
+            </button>
+          )}
+          {activeCohort && (
+            <button
+              onClick={() => updateCohort('')}
+              className="text-xs font-medium text-zinc-400 hover:text-zinc-600"
+            >
+              Clear
+            </button>
+          )}
         </div>
-      </div>
 
-      <div className="mb-2 text-sm text-zinc-500">
-        {table.getFilteredRowModel().rows.length === learners.length
-          ? `${learners.length} learner${learners.length !== 1 ? 's' : ''}`
-          : `${table.getFilteredRowModel().rows.length} of ${learners.length} learners`}
+        {/* Right: row count + columns toggle */}
+        <div className="flex items-center gap-3" ref={colMenuRef}>
+          <span className="text-sm text-zinc-500">{rowCountText}</span>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowColMenu((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+                <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+                <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" />
+              </svg>
+              Columns
+            </button>
+
+            {showColMenu && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
+                {TOGGLEABLE_COLUMNS.map(({ id, label }) => {
+                  const column = table.getColumn(id)
+                  if (!column) return null
+                  return (
+                    <label key={id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-zinc-50">
+                      <input
+                        type="checkbox"
+                        checked={column.getIsVisible()}
+                        onChange={column.getToggleVisibilityHandler()}
+                        className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900"
+                      />
+                      <span className="text-xs text-zinc-700">{label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
