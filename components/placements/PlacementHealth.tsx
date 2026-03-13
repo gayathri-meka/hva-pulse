@@ -131,7 +131,7 @@ export default function PlacementHealth(h: HealthData) {
   const focus   = focusMessage(weakest, h)
 
   return (
-    <div className="mb-8 space-y-3">
+    <div className="space-y-3">
 
       {/* ── Section header with benchmark editor ── */}
       <div className="relative flex items-center justify-between">

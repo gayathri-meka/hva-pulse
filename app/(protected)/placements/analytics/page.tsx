@@ -230,18 +230,20 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     <Suspense>
       <AnalyticsFilters lfs={lfs} batches={batches} />
     </Suspense>
-    <PlacementHealth
-      openRoles={openRoles}
-      weeklyAvg={weeklyAvg}
-      appsPerRole={appsPerRole}
-      notInterestedRate={notInterestedRate}
-      shortlistRate={shortlistRate}
-      hireRate={hireRate}
-      totalRoles={totalRoles}
-      totalApps={totalApps}
-      thresholds={thresholds}
-      isAdmin={appUser.role === 'admin'}
-    />
+    <div className="mb-8">
+      <PlacementHealth
+        openRoles={openRoles}
+        weeklyAvg={weeklyAvg}
+        appsPerRole={appsPerRole}
+        notInterestedRate={notInterestedRate}
+        shortlistRate={shortlistRate}
+        hireRate={hireRate}
+        totalRoles={totalRoles}
+        totalApps={totalApps}
+        thresholds={thresholds}
+        isAdmin={appUser.role === 'admin'}
+      />
+    </div>
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:gap-10">
       {/* Left: vertical funnel */}
       <div>

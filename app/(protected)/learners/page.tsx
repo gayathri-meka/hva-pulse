@@ -31,7 +31,10 @@ export default async function LearnersPage({ searchParams }: Props) {
   // ── Always fetch learners (needed for both tabs) ───────────────────────────
   let query = supabase.from('learners').select('*, users!learners_user_id_fkey(name, email)')
   if (filterByLF) query = query.eq('lf_user_id', appUser.id)
-  if (status) query = query.eq('status', status)
+  if (status) {
+    const statuses = status.split(',')
+    query = statuses.length > 1 ? query.in('status', statuses) : query.eq('status', status)
+  }
   if (batch)  query = query.eq('batch_name', batch)
   if (lf)     query = query.eq('lf_name', lf)
 

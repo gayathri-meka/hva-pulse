@@ -106,6 +106,15 @@ export default async function DashboardPage({ searchParams }: Props) {
   const shortlistRate     = totalApps > 0 ? shortlistPassed / totalApps : 0
   const hireRate          = (hired + rejected) > 0 ? hired / (hired + rejected) : 0
 
+  // Build learners URL with current lf/batch filters carried over
+  function learnersUrl(status: string) {
+    const params = new URLSearchParams()
+    params.set('status', status)
+    if (lf)    params.set('lf',    lf)
+    if (batch) params.set('batch', batch)
+    return `/learners?${params.toString()}`
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
@@ -119,7 +128,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       </Suspense>
 
       {/* ── Learner Journey Funnel ─────────────────────────────────────── */}
-      <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-zinc-400">Learner Journey</p>
 
         {/* Stage 1 — Enrolled */}
@@ -129,7 +138,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
 
         {/* Connector + exits */}
-        <div className="ml-[18px] mt-1 flex gap-0">
+        <div className="ml-[18px] mt-1 flex">
           <div className="flex flex-col items-center">
             <div className="w-px flex-1 bg-zinc-200" />
             <div className="h-1.5 w-1.5 rounded-full bg-zinc-300" />
@@ -137,7 +146,10 @@ export default async function DashboardPage({ searchParams }: Props) {
           </div>
           <div className="ml-4 flex items-center self-center">
             <div className="h-px w-4 bg-zinc-200" />
-            <div className="ml-2 flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5">
+            <Link
+              href={learnersUrl('Dropout,Discontinued')}
+              className="ml-2 flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 transition-opacity hover:opacity-75"
+            >
               <span className="text-sm font-semibold tabular-nums text-red-600">{exited}</span>
               <span className="text-xs text-red-400">exited</span>
               {exited > 0 && (
@@ -147,7 +159,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                     .join(' · ')}
                 </span>
               )}
-            </div>
+            </Link>
           </div>
         </div>
 
@@ -158,7 +170,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
 
         {/* Connector to outcomes */}
-        <div className="ml-[18px] mt-1 flex gap-0">
+        <div className="ml-[18px] mt-1 flex">
           <div className="flex flex-col items-center">
             <div className="w-px flex-1 bg-zinc-200" />
             <div className="h-1.5 w-1.5 rounded-full bg-zinc-300" />
@@ -167,50 +179,61 @@ export default async function DashboardPage({ searchParams }: Props) {
 
         {/* Stage 3 — Outcomes */}
         <div className="mt-2 grid grid-cols-3 gap-3">
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+          <Link
+            href={learnersUrl('Placed - Self')}
+            className="rounded-lg border border-blue-100 bg-blue-50 p-3 transition-opacity hover:opacity-75"
+          >
             <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-500">Placed — Self</p>
             <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedSelf}</p>
             <p className="mt-0.5 text-xs text-zinc-400">
               {continued > 0 ? Math.round((placedSelf / continued) * 100) : 0}% of continued
             </p>
-          </div>
-          <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
+          </Link>
+          <Link
+            href={learnersUrl('Placed - HVA')}
+            className="rounded-lg border border-violet-100 bg-violet-50 p-3 transition-opacity hover:opacity-75"
+          >
             <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500">Placed — HVA</p>
             <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedHVA}</p>
             <p className="mt-0.5 text-xs text-zinc-400">
               {continued > 0 ? Math.round((placedHVA / continued) * 100) : 0}% of continued
             </p>
-          </div>
-          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+          </Link>
+          <Link
+            href={learnersUrl('Ongoing')}
+            className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 transition-opacity hover:opacity-75"
+          >
             <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">Ongoing</p>
             <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{ongoing}</p>
             <p className="mt-0.5 text-xs text-zinc-400">
               {continued > 0 ? Math.round((ongoing / continued) * 100) : 0}% of continued
             </p>
-          </div>
+          </Link>
         </div>
       </div>
 
       {/* ── Placement Health ───────────────────────────────────────────── */}
-      <PlacementHealth
-        openRoles={openRoles}
-        weeklyAvg={weeklyAvg}
-        appsPerRole={appsPerRole}
-        notInterestedRate={notInterestedRate}
-        shortlistRate={shortlistRate}
-        hireRate={hireRate}
-        totalRoles={totalRoles}
-        totalApps={totalApps}
-        thresholds={thresholds}
-        isAdmin={false}
-      />
-      <div className="-mt-5 mb-8 flex justify-end">
-        <Link
-          href="/placements/analytics"
-          className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-600"
-        >
-          View full analytics →
-        </Link>
+      <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <PlacementHealth
+          openRoles={openRoles}
+          weeklyAvg={weeklyAvg}
+          appsPerRole={appsPerRole}
+          notInterestedRate={notInterestedRate}
+          shortlistRate={shortlistRate}
+          hireRate={hireRate}
+          totalRoles={totalRoles}
+          totalApps={totalApps}
+          thresholds={thresholds}
+          isAdmin={false}
+        />
+        <div className="mt-3 flex justify-end">
+          <Link
+            href="/placements/analytics"
+            className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-600"
+          >
+            View full analytics →
+          </Link>
+        </div>
       </div>
     </div>
   )
