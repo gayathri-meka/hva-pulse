@@ -1,92 +1,92 @@
 [
   {
-    "id": "hired-count-overall",
-    "query": "How many learners have been hired in total?",
-    "expected_tools": ["get_pipeline_summary"],
-    "must_mention": ["hired"]
-  },
-  {
-    "id": "pipeline-funnel",
-    "query": "Show me the full placement pipeline — how many are at each stage?",
-    "expected_tools": ["get_pipeline_summary"],
-    "must_mention": ["applied", "shortlisted", "hired"]
-  },
-  {
-    "id": "companies-list",
-    "query": "Which companies are we working with and how many open roles do they have?",
-    "expected_tools": ["get_companies"],
-    "must_mention": []
-  },
-  {
-    "id": "open-roles",
-    "query": "Show me all currently open roles.",
-    "expected_tools": ["get_roles"],
-    "must_mention": ["open"]
-  },
-  {
-    "id": "hired-learners-list",
-    "query": "List all learners who have been placed so far.",
-    "expected_tools": ["get_hired_learners"],
-    "must_mention": []
-  },
-  {
-    "id": "rejected-applications",
-    "query": "Show me learners who were rejected after an interview.",
-    "expected_tools": ["get_applications"],
-    "must_mention": ["rejected"]
-  },
-  {
-    "id": "not-shortlisted-applications",
-    "query": "Which learners were not shortlisted by companies?",
-    "expected_tools": ["get_applications"],
-    "must_mention": ["not_shortlisted"]
-  },
-  {
-    "id": "tat-overall",
-    "query": "What is the average time it takes for companies to make a shortlisting decision?",
-    "expected_tools": ["get_tat_metrics"],
-    "must_mention": ["days"]
-  },
-  {
-    "id": "learner-detail",
-    "query": "Give me the full profile for learner HVA001.",
-    "expected_tools": ["get_learner_detail"],
-    "must_mention": ["HVA001"]
-  },
-  {
-    "id": "learner-applications",
-    "query": "What companies has HVA001 applied to?",
-    "expected_tools": ["get_learner_applications"],
-    "must_mention": []
-  },
-  {
-    "id": "ready-learners",
-    "query": "Show me all learners who are marked as ready for placement.",
-    "expected_tools": ["get_learners"],
-    "must_mention": ["ready"]
-  },
-  {
-    "id": "job-personas",
-    "query": "What job outreach personas do we have?",
-    "expected_tools": ["get_job_personas"],
-    "must_mention": []
-  },
-  {
-    "id": "approved-opportunities",
-    "query": "Show me all approved job opportunities from the outreach engine.",
-    "expected_tools": ["get_job_opportunities"],
-    "must_mention": ["approved"]
-  },
-  {
-    "id": "batch-ambiguity",
-    "query": "How many learners from batch 10 have been hired?",
-    "expected_tools": ["get_batches", "get_pipeline_summary"],
-    "must_mention": ["hired"]
+    "id": "pipeline-status-breakdown",
+    "category": "pipeline_stats",
+    "question": "What is the current application pipeline? Show me the count at each status with percentages.",
+    "eval_notes": "Should show all statuses present in the applications table (applied, shortlisted, interviews_ongoing, on_hold, not_shortlisted, rejected, hired) with counts and percentages. Numbers must come from real DB query."
   },
   {
     "id": "placement-rate",
-    "query": "What is the overall placement rate so far?",
-    "expected_tools": ["get_pipeline_summary"],
-    "must_mention": ["%"]
+    "category": "pipeline_stats",
+    "question": "What is the overall placement rate — what percentage of all applications resulted in a hire?",
+    "eval_notes": "Must calculate hired / total * 100. Should state the absolute hired count and total count, not just the percentage. Should be clearly phrased as a rate."
+  },
+  {
+    "id": "rejection-reasons",
+    "category": "rejection_analysis",
+    "question": "How many learners were rejected after interviews, and what are the most frequently cited rejection reasons?",
+    "eval_notes": "Must distinguish between 'rejected' (post-interview) and 'not_shortlisted' (pre-interview). Should query rejection_reasons column. If reasons are empty, should say so clearly rather than inventing reasons."
+  },
+  {
+    "id": "not-shortlisted-by-company",
+    "category": "rejection_analysis",
+    "question": "Which companies have not shortlisted the most learners? Rank them.",
+    "eval_notes": "Must join applications → roles → companies and filter on status = not_shortlisted. Should produce a ranked list of companies with counts. Requires a multi-table query."
+  },
+  {
+    "id": "learner-full-profile",
+    "category": "learner_specific",
+    "question": "Give me the full profile of learner HVA001 — their batch, track, readiness, scores, and the status of all their applications.",
+    "eval_notes": "Must query both the learners table (for profile/scores) and the applications table (for application history). Should clearly mention learner_id HVA001. If HVA001 doesn't exist, should say so."
+  },
+  {
+    "id": "alumni-employment",
+    "category": "alumni",
+    "question": "How many alumni do we currently have in the system, and what fraction are still employed?",
+    "eval_notes": "Must query the alumni table and group by employment_status. Should give absolute counts and a percentage. Should mention the employed vs unemployed split."
+  },
+  {
+    "id": "company-application-volume",
+    "category": "multi_join",
+    "question": "Which companies have received the most applications? Show the top 5 with their total application count and how many resulted in a hire.",
+    "eval_notes": "Requires joining applications → roles → companies. Must show both total applications and hired count per company, ranked. Top 5 only."
+  },
+  {
+    "id": "edge-nonexistent-company",
+    "category": "edge_case",
+    "question": "Show me all hired applications for a company called 'Phantom Tech Ltd'.",
+    "eval_notes": "This company almost certainly does not exist in the DB. The model should clearly state no results were found rather than hallucinating data. It should NOT say 'I found 0 applications' if it didn't actually query — it must verify by running a query."
+  },
+  {
+    "id": "edge-nonexistent-batch",
+    "category": "edge_case",
+    "question": "List all shortlisted learners from batch '99X'.",
+    "eval_notes": "Batch '99X' almost certainly doesn't exist. The model should verify with a query and clearly communicate that no such batch was found — not invent data or silently return nothing."
+  },
+  {
+    "id": "edge-future-date",
+    "category": "edge_case",
+    "question": "How many applications were submitted in the year 2099?",
+    "eval_notes": "There should be zero applications in 2099. The model must run the query rather than refusing, and should communicate the empty result clearly. Should not hallucinate a number."
+  },
+  {
+    "id": "tat-shortlisting",
+    "category": "pipeline_stats",
+    "question": "On average, how many days does it take from when an application is submitted to when a shortlisting decision is made?",
+    "eval_notes": "Must use the shortlisting_decision_taken_at and created_at columns on the applications table. Should compute an average in days using only rows where shortlisting_decision_taken_at is not null. Should state the sample size (number of applications with a decision recorded)."
+  },
+  {
+    "id": "lf-workload",
+    "category": "multi_join",
+    "question": "How many learners is each Learning Facilitator currently managing? Rank by workload.",
+    "eval_notes": "Must join learners → users (via lf_user_id) to get LF names. Should GROUP BY lf name and count learners. Should produce a ranked list. LF names come from the users table where role = 'LF'."
+  },
+  {
+    "id": "alumni-salary",
+    "category": "alumni",
+    "question": "What is the average starting salary for placed alumni? How many alumni have salary data recorded?",
+    "eval_notes": "Must query the alumni_jobs table, not the alumni table directly. The salary column is on alumni_jobs. Should report the average of non-null salary values and the count of rows with salary data vs total alumni_jobs rows."
+  },
+  {
+    "id": "active-shortlisted",
+    "category": "learner_specific",
+    "question": "Which learners are currently shortlisted or in interviews? List their names and the companies they are being considered by.",
+    "eval_notes": "Must filter applications on status IN ('shortlisted', 'interviews_ongoing') and join to get learner names (via users table) and company names (via roles → companies). Should list individual learner+company pairs, not just counts."
+  },
+  {
+    "id": "batch-placement-comparison",
+    "category": "pipeline_stats",
+    "question": "Break down the number of hired applications by batch. Which batch has produced the most placements?",
+    "eval_notes": "Requires joining applications (status = hired) → users → learners to get batch_name. Should GROUP BY batch_name and count hires. Must identify the top batch by name. If batch_name is null for some learners that is acceptable to note."
   }
 ]

@@ -1,21 +1,16 @@
-// TODO: swap OpenAI for Anthropic (claude-sonnet-4-6) once the tool-calling integration is ready.
-// The handler shape stays the same — swap the client and model string.
-
-import OpenAI from 'openai'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat'
+import Anthropic from '@anthropic-ai/sdk'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { join } from 'node:path'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { SYSTEM_PROMPT } from '@/lib/ask-pulse/system-prompt'
-import { TOOLS, type ToolName } from '@/lib/ask-pulse/tools'
-import { executeToolCall } from '@/lib/ask-pulse/tool-handlers'
 import type { UIMessage } from '@/lib/ask-pulse/types'
 
-// Max tool-call rounds before giving up and returning an error message.
+// Max tool-call rounds before giving up.
 const MAX_ROUNDS = 5
 
 export async function POST(request: Request) {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  // Use createServerSupabaseClient() directly — React cache() doesn't work in
-  // route handlers, so getAppUser() is intentionally avoided here.
   const supabase = await createServerSupabaseClient()
 
   const {
@@ -45,75 +40,126 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  // ── Build OpenAI message thread ───────────────────────────────────────────
-  const thread: ChatCompletionMessageParam[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...messages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
-  ]
+  // ── Spawn MCP server subprocess ───────────────────────────────────────────
+  // The MCP server (mcp/dist/server.js) must be built before the Next.js app
+  // starts. Run `cd mcp && npm run build` once before `npm run dev`.
+  const transport = new StdioClientTransport({
+    command: process.execPath, // same Node binary as the parent process
+    args: [join(process.cwd(), 'mcp/dist/server.js')],
+    env: Object.fromEntries(
+      Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+    ),
+  })
 
-  // ── Agentic tool-call loop ────────────────────────────────────────────────
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  let finalText = 'Sorry, I was unable to produce a response. Please try again.'
+  const mcp = new Client({ name: 'pulse-api', version: '1.0.0' })
 
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: thread,
-      tools: TOOLS,
-      tool_choice: 'auto',
-    })
-
-    const choice = response.choices[0]
-    // Add the assistant turn to the thread so subsequent rounds have context.
-    thread.push(choice.message as ChatCompletionMessageParam)
-
-    if (choice.finish_reason !== 'tool_calls') {
-      // No more tool calls — we have the final text response.
-      finalText = choice.message.content ?? finalText
-      break
-    }
-
-    // Execute all tool calls in this round in parallel.
-    const toolCalls = (choice.message.tool_calls ?? []).filter((tc) => tc.type === 'function')
-    const toolResults = await Promise.all(
-      toolCalls.map(async (tc) => {
-        // tc.type === 'function' is guaranteed by the filter above.
-        const fn = (tc as { id: string; type: 'function'; function: { name: string; arguments: string } }).function
-        let result: unknown
-        try {
-          const args = JSON.parse(fn.arguments) as Record<string, unknown>
-          result = await executeToolCall(fn.name as ToolName, args, supabase)
-        } catch (err) {
-          console.error(`[ask-pulse] tool error — ${fn.name}:`, err)
-          result = { error: String(err) }
-        }
-        return {
-          role: 'tool' as const,
-          tool_call_id: tc.id,
-          content: JSON.stringify(result),
-        }
-      }),
-    )
-
-    thread.push(...toolResults)
+  try {
+    await mcp.connect(transport)
+  } catch (err) {
+    console.error('[ask-pulse] MCP connect failed:', err)
+    return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 
-  // ── Stream the final text back ─────────────────────────────────────────────
-  // We stream the final answer in chunks so the UI can render progressively.
-  // The tool-call rounds above are non-streaming (we need complete JSON to parse
-  // tool arguments); only the finished text output is streamed to the client.
+  // ── Fetch tools from MCP, convert to Anthropic format ────────────────────
+  const { tools: mcpTools } = await mcp.listTools()
+  const anthropicTools: Anthropic.Tool[] = mcpTools.map((t) => ({
+    name: t.name,
+    description: t.description ?? '',
+    input_schema: t.inputSchema as Anthropic.Tool['input_schema'],
+  }))
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+  const thread: Anthropic.MessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }))
+
+  // ── Streaming response ────────────────────────────────────────────────────
+  // The agentic loop runs inside the stream's start() so tool-call rounds
+  // and the final text round are all part of the same response stream.
+  //
+  // Streaming works as follows:
+  //   - anthropic.messages.stream() emits 'text' events for each token
+  //   - We pipe those directly to the response stream → words appear as generated
+  //   - ToolUseBlocks are buffered (we need the complete JSON to execute them)
+  //   - After each tool round, we execute via MCP and continue to the next round
+  //   - The stream closes when Claude stops calling tools (stop_reason = 'end_turn')
   const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(finalText))
-      controller.close()
+
+  const responseStream = new ReadableStream({
+    async start(controller) {
+      try {
+        for (let round = 0; round < MAX_ROUNDS; round++) {
+          const msgStream = anthropic.messages.stream({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 4096,
+            system: SYSTEM_PROMPT,
+            messages: thread,
+            tools: anthropicTools,
+          })
+
+          // Forward each text token to the client immediately
+          msgStream.on('text', (text) => {
+            controller.enqueue(encoder.encode(text))
+          })
+
+          // finalMessage() resolves once the full response is buffered —
+          // ToolUseBlocks have their complete JSON input by this point.
+          const message = await msgStream.finalMessage()
+
+          if (message.stop_reason !== 'tool_use') {
+            // No more tool calls — stream is complete.
+            break
+          }
+
+          // Add assistant turn (with tool calls) to the thread
+          thread.push({ role: 'assistant', content: message.content })
+
+          // Execute all tool calls via MCP in parallel
+          const toolBlocks = message.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+          )
+
+          const toolResults = await Promise.all(
+            toolBlocks.map(async (block) => {
+              let resultText: string
+              try {
+                const result = await mcp.callTool({
+                  name: block.name,
+                  arguments: block.input as Record<string, unknown>,
+                })
+                resultText = (result.content as { type: string; text: string }[])
+                  .filter((c) => c.type === 'text')
+                  .map((c) => c.text)
+                  .join('')
+              } catch (err) {
+                console.error(`[ask-pulse] tool error — ${block.name}:`, err)
+                resultText = `Error executing ${block.name}: ${String(err)}`
+              }
+              return {
+                type: 'tool_result' as const,
+                tool_use_id: block.id,
+                content: resultText,
+              }
+            }),
+          )
+
+          thread.push({ role: 'user', content: toolResults })
+        }
+      } catch (err) {
+        console.error('[ask-pulse] stream error:', err)
+        controller.enqueue(
+          encoder.encode('Sorry, something went wrong. Please try again.'),
+        )
+      } finally {
+        controller.close()
+        await mcp.close().catch(() => {})
+      }
     },
   })
 
-  return new Response(stream, {
+  return new Response(responseStream, {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   })
 }

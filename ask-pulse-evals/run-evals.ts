@@ -1,190 +1,388 @@
 /**
- * Ask Pulse eval runner.
+ * Ask Pulse LLM-as-a-judge eval runner.
  *
- * Runs each case in golden-set.json through the full pipeline:
- *   OpenAI tool-call loop → Supabase queries → final answer
- *
- * Scores:
- *   - tool_recall:   fraction of expected_tools that were actually called
- *   - mentions:      fraction of must_mention strings present in the answer
- *   - pass:          true if both are 1.0
+ * For each case in golden-set.json:
+ *   1. Run the question through the full Ask Pulse pipeline
+ *      (MCP subprocess → Anthropic claude-sonnet-4-6 agentic loop)
+ *   2. Send the question + answer to GPT-4o as a judge, scored against a rubric
+ *   3. Write results to ask-pulse-evals/scores/latest.json
  *
  * Usage:
- *   OPENAI_API_KEY=... NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
  *   npx tsx ask-pulse-evals/run-evals.ts
+ *   (or: npm run eval from the repo root)
  *
- * Or add a .env file at the repo root and the script will load it automatically.
+ * Required env vars (loaded from .env.local at repo root):
+ *   ANTHROPIC_API_KEY, OPENAI_API_KEY, MCP_DATABASE_URL
  */
 
 import 'dotenv/config'
+import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
-import { createClient } from '@supabase/supabase-js'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { SYSTEM_PROMPT } from '../lib/ask-pulse/system-prompt.js'
 
-import { SYSTEM_PROMPT } from '../lib/ask-pulse/system-prompt'
-import { TOOLS, type ToolName } from '../lib/ask-pulse/tools'
-import { executeToolCall } from '../lib/ask-pulse/tool-handlers'
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const ROOT = join(__dirname, '..')
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type Category = 'pipeline_stats' | 'rejection_analysis' | 'learner_specific' | 'alumni' | 'multi_join' | 'edge_case'
+
 interface GoldenCase {
   id: string
-  query: string
-  expected_tools: string[]
-  must_mention: string[]
+  category: Category
+  question: string
+  eval_notes: string
 }
 
-interface EvalResult {
+interface CriterionScore {
+  score: number  // 1–5
+  reason: string
+}
+
+interface JudgeScores {
+  answered_question: CriterionScore
+  used_real_data: CriterionScore
+  concise_and_readable: CriterionScore
+  handled_correctly: CriterionScore
+}
+
+interface CaseResult {
   id: string
-  query: string
-  tools_called: string[]
+  category: Category
+  question: string
   answer: string
-  tool_recall: number
-  mentions_score: number
-  pass: boolean
+  tools_called: string[]
+  scores: JudgeScores
+  mean_score: number
   error?: string
+}
+
+interface ScoreReport {
+  run_at: string
+  pipeline_model: string
+  judge_model: string
+  summary: {
+    total_cases: number
+    mean_score: number
+    by_criterion: Record<string, number>
+    by_category: Record<string, number>
+  }
+  cases: CaseResult[]
 }
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY // service role to bypass RLS
-const OPENAI_KEY = process.env.OPENAI_API_KEY
+// Load .env.local (dotenv/config loads .env; we need .env.local)
+try {
+  const envLocal = readFileSync(join(ROOT, '.env.local'), 'utf-8')
+  for (const line of envLocal.split('\n')) {
+    const m = line.match(/^([^#=\s][^=]*)=(.*)$/)
+    if (m && !process.env[m[1].trim()]) {
+      process.env[m[1].trim()] = m[2].trim()
+    }
+  }
+} catch { /* .env.local not found — rely on process.env */ }
 
-if (!SUPABASE_URL || !SUPABASE_KEY || !OPENAI_KEY) {
-  console.error(
-    'Missing env vars. Required: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY',
-  )
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
+const OPENAI_KEY = process.env.OPENAI_API_KEY
+const MCP_DB_URL = process.env.MCP_DATABASE_URL
+
+if (!ANTHROPIC_KEY || !OPENAI_KEY || !MCP_DB_URL) {
+  console.error('Missing required env vars: ANTHROPIC_API_KEY, OPENAI_API_KEY, MCP_DATABASE_URL')
   process.exit(1)
 }
 
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
 const openai = new OpenAI({ apiKey: OPENAI_KEY })
-// Service role key: bypasses RLS so evals can run without a user session.
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+const MAX_ROUNDS = 10
+const PIPELINE_MODEL = 'claude-sonnet-4-6'
+const JUDGE_MODEL = 'gpt-4o'
 
-const MAX_ROUNDS = 5
+// ─── Ask Pulse pipeline ───────────────────────────────────────────────────────
 
-// ─── Runner ───────────────────────────────────────────────────────────────────
-
-async function runCase(c: GoldenCase): Promise<EvalResult> {
+async function runPipeline(
+  question: string,
+  mcp: Client,
+  anthropicTools: Anthropic.Tool[],
+): Promise<{ answer: string; toolsCalled: string[] }> {
+  const thread: Anthropic.MessageParam[] = [{ role: 'user', content: question }]
   const toolsCalled: string[] = []
-  let answer = ''
 
-  try {
-    const thread: ChatCompletionMessageParam[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: c.query },
-    ]
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const response = await anthropic.messages.create({
+      model: PIPELINE_MODEL,
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: thread,
+      tools: anthropicTools,
+    })
 
-    for (let round = 0; round < MAX_ROUNDS; round++) {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: thread,
-        tools: TOOLS,
-        tool_choice: 'auto',
-      })
+    thread.push({ role: 'assistant', content: response.content })
 
-      const choice = response.choices[0]
-      thread.push(choice.message as ChatCompletionMessageParam)
-
-      if (choice.finish_reason !== 'tool_calls') {
-        answer = choice.message.content ?? ''
-        break
-      }
-
-      const tcs = (choice.message.tool_calls ?? []).filter((tc) => tc.type === 'function')
-      const results = await Promise.all(
-        tcs.map(async (tc) => {
-          const fn = (tc as { id: string; type: 'function'; function: { name: string; arguments: string } }).function
-          toolsCalled.push(fn.name)
-          let result: unknown
-          try {
-            const args = JSON.parse(fn.arguments) as Record<string, unknown>
-            result = await executeToolCall(fn.name as ToolName, args, supabase)
-          } catch (err) {
-            result = { error: String(err) }
-          }
-          return {
-            role: 'tool' as const,
-            tool_call_id: tc.id,
-            content: JSON.stringify(result),
-          }
-        }),
-      )
-      thread.push(...results)
+    if (response.stop_reason !== 'tool_use') {
+      const answer = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('')
+      return { answer, toolsCalled }
     }
-  } catch (err) {
-    return {
-      id: c.id,
-      query: c.query,
-      tools_called: toolsCalled,
-      answer,
-      tool_recall: 0,
-      mentions_score: 0,
-      pass: false,
-      error: String(err),
-    }
+
+    const toolBlocks = response.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+    )
+
+    const toolResults = await Promise.all(
+      toolBlocks.map(async (block) => {
+        toolsCalled.push(block.name)
+        let resultText: string
+        try {
+          const result = await mcp.callTool({
+            name: block.name,
+            arguments: block.input as Record<string, unknown>,
+          })
+          resultText = (result.content as { type: string; text: string }[])
+            .filter((c) => c.type === 'text')
+            .map((c) => c.text)
+            .join('')
+        } catch (err) {
+          resultText = `Error: ${String(err)}`
+        }
+        return {
+          type: 'tool_result' as const,
+          tool_use_id: block.id,
+          content: resultText,
+        }
+      }),
+    )
+
+    thread.push({ role: 'user', content: toolResults })
   }
 
-  // Score
-  const uniqueToolsCalled = new Set(toolsCalled)
-  const tool_recall =
-    c.expected_tools.length === 0
-      ? 1
-      : c.expected_tools.filter((t) => uniqueToolsCalled.has(t)).length / c.expected_tools.length
+  return { answer: 'Max rounds reached without a final response.', toolsCalled }
+}
 
-  const answerLower = answer.toLowerCase()
-  const mentions_score =
-    c.must_mention.length === 0
-      ? 1
-      : c.must_mention.filter((m) => answerLower.includes(m.toLowerCase())).length /
-        c.must_mention.length
+// ─── LLM judge ───────────────────────────────────────────────────────────────
 
-  const pass = tool_recall === 1 && mentions_score === 1
+const JUDGE_SYSTEM = `\
+You are a strict evaluator for an AI assistant that queries a placement database.
+Score the response on four criteria. Be honest and critical — reserve 5 for exceptional responses.
 
-  return { id: c.id, query: c.query, tools_called: toolsCalled, answer, tool_recall, mentions_score, pass }
+Scoring guide:
+  1 = Completely failed this criterion
+  2 = Poor — major issues
+  3 = Acceptable — meets minimum bar with noticeable flaws
+  4 = Good — minor issues only
+  5 = Excellent — nothing to fault
+
+Respond ONLY with a valid JSON object, no explanation outside it.`
+
+async function judgeResponse(
+  question: string,
+  answer: string,
+  category: Category,
+  evalNotes: string,
+): Promise<JudgeScores> {
+  const userPrompt = `\
+Question: ${question}
+
+Category: ${category}
+
+Evaluator notes (what a correct response should do):
+${evalNotes}
+
+Response to evaluate:
+${answer}
+
+Score each criterion 1–5 with a brief reason:
+
+{
+  "answered_question": {
+    "score": <1-5>,
+    "reason": "<did it directly answer what was asked?>"
+  },
+  "used_real_data": {
+    "score": <1-5>,
+    "reason": "<does it cite specific numbers/names from the DB, not vague claims?>"
+  },
+  "concise_and_readable": {
+    "score": <1-5>,
+    "reason": "<is it well-structured and appropriately brief — not a wall of text?>"
+  },
+  "handled_correctly": {
+    "score": <1-5>,
+    "reason": "<for edge_case category: did it handle empty/null/missing data gracefully and honestly? for others: was the logic, interpretation, and SQL reasoning sound?>"
+  }
+}`
+
+  const response = await openai.chat.completions.create({
+    model: JUDGE_MODEL,
+    messages: [
+      { role: 'system', content: JUDGE_SYSTEM },
+      { role: 'user', content: userPrompt },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0,
+  })
+
+  return JSON.parse(response.choices[0].message.content ?? '{}') as JudgeScores
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const goldenSetPath = resolve(__dirname, 'golden-set.json')
-  const cases: GoldenCase[] = JSON.parse(readFileSync(goldenSetPath, 'utf-8'))
+  const goldenSet: GoldenCase[] = JSON.parse(
+    readFileSync(join(__dirname, 'golden-set.json'), 'utf-8'),
+  )
 
-  console.log(`\nRunning ${cases.length} eval cases against gpt-4o + Supabase...\n`)
+  console.log(`\nAsk Pulse Eval — ${goldenSet.length} cases`)
+  console.log(`Pipeline: ${PIPELINE_MODEL}   Judge: ${JUDGE_MODEL}\n`)
 
-  const results: EvalResult[] = []
-  for (const c of cases) {
-    process.stdout.write(`  ${c.id.padEnd(32)} `)
-    const result = await runCase(c)
-    results.push(result)
-    const status = result.pass ? '✓ PASS' : result.error ? '✗ ERROR' : '✗ FAIL'
-    const details = result.error
-      ? result.error.slice(0, 60)
-      : `tools=${result.tool_recall.toFixed(2)} mentions=${result.mentions_score.toFixed(2)} [${result.tools_called.join(', ')}]`
-    console.log(`${status}  ${details}`)
-  }
+  // Spawn MCP server once and reuse across all cases
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [join(ROOT, 'mcp/dist/server.js')],
+    env: Object.fromEntries(
+      Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+    ),
+  })
+  const mcp = new Client({ name: 'pulse-eval', version: '1.0.0' })
+  await mcp.connect(transport)
 
-  const passed = results.filter((r) => r.pass).length
-  const total = results.length
-  console.log(`\n${'─'.repeat(72)}`)
-  console.log(`Results: ${passed}/${total} passed (${Math.round((passed / total) * 100)}%)\n`)
+  const { tools: mcpTools } = await mcp.listTools()
+  const anthropicTools: Anthropic.Tool[] = mcpTools.map((t) => ({
+    name: t.name,
+    description: t.description ?? '',
+    input_schema: t.inputSchema as Anthropic.Tool['input_schema'],
+  }))
 
-  if (passed < total) {
-    console.log('Failed cases:')
-    for (const r of results.filter((r) => !r.pass)) {
-      console.log(`\n  [${r.id}]`)
-      console.log(`  Query:        ${r.query}`)
-      console.log(`  Tools called: ${r.tools_called.join(', ') || '(none)'}`)
-      if (r.error) console.log(`  Error:        ${r.error}`)
-      console.log(`  Answer:       ${r.answer.slice(0, 200)}${r.answer.length > 200 ? '…' : ''}`)
+  const results: CaseResult[] = []
+
+  for (const c of goldenSet) {
+    process.stdout.write(`  ${c.id.padEnd(36)} `)
+
+    let caseResult: CaseResult
+
+    try {
+      // 1. Run through Ask Pulse pipeline
+      const { answer, toolsCalled } = await runPipeline(c.question, mcp, anthropicTools)
+
+      // 2. Judge the response
+      const scores = await judgeResponse(c.question, answer, c.category, c.eval_notes)
+
+      const criterion_scores = [
+        scores.answered_question?.score ?? 0,
+        scores.used_real_data?.score ?? 0,
+        scores.concise_and_readable?.score ?? 0,
+        scores.handled_correctly?.score ?? 0,
+      ]
+      const mean_score = criterion_scores.reduce((a, b) => a + b, 0) / criterion_scores.length
+
+      caseResult = { id: c.id, category: c.category, question: c.question, answer, tools_called: toolsCalled, scores, mean_score }
+    } catch (err) {
+      caseResult = {
+        id: c.id,
+        category: c.category,
+        question: c.question,
+        answer: '',
+        tools_called: [],
+        scores: {
+          answered_question: { score: 0, reason: 'Error' },
+          used_real_data: { score: 0, reason: 'Error' },
+          concise_and_readable: { score: 0, reason: 'Error' },
+          handled_correctly: { score: 0, reason: 'Error' },
+        },
+        mean_score: 0,
+        error: String(err),
+      }
     }
-    console.log()
+
+    results.push(caseResult)
+
+    const star = caseResult.mean_score >= 4 ? '★' : caseResult.mean_score >= 3 ? '◆' : '✗'
+    const detail = caseResult.error
+      ? `ERROR: ${caseResult.error.slice(0, 50)}`
+      : `${caseResult.mean_score.toFixed(2)}/5  tools=[${caseResult.tools_called.join(', ')}]`
+    console.log(`${star} ${detail}`)
   }
 
-  process.exit(passed === total ? 0 : 1)
+  await mcp.close()
+
+  // ── Aggregate ──────────────────────────────────────────────────────────────
+  const overall_mean =
+    results.reduce((a, r) => a + r.mean_score, 0) / results.length
+
+  const criterionKeys = ['answered_question', 'used_real_data', 'concise_and_readable', 'handled_correctly'] as const
+  const by_criterion: Record<string, number> = {}
+  for (const key of criterionKeys) {
+    const scores = results.map((r) => r.scores[key]?.score ?? 0)
+    by_criterion[key] = scores.reduce((a, b) => a + b, 0) / scores.length
+  }
+
+  const categories = [...new Set(results.map((r) => r.category))]
+  const by_category: Record<string, number> = {}
+  for (const cat of categories) {
+    const catResults = results.filter((r) => r.category === cat)
+    by_category[cat] = catResults.reduce((a, r) => a + r.mean_score, 0) / catResults.length
+  }
+
+  const report: ScoreReport = {
+    run_at: new Date().toISOString(),
+    pipeline_model: PIPELINE_MODEL,
+    judge_model: JUDGE_MODEL,
+    summary: {
+      total_cases: results.length,
+      mean_score: parseFloat(overall_mean.toFixed(2)),
+      by_criterion: Object.fromEntries(
+        Object.entries(by_criterion).map(([k, v]) => [k, parseFloat(v.toFixed(2))]),
+      ),
+      by_category: Object.fromEntries(
+        Object.entries(by_category).map(([k, v]) => [k, parseFloat(v.toFixed(2))]),
+      ),
+    },
+    cases: results,
+  }
+
+  // ── Write scores ───────────────────────────────────────────────────────────
+  const scoresDir = join(__dirname, 'scores')
+  mkdirSync(scoresDir, { recursive: true })
+  writeFileSync(join(scoresDir, 'latest.json'), JSON.stringify(report, null, 2))
+
+  // Timestamped copy for history
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  writeFileSync(join(scoresDir, `${ts}.json`), JSON.stringify(report, null, 2))
+
+  // ── Console summary ────────────────────────────────────────────────────────
+  const bar = '─'.repeat(60)
+  console.log(`\n${bar}`)
+  console.log(`Overall mean score: ${overall_mean.toFixed(2)} / 5.00`)
+  console.log(`\nBy criterion:`)
+  for (const [k, v] of Object.entries(by_criterion)) {
+    const filled = Math.round(v)
+    const bar_str = '█'.repeat(filled) + '░'.repeat(5 - filled)
+    console.log(`  ${k.padEnd(24)} ${bar_str}  ${v.toFixed(2)}`)
+  }
+  console.log(`\nBy category:`)
+  for (const [k, v] of Object.entries(by_category)) {
+    console.log(`  ${k.padEnd(24)} ${v.toFixed(2)}`)
+  }
+
+  const weak = results.filter((r) => r.mean_score < 3)
+  if (weak.length > 0) {
+    console.log(`\nNeeds attention (score < 3):`)
+    for (const r of weak) {
+      console.log(`  [${r.id}]  ${r.mean_score.toFixed(2)}`)
+      if (r.error) console.log(`    error: ${r.error}`)
+    }
+  }
+
+  console.log(`\nReport written to ask-pulse-evals/scores/latest.json\n`)
+
+  process.exit(0)
 }
 
 main().catch((err) => {

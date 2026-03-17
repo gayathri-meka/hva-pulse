@@ -27,6 +27,14 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env
+
+# mcp server
+mcp/node_modules/
+mcp/dist/
+
+# eval score outputs (keep the directory, ignore the reports)
+ask-pulse-evals/scores/*.json
 
 # vercel
 .vercel

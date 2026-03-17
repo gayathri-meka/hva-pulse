@@ -25,11 +25,17 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL
 GOOGLE_PRIVATE_KEY              # Multiline PEM key
 GOOGLE_SHEET_ID
 JOOBLE_API_KEY                  # Required for Job Outreach scraper
-OPENAI_API_KEY                  # Required for Ask Pulse (chat AI)
+OPENAI_API_KEY                  # Required for ask-pulse-evals only (evaluation suite)
+ANTHROPIC_API_KEY               # Required for Ask Pulse (claude-sonnet-4-6)
 GOOGLE_ALUMNI_SHEET_ID          # Alumni roster Google Sheet ID
+MCP_DATABASE_URL                # Read-only Postgres URL for the MCP server (pulse_mcp_ro role)
+                                # Format: postgresql://pulse_mcp_ro:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+                                # See migrations/018_mcp_readonly_role.sql for setup instructions
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must be added manually to Vercel — it is not a `NEXT_PUBLIC_` var and won't be auto-detected.
+
+`MCP_DATABASE_URL` is only needed locally and in any environment running the MCP server. It does not go to Vercel (the MCP server is not deployed there).
 
 ## Architecture
 
@@ -132,6 +138,18 @@ The alumni sheet sync will never overwrite Pulse-managed rows because those lear
 ## Database Schema
 
 Full schema dump is at `docs/schema.sql`. Always refer to this for column names and types — do not infer from migration files, which are incomplete.
+
+**After any schema change**, regenerate the dump and commit it alongside the migration:
+
+```bash
+supabase db dump --linked --schema public -f docs/schema.sql
+```
+
+**To check if the current dump is up-to-date** (empty diff = current, any output = stale):
+
+```bash
+supabase db dump --linked --schema public | diff docs/schema.sql -
+```
 
 ## Known Issues
 
