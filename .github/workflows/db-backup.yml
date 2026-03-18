@@ -1,0 +1,118 @@
+name: Database Backup
+
+# Runs daily at 2am UTC.
+# Can also be triggered manually from Actions → Run workflow.
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      PGSSLMODE: require
+
+    steps:
+      # ── 1. Install PostgreSQL client ────────────────────────────────────────
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # ── 2. pg_dump — full restorable backup ─────────────────────────────────
+      - name: pg_dump (custom format)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          mkdir -p backup
+
+          # Custom format — restore with: pg_restore -d <target_db> pulse_YYYY-MM-DD.dump
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=custom \
+            --schema=public \
+            --no-acl \
+            --no-owner \
+            --file="backup/pulse_${DATE}.dump"
+
+          # Plain SQL — human-readable, restore with: psql <target_db> < pulse_YYYY-MM-DD.sql
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=plain \
+            --schema=public \
+            --no-acl \
+            --no-owner \
+            --file="backup/pulse_${DATE}.sql"
+
+          echo "pg_dump complete: $(ls -lh backup/pulse_${DATE}.* | awk '{print $5, $9}')"
+
+      # ── 3. CSV export — one file per table ──────────────────────────────────
+      - name: Export tables as CSV
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          TABLES=(
+            learners
+            alumni
+            alumni_jobs
+            applications
+            roles
+            companies
+            users
+            role_preferences
+            job_personas
+            job_opportunities
+          )
+
+          for TABLE in "${TABLES[@]}"; do
+            echo "Exporting ${TABLE}…"
+            psql "$SUPABASE_DB_URL" \
+              --command "\copy (SELECT * FROM public.${TABLE}) TO STDOUT CSV HEADER" \
+              > "backup/${TABLE}_${DATE}.csv"
+          done
+
+          echo "CSV export complete:"
+          ls -lh backup/*.csv | awk '{print $5, $9}'
+
+      # ── 4. Upload as GitHub Actions artifact (30-day retention) ─────────────
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 30
+
+      # ── 5. (Optional) Upload to Google Drive ────────────────────────────────
+      # Skipped automatically if BACKUP_GDRIVE_FOLDER_ID secret is not set.
+      - name: Upload to Google Drive
+        if: ${{ secrets.BACKUP_GDRIVE_FOLDER_ID != '' }}
+        env:
+          GDRIVE_FOLDER_ID: ${{ secrets.BACKUP_GDRIVE_FOLDER_ID }}
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          pip install --quiet google-auth google-api-python-client
+          python3 - <<'PYEOF'
+          import os, json, glob
+          from google.oauth2.service_account import Credentials
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          creds_json = json.loads(os.environ['GDRIVE_SERVICE_ACCOUNT_JSON'])
+          creds = Credentials.from_service_account_info(
+              creds_json,
+              scopes=['https://www.googleapis.com/auth/drive.file'],
+          )
+          service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+          folder_id = os.environ['GDRIVE_FOLDER_ID']
+
+          for filepath in sorted(glob.glob('backup/*')):
+              filename = os.path.basename(filepath)
+              mime = 'application/octet-stream' if filepath.endswith('.dump') else 'text/plain'
+              meta = {'name': filename, 'parents': [folder_id]}
+              media = MediaFileUpload(filepath, mimetype=mime, resumable=True)
+              f = service.files().create(body=meta, media_body=media, fields='id').execute()
+              print(f'Uploaded {filename} → {f["id"]}')
+          PYEOF

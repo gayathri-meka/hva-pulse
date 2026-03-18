@@ -366,7 +366,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
               </div>
             </>
           )}
-          <ExportButton applications={selectedApplications} disabled={selectedCount === 0} />
+          <ExportButton applications={applications} />
         </div>
       </div>
 
