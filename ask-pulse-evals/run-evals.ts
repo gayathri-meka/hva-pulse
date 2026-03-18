@@ -235,9 +235,14 @@ Score each criterion 1–5 with a brief reason:
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const goldenSet: GoldenCase[] = JSON.parse(
+  // Optional: --filter id1,id2,... to run a subset of cases
+  const filterArg = process.argv.find((a) => a.startsWith('--filter='))
+  const filterIds = filterArg ? new Set(filterArg.replace('--filter=', '').split(',')) : null
+
+  let goldenSet: GoldenCase[] = JSON.parse(
     readFileSync(join(__dirname, 'golden-set.json'), 'utf-8'),
   )
+  if (filterIds) goldenSet = goldenSet.filter((c) => filterIds.has(c.id))
 
   console.log(`\nAsk Pulse Eval — ${goldenSet.length} cases`)
   console.log(`Pipeline: ${PIPELINE_MODEL}   Judge: ${JUDGE_MODEL}\n`)

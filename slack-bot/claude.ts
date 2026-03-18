@@ -70,8 +70,9 @@ export async function runQuery(
   question: string,
   mcp: Client,
   tools: Anthropic.Tool[],
+  history: Anthropic.MessageParam[] = [],
 ): Promise<string> {
-  const thread: Anthropic.MessageParam[] = [{ role: 'user', content: question }];
+  const thread: Anthropic.MessageParam[] = [...history, { role: 'user', content: question }];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const response = await anthropic.messages.create({

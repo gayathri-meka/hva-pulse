@@ -7,6 +7,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runQuery } from './claude.js';
 
+type SlackClient = InstanceType<typeof App>['client'];
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Path to the pre-built MCP server (run `cd mcp && npm run build` first)
 const MCP_SERVER_PATH = join(__dirname, '..', 'mcp', 'dist', 'server.js');
@@ -63,6 +65,64 @@ async function getMcp(): Promise<{ mcp: Client; tools: Anthropic.Tool[] }> {
   return { mcp: client, tools: anthropicTools };
 }
 
+// ── Bot identity ──────────────────────────────────────────────────────────────
+// Resolved at startup; used to identify bot messages in thread history.
+
+let botUserId: string | undefined;
+
+// ── Thread history → Anthropic messages ──────────────────────────────────────
+
+async function fetchThreadHistory(
+  channel: string,
+  threadTs: string,
+  currentTs: string,
+  client: SlackClient,
+): Promise<Anthropic.MessageParam[]> {
+  try {
+    const { messages } = await client.conversations.replies({
+      channel,
+      ts: threadTs,
+      limit: 20,
+    });
+    if (!messages) return [];
+
+    const history: Anthropic.MessageParam[] = [];
+
+    for (const msg of messages) {
+      if (msg.ts === currentTs) continue;                       // skip the current message
+      if (!msg.text || msg.text.includes('_Thinking…_')) continue; // skip placeholders
+
+      const isBot = !!(msg.bot_id ?? (botUserId && msg.user === botUserId));
+      const role: 'user' | 'assistant' = isBot ? 'assistant' : 'user';
+      const text = role === 'user'
+        ? msg.text.replace(/<@[A-Z0-9]+>/g, '').trim()
+        : msg.text;
+
+      if (!text) continue;
+
+      // Anthropic requires strictly alternating roles — merge consecutive same-role messages
+      const last = history[history.length - 1];
+      if (last && last.role === role) {
+        last.content = (last.content as string) + '\n' + text;
+      } else {
+        history.push({ role, content: text });
+      }
+    }
+
+    // History must end on an assistant turn (the user question is appended by runQuery)
+    // If the last entry is a user message it means there's no prior bot reply — drop it
+    // to avoid a double user-turn when runQuery prepends the new question.
+    // (This can happen on the very first message in a thread.)
+    if (history.length > 0 && history[history.length - 1].role === 'user') {
+      history.pop();
+    }
+
+    return history;
+  } catch {
+    return []; // non-fatal — fall back to no history
+  }
+}
+
 // ── Markdown → Slack mrkdwn ───────────────────────────────────────────────────
 
 function toMrkdwn(text: string): string {
@@ -83,14 +143,16 @@ async function handleMessage({
   userText,
   channel,
   threadTs,          // reply thread anchor (undefined = start new thread for mentions, none for DMs)
+  currentTs,         // ts of the triggering message (excluded from history)
   replyInThread,     // true for channel mentions, false for DMs
   client,
 }: {
   userText: string;
   channel: string;
   threadTs: string;
+  currentTs: string;
   replyInThread: boolean;
-  client: InstanceType<typeof App>['client'];
+  client: SlackClient;
 }) {
   // Post "Thinking…" immediately so the user knows the bot received their message
   const thinking = await client.chat.postMessage({
@@ -103,7 +165,11 @@ async function handleMessage({
   let responseText: string;
   try {
     const { mcp, tools } = await getMcp();
-    responseText = toMrkdwn(await runQuery(userText, mcp, tools));
+    // Fetch prior thread messages so follow-up questions have full context
+    const history = replyInThread
+      ? await fetchThreadHistory(channel, threadTs, currentTs, client)
+      : [];
+    responseText = toMrkdwn(await runQuery(userText, mcp, tools, history));
   } catch (err) {
     console.error('[pulse-bot] error:', err);
     responseText = `Sorry, something went wrong. ${err instanceof Error ? err.message : String(err)}`;
@@ -133,6 +199,7 @@ slack.event('app_mention', async ({ event, client }) => {
     userText,
     channel: event.channel,
     threadTs,
+    currentTs: event.ts,
     replyInThread: true,
     client,
   });
@@ -161,7 +228,8 @@ slack.message(async ({ message, client }) => {
     userText,
     channel: msg.channel,
     threadTs: msg.ts,
-    replyInThread: false, // DMs: just post inline, no nested thread
+    currentTs: msg.ts,
+    replyInThread: false,
     client,
   });
 });
@@ -172,6 +240,12 @@ slack.message(async ({ message, client }) => {
 await getMcp();
 
 await slack.start();
+
+// Resolve the bot's own Slack user ID so we can correctly attribute its messages
+// in thread history (needed to set role: 'assistant' for prior bot replies)
+const authResult = await slack.client.auth.test();
+botUserId = authResult.user_id as string;
+
 console.log('[pulse-bot] Running in Socket Mode — waiting for messages');
 
 process.on('SIGINT', async () => {
