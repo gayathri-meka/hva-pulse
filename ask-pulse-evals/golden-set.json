@@ -88,5 +88,29 @@
     "category": "pipeline_stats",
     "question": "Break down the number of hired applications by batch. Which batch has produced the most placements?",
     "eval_notes": "Requires joining applications (status = hired) → users → learners to get batch_name. Should GROUP BY batch_name and count hires. Must identify the top batch by name. If batch_name is null for some learners that is acceptable to note."
+  },
+  {
+    "id": "rejection-companies-roles-tech-breakdown",
+    "category": "rejection_analysis",
+    "question": "What are all the companies that rejected learners? What were the roles — can you list them down? How many of these are tech roles and in that how many are web dev (frontend/backend)? What's the % breakdown?",
+    "eval_notes": "Must query applications with status = 'rejected', join to roles and companies to get role/company names. Should list companies and their rejected roles. Then must attempt to classify roles as tech vs non-tech, and within tech identify web dev (frontend/backend) roles — likely using role title text matching (ILIKE). Should show counts and percentages for: total roles, tech roles, web dev roles. If classification is uncertain, model should note that it is based on role title keywords."
+  },
+  {
+    "id": "best-performing-batch",
+    "category": "multi_join",
+    "question": "Which batch is performing best? Who are the mentors and learners for this batch?",
+    "eval_notes": "Must define 'best performing' — likely by placement rate (hired applications / total applications) or absolute hire count. Should query applications → learners to get batch_name and compute a performance metric, identify the top batch, then list the learners in that batch (joining learners → users for names) and their assigned LF/mentors (lf_user_id → users). Should explicitly state which metric was used to rank batches."
+  },
+  {
+    "id": "placed-this-year",
+    "category": "learner_specific",
+    "question": "How many learners got placed this year?",
+    "eval_notes": "Must query the learners table filtering on status IN ('Placed - HVA', 'Placed - Self') — both statuses must be included. 'This year' should be interpreted using the placed_fy column (financial year) or the updated_at timestamp for the current calendar year. Should state the total count and ideally split by 'Placed - HVA' vs 'Placed - Self'. Must not use only the alumni table — the learners table status is the source of truth for placement."
+  },
+  {
+    "id": "rejected-learners-readiness-breakdown",
+    "category": "rejection_analysis",
+    "question": "Out of all the learners that got rejected, can you give a breakdown of their readiness?",
+    "eval_notes": "Must query applications with status = 'rejected', join to learners to get the readiness column. Should GROUP BY readiness and count distinct learners (not applications, to avoid double-counting). Readiness values: ready, almost_ready, not_ready. Should show counts and percentages. If a learner has multiple rejections, they should be counted once. Should note if any rejected learners have null readiness."
   }
 ]
