@@ -27,7 +27,7 @@
     "id": "learner-full-profile",
     "category": "learner_specific",
     "question": "Give me the full profile of learner HVA001 — their batch, track, readiness, scores, and the status of all their applications.",
-    "eval_notes": "Must query both the learners table (for profile/scores) and the applications table (for application history). Should clearly mention learner_id HVA001. If HVA001 doesn't exist, should say so."
+    "eval_notes": "Must query both the learners table (for profile/scores) and the applications table (for application history). HVA001 almost certainly does not exist in the DB. The correct and expected response is to run the query, find no results, and clearly state that no learner with ID HVA001 was found — this should score highly. A low score should only be given if the model invents data or fails to query at all."
   },
   {
     "id": "alumni-employment",
@@ -106,6 +106,12 @@
     "category": "learner_specific",
     "question": "How many learners got placed this year?",
     "eval_notes": "Must query the learners table filtering on status IN ('Placed - HVA', 'Placed - Self') — both statuses must be included. 'This year' should be interpreted using the placed_fy column (financial year) or the updated_at timestamp for the current calendar year. Should state the total count and ideally split by 'Placed - HVA' vs 'Placed - Self'. Must not use only the alumni table — the learners table status is the source of truth for placement."
+  },
+  {
+    "id": "fully-placed-batches",
+    "category": "pipeline_stats",
+    "question": "Ignoring learners who exited (dropped out or discontinued), are there any batches where all remaining learners got placed?",
+    "eval_notes": "Must query the learners table, exclude status IN ('Dropped Out', 'Discontinued'), then check whether every remaining learner in each batch has status IN ('Placed - HVA', 'Placed - Self'). Should GROUP BY batch_name and use a HAVING clause or equivalent logic to find batches where all non-exit learners are placed. If no such batch exists, should say so clearly. Must not include exit learners in the denominator."
   },
   {
     "id": "rejected-learners-readiness-breakdown",
