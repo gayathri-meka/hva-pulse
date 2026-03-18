@@ -11,6 +11,15 @@ Learning Facilitators (LFs) query and understand learner placement data in real 
 readiness (ready | almost_ready | not_ready), and optional blacklisted_date. \
 Each learner is assigned an LF (Learning Facilitator).
 
+The learners table has a **status** column reflecting overall programme state. Known values:
+- Active: "Yet to Start", "Ongoing"
+- Exit: "Dropped Out", "Discontinued"
+- Placement: "Placed - HVA" (placed through Pulse), "Placed - Self" (self-placed)
+
+**Important**: whenever a user asks about "placed" learners, always include BOTH \
+"Placed - HVA" AND "Placed - Self" (e.g. \`status IN ('Placed - HVA', 'Placed - Self')\`) \
+unless they explicitly ask for only one type.
+
 **Companies** — hiring organisations. Each company has one or more Roles.
 
 **Roles** — job openings. Status: open (actively hiring) or closed.
