@@ -1,0 +1,23 @@
+{
+  "name": "pulse-slack-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack bot that answers Pulse database questions via the MCP server",
+  "scripts": {
+    "dev": "tsx --env-file=../.env.local app.ts",
+    "build": "tsc",
+    "start": "node --env-file=../.env.local dist/app.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@slack/bolt": "^3.22.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

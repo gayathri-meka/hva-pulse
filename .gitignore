@@ -33,6 +33,10 @@ yarn-error.log*
 mcp/node_modules/
 mcp/dist/
 
+# slack bot
+slack-bot/node_modules/
+slack-bot/dist/
+
 # eval score outputs (keep the directory, ignore the reports)
 ask-pulse-evals/scores/*.json
 
