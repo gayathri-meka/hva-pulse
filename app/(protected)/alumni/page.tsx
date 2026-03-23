@@ -119,14 +119,15 @@ export default async function AlumniPage({
     .map((cohort_fy) => {
       const fromLearners = learnerCohortMap.get(cohort_fy)
       const stat         = (rawCohortStats ?? []).find((r) => r.cohort_fy === cohort_fy)
-      // Prefer live learner data; fall back to manual cohort_stats
+      // Manual cohort_stats is authoritative for historical cohorts.
+      // Only use live learner data when no manual entry exists.
       return {
         cohort_fy,
-        id:           fromLearners ? null : (stat?.id ?? null),
-        onboarded:    fromLearners?.onboarded ?? stat?.onboarded ?? null,
-        dropouts:     fromLearners?.dropouts  ?? stat?.dropouts  ?? null,
+        id:           stat?.id ?? null,
+        onboarded:    stat?.onboarded ?? fromLearners?.onboarded ?? null,
+        dropouts:     stat?.dropouts  ?? fromLearners?.dropouts  ?? null,
         placed:       cohortPlacedMap.get(cohort_fy) ?? 0,
-        autoComputed: !!fromLearners,
+        autoComputed: !stat && !!fromLearners,
       }
     })
 
