@@ -149,7 +149,7 @@ export default function CompaniesListClient({
     )
     .filter((c) => !searchTerm || c.company_name.toLowerCase().includes(searchTerm))
 
-  const allOpen = openIds.size === companies.length
+  const allOpen = companies.length > 0 && companies.every((c) => openIds.has(c.id))
 
   function toggleAll() {
     setOpenIds(allOpen ? new Set() : new Set(companies.map((c) => c.id)))
@@ -172,13 +172,11 @@ export default function CompaniesListClient({
     const { active, over } = event
     if (!over || active.id === over.id) return
 
-    setOrderedIds((prev) => {
-      const oldIndex  = prev.indexOf(active.id as string)
-      const newIndex  = prev.indexOf(over.id as string)
-      const reordered = arrayMove(prev, oldIndex, newIndex)
-      reorderCompanies(reordered)
-      return reordered
-    })
+    const oldIndex  = orderedIds.indexOf(active.id as string)
+    const newIndex  = orderedIds.indexOf(over.id as string)
+    const reordered = arrayMove(orderedIds, oldIndex, newIndex)
+    setOrderedIds(reordered)
+    reorderCompanies(reordered)
   }
 
   // Hide drag handles when a filter is active (reordering a subset is misleading)

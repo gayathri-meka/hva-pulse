@@ -38,6 +38,9 @@ export function exportToCsv<T>(table: Table<T>, filename: string): void {
   const a = document.createElement('a')
   a.href = url
   a.download = filename
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+  // Defer revoke so the browser has time to initiate the download (Safari / Firefox)
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }

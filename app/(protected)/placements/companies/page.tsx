@@ -78,7 +78,7 @@ export default async function CompaniesPage({ searchParams }: Props) {
           <p className="text-sm text-zinc-400">No companies yet. Add your first one above.</p>
         </div>
       ) : (
-        <Suspense>
+        <Suspense fallback={null}>
           <CompaniesListClient companies={companiesWithRoles} initialView={initialView} />
         </Suspense>
       )}

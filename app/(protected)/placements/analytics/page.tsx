@@ -228,7 +228,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
 
   return (
     <div>
-    <Suspense>
+    <Suspense fallback={null}>
       <AnalyticsFilters lfs={lfs} batches={batches} />
     </Suspense>
     <div className="mb-8">

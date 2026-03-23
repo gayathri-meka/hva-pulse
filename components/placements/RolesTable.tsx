@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   useReactTable,
@@ -13,6 +13,7 @@ import {
   createColumnHelper,
   type FilterFn,
   type Column,
+  type Row,
   type SortingState,
   type ColumnFiltersState,
   type ColumnSizingState,
@@ -33,11 +34,23 @@ const STATUS_BADGE: Record<string, string> = {
   closed: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200',
 }
 
-// ── Multi-select filter ────────────────────────────────────────────────────────
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+// ── Stable filter functions (module scope = stable references) ─────────────────
 const multiSelectFilter: FilterFn<FlatRole> = (row, colId, filterValues: string[]) =>
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
 
+// Defined outside component so the reference is stable across renders
+function globalSearchFn(row: Row<FlatRole>, _colId: string, filterValue: string): boolean {
+  const q = filterValue.toLowerCase()
+  return (
+    row.getValue<string>('company_name').toLowerCase().includes(q) ||
+    row.getValue<string>('role_title').toLowerCase().includes(q)
+  )
+}
+
+// ── FilterDropdown ─────────────────────────────────────────────────────────────
 function FilterDropdown({ column }: { column: Column<FlatRole, unknown> }) {
   const [open, setOpen] = useState(false)
   const ref             = useRef<HTMLDivElement>(null)
@@ -110,7 +123,7 @@ function FilterDropdown({ column }: { column: Column<FlatRole, unknown> }) {
   )
 }
 
-// ── Columns ────────────────────────────────────────────────────────────────────
+// ── Columns (module scope — stable reference, deterministic UTC date format) ───
 const col = createColumnHelper<FlatRole>()
 
 const columns = [
@@ -149,11 +162,15 @@ const columns = [
   col.accessor('created_at', {
     header: 'Date Added',
     size: 120,
-    cell: (info) => (
-      <span className="text-zinc-500">
-        {new Date(info.getValue()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-      </span>
-    ),
+    // Use UTC date parts so server-render and browser hydration produce identical output
+    cell: (info) => {
+      const d = new Date(info.getValue())
+      return (
+        <span className="text-zinc-500">
+          {d.getUTCDate()} {MONTHS[d.getUTCMonth()]} {d.getUTCFullYear()}
+        </span>
+      )
+    },
     sortingFn: 'datetime',
   }),
 ]
@@ -173,25 +190,29 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
     localStorage.setItem(SIZING_KEY, JSON.stringify(columnSizing))
   }, [columnSizing])
 
-  // Flat-map all roles with their company name
-  const allRoles: FlatRole[] = companies.flatMap((c) =>
-    c.roles.map((r) => ({ ...r, company_name: c.company_name })),
+  // Memoize derived data so TanStack Table only reprocesses when companies or
+  // weekParam actually change — not on every filter/sort state update.
+  const allRoles = useMemo<FlatRole[]>(
+    () => companies.flatMap((c) => c.roles.map((r) => ({ ...r, company_name: c.company_name }))),
+    [companies],
   )
 
-  // Apply week filter (pre-table, since it comes from the URL)
-  const weekFilteredRoles = weekParam
-    ? allRoles.filter((r) => {
-        const d         = new Date(r.created_at)
-        const weekStart = new Date(weekParam + 'T00:00:00')
-        const weekEnd   = new Date(weekStart)
-        weekEnd.setDate(weekEnd.getDate() + 7)
-        return d >= weekStart && d < weekEnd
-      })
-    : allRoles
+  const weekFilteredRoles = useMemo<FlatRole[]>(() => {
+    if (!weekParam) return allRoles
+    // Parse as explicit UTC so it matches the UTC isoDate generated on the server
+    const weekStart = new Date(weekParam + 'T00:00:00Z')
+    const weekEnd   = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+    return allRoles.filter((r) => {
+      const d = new Date(r.created_at)
+      return d >= weekStart && d < weekEnd
+    })
+  }, [allRoles, weekParam])
 
-  const weekLabel = weekParam
-    ? new Date(weekParam + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : null
+  const weekLabel = useMemo(() => {
+    if (!weekParam) return null
+    const d = new Date(weekParam + 'T00:00:00Z')
+    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
+  }, [weekParam])
 
   function clearWeek() {
     const params = new URLSearchParams(searchParams.toString())
@@ -208,13 +229,7 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
     onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
-    globalFilterFn: (row, _colId, filterValue: string) => {
-      const q = filterValue.toLowerCase()
-      return (
-        row.getValue<string>('company_name').toLowerCase().includes(q) ||
-        row.getValue<string>('role_title').toLowerCase().includes(q)
-      )
-    },
+    globalFilterFn: globalSearchFn,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -235,7 +250,6 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
     <div>
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {/* Week chip */}
         {weekLabel && (
           <span className="flex items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white">
             Week of {weekLabel}
@@ -247,7 +261,6 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
           </span>
         )}
 
-        {/* Global search */}
         <div className="relative min-w-[180px] max-w-xs flex-1">
           <svg
             xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -277,15 +290,11 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
         <span className="text-sm text-zinc-400">{rows.length} role{rows.length !== 1 ? 's' : ''}</span>
 
         {hasActiveFilter && (
-          <button
-            onClick={clearAllFilters}
-            className="text-xs font-medium text-blue-500 hover:text-blue-700"
-          >
+          <button onClick={clearAllFilters} className="text-xs font-medium text-blue-500 hover:text-blue-700">
             Clear filters
           </button>
         )}
 
-        {/* CSV export */}
         <button
           onClick={() => exportToCsv(table, `roles_${new Date().toISOString().slice(0, 10)}.csv`)}
           disabled={rows.length === 0}
@@ -322,9 +331,7 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
                           {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
                           {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                         </div>
-                        {header.column.getCanFilter() && (
-                          <FilterDropdown column={header.column} />
-                        )}
+                        {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
                       </>
                     )}
                     {header.column.getCanResize() && (
