@@ -1,14 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
+  type FilterFn,
+  type Column,
   type SortingState,
   type ColumnFiltersState,
   type ColumnSizingState,
@@ -29,12 +33,91 @@ const STATUS_BADGE: Record<string, string> = {
   closed: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200',
 }
 
+// ── Multi-select filter ────────────────────────────────────────────────────────
+const multiSelectFilter: FilterFn<FlatRole> = (row, colId, filterValues: string[]) =>
+  !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
+multiSelectFilter.autoRemove = (val: string[]) => !val?.length
+
+function FilterDropdown({ column }: { column: Column<FlatRole, unknown> }) {
+  const [open, setOpen] = useState(false)
+  const ref             = useRef<HTMLDivElement>(null)
+  const selected        = (column.getFilterValue() as string[]) ?? []
+
+  useEffect(() => {
+    if (!open) return
+    function onOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [open])
+
+  const options = Array.from(column.getFacetedUniqueValues().keys())
+    .filter((v) => v != null && v !== '')
+    .map(String)
+    .sort()
+
+  function toggle(val: string) {
+    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
+    column.setFilterValue(next.length ? next : undefined)
+  }
+
+  const label =
+    selected.length === 0 ? 'All'
+    : selected.length === 1 ? selected[0]
+    : `${selected.length} selected`
+
+  return (
+    <div ref={ref} className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-xs font-normal normal-case tracking-normal focus:outline-none ${
+          selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-0.5 max-h-52 min-w-[140px] overflow-y-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { column.setFilterValue(undefined); setOpen(false) }}
+              className="w-full border-b border-zinc-100 px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50"
+            >
+              Clear filter
+            </button>
+          )}
+          {options.map((opt) => (
+            <label key={opt} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={() => toggle(opt)}
+                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
+              />
+              <span className="capitalize">{opt}</span>
+            </label>
+          ))}
+          {options.length === 0 && <p className="px-3 py-1 text-xs text-zinc-400">No values</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Columns ────────────────────────────────────────────────────────────────────
 const col = createColumnHelper<FlatRole>()
 
 const columns = [
   col.accessor('company_name', {
     header: 'Company',
     size: 180,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="font-medium text-zinc-800">{info.getValue()}</span>,
   }),
   col.accessor('role_title', {
@@ -45,6 +128,7 @@ const columns = [
   col.accessor('location', {
     header: 'Location',
     size: 140,
+    filterFn: multiSelectFilter,
     cell: (info) => <span className="text-zinc-500">{info.getValue() || '—'}</span>,
   }),
   col.accessor('salary_range', {
@@ -55,6 +139,7 @@ const columns = [
   col.accessor('status', {
     header: 'Status',
     size: 100,
+    filterFn: multiSelectFilter,
     cell: (info) => (
       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_BADGE[info.getValue()] ?? ''}`}>
         {info.getValue()}
@@ -73,33 +158,34 @@ const columns = [
   }),
 ]
 
+// ── Component ──────────────────────────────────────────────────────────────────
 export default function RolesTable({ companies }: { companies: CompanyWithRoles[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const weekParam    = searchParams.get('week')
 
-  const [sorting, setSorting]           = useState<SortingState>([{ id: 'created_at', desc: true }])
+  const [sorting, setSorting]             = useState<SortingState>([{ id: 'created_at', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [columnSizing, setColumnSizing]  = useState<ColumnSizingState>(loadSizing)
+  const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
+  const [globalFilter, setGlobalFilter]   = useState('')
 
-  // Persist column sizing
   useEffect(() => {
     localStorage.setItem(SIZING_KEY, JSON.stringify(columnSizing))
   }, [columnSizing])
 
-  // Flat-map roles with company name
+  // Flat-map all roles with their company name
   const allRoles: FlatRole[] = companies.flatMap((c) =>
     c.roles.map((r) => ({ ...r, company_name: c.company_name })),
   )
 
-  // Filter to the selected week if present
-  const filteredRoles = weekParam
+  // Apply week filter (pre-table, since it comes from the URL)
+  const weekFilteredRoles = weekParam
     ? allRoles.filter((r) => {
-        const roleDate = new Date(r.created_at)
+        const d         = new Date(r.created_at)
         const weekStart = new Date(weekParam + 'T00:00:00')
         const weekEnd   = new Date(weekStart)
         weekEnd.setDate(weekEnd.getDate() + 7)
-        return roleDate >= weekStart && roleDate < weekEnd
+        return d >= weekStart && d < weekEnd
       })
     : allRoles
 
@@ -114,35 +200,92 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
   }
 
   const table = useReactTable({
-    data: filteredRoles,
+    data: weekFilteredRoles,
     columns,
-    state: { sorting, columnFilters, columnSizing },
+    filterFns: { multiSelectFilter },
+    state: { sorting, columnFilters, columnSizing, globalFilter },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: setColumnSizing,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: (row, _colId, filterValue: string) => {
+      const q = filterValue.toLowerCase()
+      return (
+        row.getValue<string>('company_name').toLowerCase().includes(q) ||
+        row.getValue<string>('role_title').toLowerCase().includes(q)
+      )
+    },
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
-  const rows = table.getRowModel().rows
+  const rows            = table.getRowModel().rows
+  const hasActiveFilter = columnFilters.length > 0 || globalFilter.length > 0
+
+  function clearAllFilters() {
+    setColumnFilters([])
+    setGlobalFilter('')
+  }
 
   return (
     <div>
       {/* Toolbar */}
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Week chip */}
         {weekLabel && (
           <span className="flex items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white">
             Week of {weekLabel}
-            <button onClick={clearWeek} className="ml-0.5 text-zinc-400 hover:text-white" title="Clear filter">
+            <button onClick={clearWeek} className="ml-0.5 text-zinc-400 hover:text-white" title="Clear">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                 <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
               </svg>
             </button>
           </span>
         )}
+
+        {/* Global search */}
+        <div className="relative min-w-[180px] max-w-xs flex-1">
+          <svg
+            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+          >
+            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+          </svg>
+          <input
+            type="text"
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            placeholder="Search company or role…"
+            className="w-full rounded-full border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+          />
+          {globalFilter && (
+            <button
+              onClick={() => setGlobalFilter('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
         <span className="text-sm text-zinc-400">{rows.length} role{rows.length !== 1 ? 's' : ''}</span>
+
+        {hasActiveFilter && (
+          <button
+            onClick={clearAllFilters}
+            className="text-xs font-medium text-blue-500 hover:text-blue-700"
+          >
+            Clear filters
+          </button>
+        )}
+
+        {/* CSV export */}
         <button
           onClick={() => exportToCsv(table, `roles_${new Date().toISOString().slice(0, 10)}.csv`)}
           disabled={rows.length === 0}
@@ -167,17 +310,22 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
                   <th
                     key={header.id}
                     style={{ width: header.getSize(), position: 'relative' }}
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400"
+                    className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400"
                   >
                     {header.isPlaceholder ? null : (
-                      <div
-                        className={`flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer select-none hover:text-zinc-600' : ''}`}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
-                        {header.column.getIsSorted() === 'desc' && <span>↓</span>}
-                      </div>
+                      <>
+                        <div
+                          className={`flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer select-none hover:text-zinc-600' : ''}`}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
+                          {header.column.getIsSorted() === 'desc' && <span>↓</span>}
+                        </div>
+                        {header.column.getCanFilter() && (
+                          <FilterDropdown column={header.column} />
+                        )}
+                      </>
                     )}
                     {header.column.getCanResize() && (
                       <div
