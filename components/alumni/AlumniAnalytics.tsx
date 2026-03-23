@@ -104,6 +104,7 @@ export default function AlumniAnalytics({
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Onboarded</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Dropouts</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Placed</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Yet to be placed</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Placement %</th>
                   <th className="w-10" />
                 </tr>
@@ -111,7 +112,7 @@ export default function AlumniAnalytics({
               <tbody className="divide-y divide-zinc-100">
                 {cohortRows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                       No cohort data yet — click &ldquo;+ Add cohort&rdquo; to get started.
                     </td>
                   </tr>
@@ -133,6 +134,9 @@ export default function AlumniAnalytics({
                         {row.dropouts !== null ? row.dropouts : <span className="text-zinc-300">—</span>}
                       </td>
                       <td className="px-4 py-2.5 text-right text-zinc-700">{row.placed}</td>
+                      <td className="px-4 py-2.5 text-right text-zinc-700">
+                        {active !== null ? active - row.placed : <span className="text-zinc-300">—</span>}
+                      </td>
                       <td className="px-4 py-2.5 text-right text-zinc-700">
                         {rate !== null ? `${rate}%` : <span className="text-zinc-300">—</span>}
                       </td>
