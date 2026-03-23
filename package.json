@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "cd mcp && npm install && npm run build && cd .. && next build",
+    "build": "cd mcp && npm install --include=dev && npm run build && cd .. && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest",
