@@ -27,6 +27,8 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-17
+          # Make pg17 tools the default for all subsequent steps
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       # ── 2. pg_dump — full restorable backup ─────────────────────────────────
       - name: pg_dump (custom format)
