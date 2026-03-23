@@ -86,9 +86,14 @@ export default async function DashboardPage({ searchParams }: Props) {
   const weekCounts: Record<number, number> = {}
   for (const role of roles ?? []) {
     if (!role.created_at) continue
-    const diffMs  = startOfCurrentWeek.getTime() - new Date(role.created_at).getTime()
-    const weeksAgo = Math.max(0, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)))
-    weekCounts[weeksAgo] = (weekCounts[weeksAgo] ?? 0) + 1
+    const d = new Date(role.created_at)
+    const roleDow = d.getDay() === 0 ? 6 : d.getDay() - 1
+    const roleMonday = new Date(d)
+    roleMonday.setHours(0, 0, 0, 0)
+    roleMonday.setDate(d.getDate() - roleDow)
+    const diffMs  = startOfCurrentWeek.getTime() - roleMonday.getTime()
+    const weeksAgo = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
+    if (weeksAgo >= 0) weekCounts[weeksAgo] = (weekCounts[weeksAgo] ?? 0) + 1
   }
   const last4 = [0, 1, 2, 3].map((w) => weekCounts[w] ?? 0)
   const weeklyAvg = last4.reduce((s, c) => s + c, 0) / 4

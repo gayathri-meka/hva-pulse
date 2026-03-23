@@ -89,9 +89,16 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   for (const role of roles ?? []) {
     if (!role.created_at) continue
     const d = new Date(role.created_at)
-    const diffMs = startOfCurrentWeek.getTime() - d.getTime()
-    const weeksAgo = Math.max(0, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)))
-    weekCounts[weeksAgo] = (weekCounts[weeksAgo] ?? 0) + 1
+    // Snap to the Monday of the role's own week, then diff Monday-to-Monday.
+    // Without this, Math.floor on a fractional week (e.g. Tue–Sun of a prior week)
+    // rounds down into the wrong bucket.
+    const roleDow = d.getDay() === 0 ? 6 : d.getDay() - 1
+    const roleMonday = new Date(d)
+    roleMonday.setHours(0, 0, 0, 0)
+    roleMonday.setDate(d.getDate() - roleDow)
+    const diffMs = startOfCurrentWeek.getTime() - roleMonday.getTime()
+    const weeksAgo = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
+    if (weeksAgo >= 0) weekCounts[weeksAgo] = (weekCounts[weeksAgo] ?? 0) + 1
   }
 
   const weeklyRoles = Object.entries(weekCounts)
