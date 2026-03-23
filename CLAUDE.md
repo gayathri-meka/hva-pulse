@@ -139,6 +139,12 @@ The alumni sheet sync will never overwrite Pulse-managed rows because those lear
 
 Full schema dump is at `docs/schema.sql`. Always refer to this for column names and types — do not infer from migration files, which are incomplete.
 
+**When adding a new query, always ask: does this column need an index?** Indexes to consider whenever you add a `.eq()`, `.in()`, or `.filter()` on a column that isn't already indexed:
+- Any foreign key column used in joins or filters (e.g. `user_id`, `role_id`, `learner_id`)
+- Any column used as a filter in a list/analytics page (e.g. `lf_name`, `batch_name`, `status`, `preference`)
+
+Existing indexes are in `migrations/007_performance_indexes.sql` and `migrations/020_missing_indexes.sql`. Add new ones in a new migration file.
+
 **After any schema change**, regenerate the dump and commit it alongside the migration:
 
 ```bash
