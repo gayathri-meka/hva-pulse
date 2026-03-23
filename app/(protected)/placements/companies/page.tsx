@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import AddCompanyButton from '@/components/placements/AddCompanyButton'
@@ -77,7 +78,9 @@ export default async function CompaniesPage({ searchParams }: Props) {
           <p className="text-sm text-zinc-400">No companies yet. Add your first one above.</p>
         </div>
       ) : (
-        <CompaniesListClient companies={companiesWithRoles} initialView={initialView} />
+        <Suspense>
+          <CompaniesListClient companies={companiesWithRoles} initialView={initialView} />
+        </Suspense>
       )}
     </div>
   )
