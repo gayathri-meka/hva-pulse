@@ -197,7 +197,7 @@ export async function createApplication(formData: FormData) {
   revalidatePath('/placements/analytics')
 }
 
-export async function updateApplicationStatus(id: string, status: string, note?: string, reasons?: string[], salaryLpa?: number) {
+export async function updateApplicationStatus(id: string, status: string, note?: string, reasons?: string[], salaryLpa?: number, placementDate?: string) {
   await requireAdmin()
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -261,11 +261,12 @@ export async function updateApplicationStatus(id: string, status: string, note?:
         if (alumniId) {
           await supabase.from('alumni_jobs').delete().eq('alumni_id', alumniId).eq('is_current', true)
           await supabase.from('alumni_jobs').insert({
-            alumni_id: alumniId,
-            company:   company.company_name,
-            role:      role.role_title,
-            salary:    salaryLpa ?? null,
-            is_current: true,
+            alumni_id:       alumniId,
+            company:         company.company_name,
+            role:            role.role_title,
+            salary:          salaryLpa ?? null,
+            placement_month: placementDate ?? null,
+            is_current:      true,
           })
         }
       }

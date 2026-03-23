@@ -90,6 +90,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   const [checkedReasons, setCheckedReasons] = useState<Set<string>>(new Set())
   const [reasonsError, setReasonsError]     = useState(false)
   const [salaryText, setSalaryText]         = useState('')
+  const [placementDate, setPlacementDate]   = useState(() => new Date().toISOString().slice(0, 10))
   const [bulkSelect, setBulkSelect]         = useState('')
   const [, startTransition] = useTransition()
 
@@ -99,6 +100,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     setCheckedReasons(new Set())
     setReasonsError(false)
     setSalaryText('')
+    setPlacementDate(new Date().toISOString().slice(0, 10))
   }
 
   function handleStatusChange(id: string, newStatus: string) {
@@ -129,7 +131,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
   function handleModalConfirm() {
     const change = pendingChange!
 
-    // Hired — no reasons required, just optional salary
+    // Hired — no reasons required, just optional salary + placement date
     if (change.newStatus === 'hired') {
       const salary = salaryText ? parseFloat(salaryText) : undefined
       if (change.bulk) {
@@ -140,7 +142,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
         setRowSelection({})
       } else {
         setStatusMap((prev) => ({ ...prev, [change.id]: 'hired' }))
-        startTransition(() => updateApplicationStatus(change.id, 'hired', undefined, undefined, salary))
+        startTransition(() => updateApplicationStatus(change.id, 'hired', undefined, undefined, salary, placementDate))
       }
       setPendingChange(null)
       setSalaryText('')
@@ -174,6 +176,7 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
     setCheckedReasons(new Set())
     setReasonsError(false)
     setSalaryText('')
+    setPlacementDate(new Date().toISOString().slice(0, 10))
   }
 
   const columns = [
@@ -466,6 +469,15 @@ export default function ApplicationsList({ applications, statusCounts, total }: 
                       value={salaryText}
                       onChange={(e) => setSalaryText(e.target.value)}
                       placeholder="e.g. 8.5"
+                      className="mt-1 mb-3 w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
+                    />
+                    <label className="block text-xs font-medium text-zinc-500">
+                      Date of Placement
+                    </label>
+                    <input
+                      type="date"
+                      value={placementDate}
+                      onChange={(e) => setPlacementDate(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-zinc-900"
                     />
                   </>
