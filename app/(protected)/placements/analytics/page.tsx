@@ -100,8 +100,9 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     .map(({ weeksAgo, count }) => {
       const monday = new Date(startOfCurrentWeek)
       monday.setDate(monday.getDate() - weeksAgo * 7)
-      const label = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      return { label, count }
+      const label   = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const isoDate = monday.toISOString().slice(0, 10)
+      return { label, isoDate, count }
     })
 
   const notInterested = allPrefs.length

@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import NotInterestedReasons from './NotInterestedReasons'
 
 interface Props {
   totalRoles:                 number
-  weeklyRoles:                { label: string; count: number }[]
+  weeklyRoles:                { label: string; isoDate: string; count: number }[]
   notInterested:              number
   totalApps:                  number
   notShortlisted:             number
@@ -193,7 +194,7 @@ function WeeklyModal({
   weeklyRoles,
   onClose,
 }: {
-  weeklyRoles: { label: string; count: number }[]
+  weeklyRoles: { label: string; isoDate: string; count: number }[]
   onClose: () => void
 }) {
   const allCounts = weeklyRoles.map((w) => w.count)
@@ -241,16 +242,22 @@ function WeeklyModal({
             <p className="text-xs text-zinc-400">No data available.</p>
           ) : (
             weeklyRoles.map((w) => (
-              <div key={w.label} className="flex items-center gap-3">
-                <span className="w-12 shrink-0 text-right text-xs text-zinc-500 md:w-16">{w.label}</span>
+              <Link
+                key={w.label}
+                href={`/placements/companies?view=table&week=${w.isoDate}`}
+                onClick={onClose}
+                className="group flex items-center gap-3 rounded-lg px-1 py-0.5 hover:bg-zinc-50"
+                title={`View roles added week of ${w.label}`}
+              >
+                <span className="w-12 shrink-0 text-right text-xs text-zinc-500 group-hover:text-zinc-700 md:w-16">{w.label}</span>
                 <div className="flex flex-1 items-center gap-2">
                   <div
-                    className="h-5 rounded bg-[#5BAE5B]/25"
+                    className="h-5 rounded bg-[#5BAE5B]/25 transition-colors group-hover:bg-[#5BAE5B]/40"
                     style={{ width: `${(w.count / maxCount) * 100}%`, minWidth: w.count > 0 ? '4px' : '0' }}
                   />
                   <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-700">{w.count}</span>
                 </div>
-              </div>
+              </Link>
             ))
           )}
           </div>

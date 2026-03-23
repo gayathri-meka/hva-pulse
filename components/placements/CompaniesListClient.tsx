@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   DndContext,
   closestCenter,
@@ -19,8 +20,11 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import CompanyAccordion from './CompanyAccordion'
+import RolesTable from './RolesTable'
 import { reorderCompanies } from '@/app/(protected)/placements/actions'
 import type { CompanyWithRoles } from '@/types'
+
+type ViewMode = 'cards' | 'table'
 
 function GripHandle({ attributes, listeners }: {
   attributes: ReturnType<typeof useSortable>['attributes']
@@ -78,9 +82,24 @@ type RoleFilter = 'all' | 'open' | 'closed'
 
 export default function CompaniesListClient({
   companies: initial,
+  initialView = 'cards',
 }: {
   companies: CompanyWithRoles[]
+  initialView?: ViewMode
 }) {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+
+  const [view, setView] = useState<ViewMode>(initialView)
+
+  function switchView(v: ViewMode) {
+    setView(v)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('view', v)
+    if (v === 'cards') params.delete('week')
+    router.push(`?${params.toString()}`)
+  }
+
   // orderedIds drives display order; initial is the source of truth for data
   const [orderedIds, setOrderedIds] = useState<string[]>(() => initial.map((c) => c.id))
   const [openIds, setOpenIds]       = useState<Set<string>>(() => new Set(initial.map((c) => c.id)))
@@ -167,82 +186,114 @@ export default function CompaniesListClient({
 
   return (
     <div>
-      {/* Filter + Search + Expand/Collapse row */}
+      {/* View toggle + Filter + Search + Expand/Collapse row */}
       <div className="mb-3 flex flex-wrap items-center gap-3">
-        {/* Status pills */}
-        <div className="flex gap-2">
-          {(['all', 'open', 'closed'] as RoleFilter[]).map((f) => (
+        {/* Cards / Table toggle */}
+        <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5">
+          {(['cards', 'table'] as ViewMode[]).map((v) => (
             <button
-              key={f}
-              onClick={() => setRoleFilter(f)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                roleFilter === f
-                  ? 'bg-zinc-900 text-white'
-                  : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+              key={v}
+              onClick={() => switchView(v)}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors capitalize ${
+                view === v ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'open' ? 'Has Open Roles' : 'All Closed'}
+              {v === 'cards' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                  <path d="M2 4.75A2.75 2.75 0 0 1 4.75 2h10.5A2.75 2.75 0 0 1 18 4.75v10.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25V4.75Zm2.75-.75c-.69 0-1.25.56-1.25 1.25v.5h11v-.5c0-.69-.56-1.25-1.25-1.25H4.75ZM3.5 7.25v8c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-8h-13Z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                  <path fillRule="evenodd" d="M.99 5.24A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25l.01 9.5A2.25 2.25 0 0 1 16.76 17H3.26A2.267 2.267 0 0 1 1 14.74l-.01-9.5Zm8.26 9.52v-.625a.75.75 0 0 0-1.5 0v.625h1.5Zm1.5 0h1.5v-.625a.75.75 0 0 0-1.5 0v.625Zm3 0h1.5v-.625a.75.75 0 0 0-1.5 0v.625Zm-9 0h1.5v-.625a.75.75 0 0 0-1.5 0v.625ZM2.5 9.5v1.5h15V9.5h-15Zm0-2h15V6a.75.75 0 0 0-.75-.75H3.25A.75.75 0 0 0 2.5 6v1.5Z" clipRule="evenodd" />
+                </svg>
+              )}
+              {v === 'cards' ? 'Cards' : 'Table'}
             </button>
           ))}
         </div>
 
-        {/* Search */}
-        <div className="relative flex-1 min-w-[160px] max-w-xs">
-          <svg
-            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
-          >
-            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search companies…"
-            className="w-full rounded-full border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-              </svg>
-            </button>
-          )}
-        </div>
+        {view === 'cards' && (
+          <>
+            {/* Status pills */}
+            <div className="flex gap-2">
+              {(['all', 'open', 'closed'] as RoleFilter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setRoleFilter(f)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    roleFilter === f
+                      ? 'bg-zinc-900 text-white'
+                      : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'open' ? 'Has Open Roles' : 'All Closed'}
+                </button>
+              ))}
+            </div>
 
-        <button
-          onClick={toggleAll}
-          className="ml-auto text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-700"
-        >
-          {allOpen ? 'Collapse all' : 'Expand all'}
-        </button>
+            {/* Search */}
+            <div className="relative flex-1 min-w-[160px] max-w-xs">
+              <svg
+                xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+              >
+                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search companies…"
+                className="w-full rounded-full border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={toggleAll}
+              className="ml-auto text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-700"
+            >
+              {allOpen ? 'Collapse all' : 'Expand all'}
+            </button>
+          </>
+        )}
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={companies.map((c) => c.id)}
-          strategy={verticalListSortingStrategy}
+      {view === 'table' ? (
+        <RolesTable companies={initial} />
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          <div className="flex flex-col gap-4">
-            {companies.map((company) => (
-              <SortableItem
-                key={company.id}
-                company={company}
-                isOpen={openIds.has(company.id)}
-                onToggle={() => toggleOne(company.id)}
-                showHandle={showHandles}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+          <SortableContext
+            items={companies.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-4">
+              {companies.map((company) => (
+                <SortableItem
+                  key={company.id}
+                  company={company}
+                  isOpen={openIds.has(company.id)}
+                  onToggle={() => toggleOne(company.id)}
+                  showHandle={showHandles}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
     </div>
   )
 }

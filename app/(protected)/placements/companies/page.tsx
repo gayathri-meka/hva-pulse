@@ -7,10 +7,17 @@ import type { CompanyWithRoles, RoleWithCounts } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-export default async function CompaniesPage() {
+interface Props {
+  searchParams: Promise<{ view?: string; week?: string }>
+}
+
+export default async function CompaniesPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
   if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
+
+  const { view } = await searchParams
+  const initialView = view === 'table' ? 'table' : 'cards'
 
   const supabase = await createServerSupabaseClient()
 
@@ -70,7 +77,7 @@ export default async function CompaniesPage() {
           <p className="text-sm text-zinc-400">No companies yet. Add your first one above.</p>
         </div>
       ) : (
-        <CompaniesListClient companies={companiesWithRoles} />
+        <CompaniesListClient companies={companiesWithRoles} initialView={initialView} />
       )}
     </div>
   )
