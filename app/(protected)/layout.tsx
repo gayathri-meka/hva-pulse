@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 import AppShell from '@/components/AppShell'
 
@@ -8,13 +7,9 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createServerSupabaseClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
-
+  // getAppUser() does auth.getUser() + users-table lookup in one cache-wrapped call.
+  // The middleware already redirects unauthenticated requests before this runs,
+  // so a null here means the user is authenticated but not in the users table.
   const appUser = await getAppUser()
 
   if (!appUser) {
