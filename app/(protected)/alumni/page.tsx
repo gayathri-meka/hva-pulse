@@ -119,15 +119,18 @@ export default async function AlumniPage({
     .map((cohort_fy) => {
       const fromLearners = learnerCohortMap.get(cohort_fy)
       const stat         = (rawCohortStats ?? []).find((r) => r.cohort_fy === cohort_fy)
-      // Manual cohort_stats is authoritative for historical cohorts.
-      // Only use live learner data when no manual entry exists.
+      // Only 2025-26 is live-computed from the learners table.
+      // All other cohorts use manually entered cohort_stats.
+      // TODO: when a new cohort goes live, update LIVE_COHORT below.
+      const LIVE_COHORT = '2025-26'
+      const useLive = cohort_fy === LIVE_COHORT && !!fromLearners
       return {
         cohort_fy,
-        id:           stat?.id ?? null,
-        onboarded:    stat?.onboarded ?? fromLearners?.onboarded ?? null,
-        dropouts:     stat?.dropouts  ?? fromLearners?.dropouts  ?? null,
+        id:           useLive ? null : (stat?.id ?? null),
+        onboarded:    useLive ? (fromLearners?.onboarded ?? null) : (stat?.onboarded ?? null),
+        dropouts:     useLive ? (fromLearners?.dropouts  ?? null) : (stat?.dropouts  ?? null),
         placed:       cohortPlacedMap.get(cohort_fy) ?? 0,
-        autoComputed: !stat && !!fromLearners,
+        autoComputed: useLive,
       }
     })
 

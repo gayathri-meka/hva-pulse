@@ -117,6 +117,8 @@ Two separate data sources feed the `alumni` table. Do NOT mix them up:
 
 The alumni sheet sync will never overwrite Pulse-managed rows because those learners are not in the sheet. The learner sync uses `ignoreDuplicates: true` so it won't overwrite existing alumni rows either.
 
+**Cohort analytics live computation:** Only the cohort defined by `LIVE_COHORT` in `app/(protected)/alumni/page.tsx` is auto-computed from the learners table. All other cohorts use manually entered `cohort_stats`. When a new cohort goes live, update `LIVE_COHORT` in that file.
+
 ### Job Outreach Engine
 
 `app/(protected)/placements/` includes a Job Outreach tab backed by:
