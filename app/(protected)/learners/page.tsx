@@ -14,11 +14,12 @@ import LearnerSnapshot, {
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ status?: string; batch?: string; lf?: string; viewAll?: string; tab?: string; learner?: string; fy?: string }>
+  searchParams: Promise<{ status?: string; batch?: string; lf?: string; viewAll?: string; tab?: string; learner?: string; fy?: string; sub_cohort?: string }>
 }
 
 export default async function LearnersPage({ searchParams }: Props) {
-  const { status, batch, lf, viewAll, tab, learner: learnerParam, fy } = await searchParams
+  const { status, batch, lf, viewAll, tab, learner: learnerParam, fy, sub_cohort } = await searchParams
+  const subCohorts = sub_cohort ? sub_cohort.split(',').filter(Boolean) : []
 
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
@@ -35,7 +36,8 @@ export default async function LearnersPage({ searchParams }: Props) {
     query = statuses.length > 1 ? query.in('status', statuses) : query.eq('status', status)
   }
   if (batch)  query = query.eq('batch_name', batch)
-  if (lf)     query = query.eq('lf_name', lf)
+  if (lf)              query = query.eq('lf_name', lf)
+  if (subCohorts.length) query = query.in('sub_cohort', subCohorts)
 
   // FY year filter — default to '2025-26' unless explicitly set to 'all'
   const activeFy = fy !== 'all' ? (fy ?? '2025-26') : null
