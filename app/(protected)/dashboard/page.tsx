@@ -23,26 +23,36 @@ export default async function DashboardPage({ searchParams }: Props) {
   const supabase = await createServerSupabaseClient()
 
   // ── Learner data ─────────────────────────────────────────────────────────
-  const [{ data: allLearners }, { data: filteredLearners }] = await Promise.all([
+  // funnelLearners: filtered by lf + batch + sub_cohort (learner journey only)
+  // healthLearners: filtered by lf + batch only (placement health — sub_cohort excluded)
+  const [{ data: allLearners }, { data: funnelFiltered }, { data: healthFiltered }] = await Promise.all([
     supabase.from('learners').select('status, lf_name, batch_name, sub_cohort').eq('is_current_cohort', true),
     (lf || batch || subCohorts.length > 0)
       ? (() => {
           let q = supabase.from('learners').select('user_id, status').eq('is_current_cohort', true)
-          if (lf)              q = q.eq('lf_name',    lf)
-          if (batch)           q = q.eq('batch_name', batch)
+          if (lf)                q = q.eq('lf_name',    lf)
+          if (batch)             q = q.eq('batch_name', batch)
           if (subCohorts.length) q = q.in('sub_cohort', subCohorts)
+          return q
+        })()
+      : Promise.resolve({ data: null, error: null }),
+    (lf || batch)
+      ? (() => {
+          let q = supabase.from('learners').select('user_id').eq('is_current_cohort', true)
+          if (lf)    q = q.eq('lf_name',    lf)
+          if (batch) q = q.eq('batch_name', batch)
           return q
         })()
       : Promise.resolve({ data: null, error: null }),
   ])
 
-  const lfs         = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort()    as string[]
-  const batches     = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
+  const lfs              = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort()    as string[]
+  const batches          = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
   const subCohortOptions = Array.from(new Set(allLearners?.map((l) => l.sub_cohort).filter(Boolean))).sort() as string[]
 
-  const funnelLearners = filteredLearners ?? allLearners ?? []
-  const filterUserIds  = filteredLearners
-    ? filteredLearners.map((l) => l.user_id).filter((id): id is string => !!id)
+  const funnelLearners = funnelFiltered ?? allLearners ?? []
+  const filterUserIds  = healthFiltered
+    ? healthFiltered.map((l) => l.user_id).filter((id): id is string => !!id)
     : null
 
   // ── Funnel counts ─────────────────────────────────────────────────────────
