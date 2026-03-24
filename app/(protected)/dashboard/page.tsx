@@ -10,7 +10,7 @@ import type { PlacementThresholds } from '@/app/(protected)/placements/analytics
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ lf?: string; batch?: string }>
+  searchParams: Promise<{ lf?: string; batch?: string; sub_cohort?: string }>
 }
 
 export default async function DashboardPage({ searchParams }: Props) {
@@ -18,24 +18,27 @@ export default async function DashboardPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
 
   const firstName = appUser.name?.split(' ')[0] ?? appUser.email.split('@')[0]
-  const { lf, batch } = await searchParams
+  const { lf, batch, sub_cohort } = await searchParams
+  const subCohorts = sub_cohort ? sub_cohort.split(',').filter(Boolean) : []
   const supabase = await createServerSupabaseClient()
 
   // ── Learner data ─────────────────────────────────────────────────────────
   const [{ data: allLearners }, { data: filteredLearners }] = await Promise.all([
-    supabase.from('learners').select('status, lf_name, batch_name'),
-    (lf || batch)
+    supabase.from('learners').select('status, lf_name, batch_name, sub_cohort').eq('is_current_cohort', true),
+    (lf || batch || subCohorts.length > 0)
       ? (() => {
-          let q = supabase.from('learners').select('user_id, status')
-          if (lf)    q = q.eq('lf_name',    lf)
-          if (batch) q = q.eq('batch_name', batch)
+          let q = supabase.from('learners').select('user_id, status').eq('is_current_cohort', true)
+          if (lf)              q = q.eq('lf_name',    lf)
+          if (batch)           q = q.eq('batch_name', batch)
+          if (subCohorts.length) q = q.in('sub_cohort', subCohorts)
           return q
         })()
       : Promise.resolve({ data: null, error: null }),
   ])
 
-  const lfs     = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort()    as string[]
-  const batches = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
+  const lfs         = Array.from(new Set(allLearners?.map((l) => l.lf_name).filter(Boolean))).sort()    as string[]
+  const batches     = Array.from(new Set(allLearners?.map((l) => l.batch_name).filter(Boolean))).sort() as string[]
+  const subCohortOptions = Array.from(new Set(allLearners?.map((l) => l.sub_cohort).filter(Boolean))).sort() as string[]
 
   const funnelLearners = filteredLearners ?? allLearners ?? []
   const filterUserIds  = filteredLearners
@@ -116,8 +119,9 @@ export default async function DashboardPage({ searchParams }: Props) {
     const params = new URLSearchParams()
     params.set('status', status)
     params.set('fy', 'all')
-    if (lf)    params.set('lf',    lf)
-    if (batch) params.set('batch', batch)
+    if (lf)                params.set('lf',         lf)
+    if (batch)             params.set('batch',       batch)
+    if (subCohorts.length) params.set('sub_cohort',  subCohorts.join(','))
     return `/learners?${params.toString()}`
   }
 
@@ -130,7 +134,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       </div>
 
       <Suspense>
-        <DashboardFilters lfs={lfs} batches={batches} />
+        <DashboardFilters lfs={lfs} batches={batches} subCohorts={subCohortOptions} />
       </Suspense>
 
       {/* ── Learner Journey Funnel ─────────────────────────────────────── */}

@@ -78,8 +78,10 @@ export async function POST() {
         core_skills_mentor_name: row['core_skills_mentor'] ?? '',
         track: row['track'] ?? '',
         join_date: row['join_date'] || null,
-        cohort_fy: row['cohort_fy'] || '2025-26',
-        placed_fy: row['placed_fy'] || null,
+        cohort_fy:         row['cohort_fy'] || '2025-26',
+        placed_fy:         row['placed_fy'] || null,
+        is_current_cohort: true,
+        sub_cohort:        row['sub_cohort'] || null,
       }
     }).filter((l) => l.user_id !== null)
 

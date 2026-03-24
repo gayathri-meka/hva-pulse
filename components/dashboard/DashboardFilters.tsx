@@ -13,17 +13,20 @@ const Chevron = () => (
 const selectCls = 'appearance-none rounded-lg border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm text-zinc-700 shadow-sm hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1'
 
 interface Props {
-  lfs:     string[]
-  batches: string[]
+  lfs:        string[]
+  batches:    string[]
+  subCohorts: string[]
 }
 
-export default function DashboardFilters({ lfs, batches }: Props) {
+export default function DashboardFilters({ lfs, batches, subCohorts }: Props) {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
-  const activeLf    = searchParams.get('lf')    ?? ''
-  const activeBatch = searchParams.get('batch')  ?? ''
-  const isFiltered  = !!(activeLf || activeBatch)
+  const activeLf           = searchParams.get('lf')         ?? ''
+  const activeBatch        = searchParams.get('batch')       ?? ''
+  const activeSubCohortParam = searchParams.get('sub_cohort') ?? ''
+  const activeSubCohortSet = new Set(activeSubCohortParam ? activeSubCohortParam.split(',') : [])
+  const isFiltered         = !!(activeLf || activeBatch || activeSubCohortParam)
 
   function update(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString())
@@ -32,8 +35,32 @@ export default function DashboardFilters({ lfs, batches }: Props) {
     router.push(`/dashboard?${params.toString()}`)
   }
 
+  function toggleSubCohort(value: string) {
+    const next = new Set(activeSubCohortSet)
+    if (next.has(value)) next.delete(value)
+    else                 next.add(value)
+    const params = new URLSearchParams(searchParams.toString())
+    if (next.size > 0) params.set('sub_cohort', Array.from(next).join(','))
+    else               params.delete('sub_cohort')
+    router.push(`/dashboard?${params.toString()}`)
+  }
+
   return (
     <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
+      {subCohorts.length > 0 && subCohorts.map((sc) => (
+        <button
+          key={sc}
+          onClick={() => toggleSubCohort(sc)}
+          className={`rounded-lg border px-3 py-2 text-sm shadow-sm transition-colors ${
+            activeSubCohortSet.has(sc)
+              ? 'border-zinc-800 bg-zinc-800 text-white'
+              : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+          }`}
+        >
+          {sc}
+        </button>
+      ))}
+
       <div className="relative">
         <select value={activeLf} onChange={(e) => update('lf', e.target.value)} className={selectCls}>
           <option value="">All LFs</option>
