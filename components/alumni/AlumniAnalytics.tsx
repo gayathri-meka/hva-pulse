@@ -121,8 +121,8 @@ export default function AlumniAnalytics({
                   const active = row.onboarded !== null && row.dropouts !== null
                     ? row.onboarded - row.dropouts
                     : null
-                  const rate = active !== null && active > 0
-                    ? Math.round((row.placed / active) * 100)
+                  const rate = row.onboarded !== null && row.onboarded > 0
+                    ? Math.round((row.placed / row.onboarded) * 100)
                     : null
                   return (
                     <tr key={row.cohort_fy} className="hover:bg-zinc-50">
@@ -156,6 +156,30 @@ export default function AlumniAnalytics({
                   )
                 })}
               </tbody>
+              {cohortRows.length > 0 && (() => {
+                const totalOnboarded = cohortRows.every(r => r.onboarded !== null)
+                  ? cohortRows.reduce((s, r) => s + (r.onboarded ?? 0), 0) : null
+                const totalDropouts = cohortRows.every(r => r.dropouts !== null)
+                  ? cohortRows.reduce((s, r) => s + (r.dropouts ?? 0), 0) : null
+                const totalPlaced = cohortRows.reduce((s, r) => s + r.placed, 0)
+                const totalActive = totalOnboarded !== null && totalDropouts !== null
+                  ? totalOnboarded - totalDropouts : null
+                const totalRate = totalOnboarded !== null && totalOnboarded > 0
+                  ? Math.round((totalPlaced / totalOnboarded) * 100) : null
+                return (
+                  <tfoot>
+                    <tr className="border-t border-zinc-200 bg-zinc-50">
+                      <td className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">Total</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{totalOnboarded ?? <span className="text-zinc-300">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{totalDropouts ?? <span className="text-zinc-300">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{totalPlaced}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{totalActive !== null ? totalActive - totalPlaced : <span className="text-zinc-300">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{totalRate !== null ? `${totalRate}%` : <span className="text-zinc-300">—</span>}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                )
+              })()}
             </table>
           </div>
           <p className="mt-2 text-xs text-zinc-400">

@@ -115,6 +115,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   function learnersUrl(status: string) {
     const params = new URLSearchParams()
     params.set('status', status)
+    params.set('fy', 'all')
     if (lf)    params.set('lf',    lf)
     if (batch) params.set('batch', batch)
     return `/learners?${params.toString()}`
