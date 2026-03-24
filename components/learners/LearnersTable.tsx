@@ -31,13 +31,19 @@ function loadSizing(): ColumnSizingState {
 }
 
 const DEFAULT_VISIBILITY: ColumnVisibilityState = {
-  new_lf:             false,
-  year_of_graduation: false,
-  degree:             false,
-  specialisation:     false,
-  proactiveness:      false,
-  articulation:       false,
-  comprehension:      false,
+  phone_number:           false,
+  cohort_fy:              false,
+  placed_fy:              false,
+  sub_cohort:             false,
+  tech_mentor_name:       false,
+  core_skills_mentor_name: false,
+  new_lf:                 false,
+  year_of_graduation:     false,
+  degree:                 false,
+  specialisation:         false,
+  proactiveness:          false,
+  articulation:           false,
+  comprehension:          false,
 }
 
 function loadVisibility(): ColumnVisibilityState {
@@ -64,26 +70,32 @@ const READINESS_BADGE: Record<string, string> = {
 }
 
 type LearnerRow = {
-  learner_id:         string
-  name:               string
-  email:              string
-  batch_name:         string
-  status:             string
-  lf_name:            string
-  new_lf:             string | null
-  track:              string
-  join_date:          string | null
-  year_of_graduation: number | null
-  degree:             string | null
-  specialisation:     string | null
-  current_location:   string | null
-  prs:                number | null
-  readiness:          string | null
-  blacklisted_date:   string | null
-  proactiveness:      number | null
-  articulation:       number | null
-  comprehension:      number | null
-  tech_score:         number | null
+  learner_id:              string
+  name:                    string
+  email:                   string
+  phone_number:            string | null
+  batch_name:              string
+  status:                  string
+  lf_name:                 string
+  new_lf:                  string | null
+  track:                   string
+  join_date:               string | null
+  cohort_fy:               string | null
+  placed_fy:               string | null
+  sub_cohort:              string | null
+  tech_mentor_name:        string | null
+  core_skills_mentor_name: string | null
+  year_of_graduation:      number | null
+  degree:                  string | null
+  specialisation:          string | null
+  current_location:        string | null
+  prs:                     number | null
+  readiness:               string | null
+  blacklisted_date:        string | null
+  proactiveness:           number | null
+  articulation:            number | null
+  comprehension:           number | null
+  tech_score:              number | null
 }
 
 // ── Multi-select filter ───────────────────────────────────────────────────────
@@ -177,18 +189,24 @@ const col = createColumnHelper<LearnerRow>()
 
 // Column metadata for the visibility toggle menu
 const TOGGLEABLE_COLUMNS = [
-  { id: 'new_lf',             label: 'New LF'            },
-  { id: 'prs',                label: 'PRS'               },
-  { id: 'readiness',          label: 'Readiness'         },
-  { id: 'current_location',   label: 'Location'          },
-  { id: 'blacklisted_date',   label: 'Blacklisted Date'  },
-  { id: 'tech_score',         label: 'Tech Score'        },
-  { id: 'year_of_graduation', label: 'Grad Year'         },
-  { id: 'degree',             label: 'Degree'            },
-  { id: 'specialisation',     label: 'Specialisation'    },
-  { id: 'proactiveness',      label: 'Proactiveness'     },
-  { id: 'articulation',       label: 'Articulation'      },
-  { id: 'comprehension',      label: 'Comprehension'     },
+  { id: 'phone_number',            label: 'Phone'               },
+  { id: 'cohort_fy',               label: 'Cohort FY'           },
+  { id: 'placed_fy',               label: 'Placed FY'           },
+  { id: 'sub_cohort',              label: 'Sub Cohort'          },
+  { id: 'tech_mentor_name',        label: 'Tech Mentor'         },
+  { id: 'core_skills_mentor_name', label: 'Core Skills Mentor'  },
+  { id: 'new_lf',                  label: 'New LF'              },
+  { id: 'prs',                     label: 'PRS'                 },
+  { id: 'readiness',               label: 'Readiness'           },
+  { id: 'current_location',        label: 'Location'            },
+  { id: 'blacklisted_date',        label: 'Blacklisted Date'    },
+  { id: 'tech_score',              label: 'Tech Score'          },
+  { id: 'year_of_graduation',      label: 'Grad Year'           },
+  { id: 'degree',                  label: 'Degree'              },
+  { id: 'specialisation',          label: 'Specialisation'      },
+  { id: 'proactiveness',           label: 'Proactiveness'       },
+  { id: 'articulation',            label: 'Articulation'        },
+  { id: 'comprehension',           label: 'Comprehension'       },
 ]
 
 const columns = [
@@ -252,6 +270,41 @@ const columns = [
     header: 'Joined',
     size: 110,
     cell: (info) => <span className="text-zinc-400">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('cohort_fy', {
+    header: 'Cohort FY',
+    size: 110,
+    filterFn: multiSelectFilter,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('placed_fy', {
+    header: 'Placed FY',
+    size: 110,
+    filterFn: multiSelectFilter,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('sub_cohort', {
+    header: 'Sub Cohort',
+    size: 110,
+    filterFn: multiSelectFilter,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('phone_number', {
+    header: 'Phone',
+    size: 140,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('tech_mentor_name', {
+    header: 'Tech Mentor',
+    size: 160,
+    filterFn: multiSelectFilter,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('core_skills_mentor_name', {
+    header: 'Core Skills Mentor',
+    size: 180,
+    filterFn: multiSelectFilter,
+    cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor('prs', {
     header: 'PRS',

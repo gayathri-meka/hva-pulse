@@ -47,7 +47,8 @@ export default async function LearnersPage({ searchParams }: Props) {
     learner_id: string; user_id: string | null; lf_user_id: string | null
     phone_number: string; category: string; lf_name: string; new_lf: string | null; status: string
     batch_name: string; tech_mentor_name: string; core_skills_mentor_name: string
-    track: string; join_date: string | null
+    track: string; join_date: string | null; cohort_fy: string | null; placed_fy: string | null
+    sub_cohort: string | null
     year_of_graduation: number | null; degree: string | null; specialisation: string | null
     current_location: string | null; prs: number | null; readiness: string | null
     blacklisted_date: string | null; proactiveness: number | null; articulation: number | null
