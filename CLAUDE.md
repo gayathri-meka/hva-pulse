@@ -129,13 +129,15 @@ The alumni sheet sync will never overwrite Pulse-managed rows because those lear
 
 ### UI Conventions
 
+**Before making any UI changes, read `docs/ui-design-language.md`.** It is the single source of truth for colours, typography, spacing, borders, cards, tables, buttons, tabs, modals, badges, and empty states.
+
 - Tailwind CSS utility classes throughout; custom green `#5BAE5B` for active nav states
 - Tab navs: `border-b` container, active tab indicator = `h-0.5 bg-[#5BAE5B]` absolutely positioned at bottom
 - Client components that need optimistic updates use `useTransition` with server actions
 - Modals are rendered inline via the `Modal.tsx` component (fixed backdrop + centered panel), not a portal
 - TanStack Table v8 is used for the learners, applications, and matching tables with column resizing persisted to `localStorage`
 - Data tables: always use TanStack Table v8 (same pattern as LearnersTable / AlumniTable) — column resizing persisted to localStorage, column visibility toggle, multi-select FilterDropdown per column, row count display
-- Status badges follow a consistent color scheme: blue=applied/reviewed, amber=shortlisted/in-process, emerald=hired/open, red=rejected, zinc=closed/not-shortlisted/not-interested
+- **Placement pipeline** status badges: blue=applied/reviewed, amber=shortlisted/in-process, emerald=hired/open, red=rejected, zinc=closed/not-shortlisted/not-interested (placement-specific; see `docs/ui-design-language.md` for learning health data colours)
 
 ## Database Schema
 

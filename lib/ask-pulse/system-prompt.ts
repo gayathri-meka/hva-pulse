@@ -11,7 +11,7 @@ Each learner is assigned an LF (Learning Facilitator).
 The learners table has a **status** column that reflects their overall programme state. Known values include:
 - Active statuses: "Yet to Start", "Ongoing"
 - Exit statuses: "Dropped Out", "Discontinued"
-- Placement statuses: "Placed - HVA" (placed through Pulse), "Placed - Self" (self-placed)
+- Placement statuses: "Placed - HVA" (placed through HVA), "Placed - Self" (self-placed)
 
 **Important**: whenever a user asks about "placed" learners, always include BOTH \
 "Placed - HVA" AND "Placed - Self" in your query (e.g. \`status IN ('Placed - HVA', 'Placed - Self')\`) \

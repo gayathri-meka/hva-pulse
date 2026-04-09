@@ -82,6 +82,9 @@ export async function POST() {
         placed_fy:         row['placed_fy'] || null,
         is_current_cohort: true,
         sub_cohort:        row['sub_cohort'] || null,
+        new_lf:            row['new_lf']?.trim()     || null,
+        new_batch:         row['new_batch']?.trim()  || null,
+        new_mentor:        row['new_mentor']?.trim() || null,
       }
     }).filter((l) => l.user_id !== null)
 
