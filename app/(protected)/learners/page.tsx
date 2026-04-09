@@ -39,9 +39,11 @@ export default async function LearnersPage({ searchParams }: Props) {
   if (lf)              query = query.eq('lf_name', lf)
   if (subCohorts.length) query = query.in('sub_cohort', subCohorts)
 
-  // FY year filter — default to '2025-26' unless explicitly set to 'all'
+  // FY year filter — default to '2025-26' unless explicitly set to 'all'.
+  // 'all' means: no cohort_fy filter, but limit to learners marked as part of the active programme.
   const activeFy = fy !== 'all' ? (fy ?? '2025-26') : null
   if (activeFy) query = query.eq('cohort_fy', activeFy)
+  else          query = query.eq('is_current_cohort', true)
 
   const { data: rawLearners } = await query
 

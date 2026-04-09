@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation'
 import {
   startIntervention,
   saveInterventionStep1,
+  clearInterventionStep1,
   saveInterventionStep2,
   saveActionItems,
-  extendIntervention,
+  updateResurfaceDate,
+  saveReview,
   closeIntervention,
+  deleteIntervention,
 } from '@/app/(protected)/learning/actions'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -18,6 +21,14 @@ export type ActionItem = {
   owner:        string
   due_date:     string | null
   completed_at: string | null
+}
+
+export type ReviewEntry = {
+  at:                 string
+  by:                 string | null
+  by_name:            string | null
+  note:               string
+  new_resurface_date: string | null
 }
 
 export type Intervention = {
@@ -31,6 +42,7 @@ export type Intervention = {
   step2_completed_at:   string | null
   resurface_date:       string | null
   last_reviewed_at:     string | null
+  reviews:              ReviewEntry[]
 }
 
 export type StaffUser = { id: string; name: string; role: string }
@@ -58,17 +70,57 @@ function defaultDueDate() {
 // ── Panel ──────────────────────────────────────────────────────────────────────
 
 export default function InterventionPanel({ learnerId, intervention, staffUsers }: Props) {
+  const router = useRouter()
+  const [isDeleting, startDelete] = useTransition()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const step1Done = !!intervention?.step1_completed_at
   const step2Done = !!intervention?.step2_completed_at
 
+  function handleDeleteIntervention() {
+    if (!intervention) return
+    setDeleteError('')
+    startDelete(async () => {
+      try {
+        await deleteIntervention(intervention.id)
+        setShowDeleteConfirm(false)
+        router.refresh()
+      } catch (e) {
+        setDeleteError(String(e))
+      }
+    })
+  }
+
   return (
     <div>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Intervention</p>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Intervention</p>
+        {intervention && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-xs text-red-400 hover:text-red-600"
+          >
+            Delete intervention
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-3 gap-4">
         <Step1Card learnerId={learnerId} intervention={intervention} />
         <Step2Card intervention={intervention} locked={!step1Done} staffUsers={staffUsers} />
         <Step3Card intervention={intervention} locked={!step2Done} />
       </div>
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete intervention?"
+          message="All progress, root cause notes, and action items for this intervention will be permanently removed. This cannot be undone."
+          confirmLabel="Delete intervention"
+          isPending={isDeleting}
+          error={deleteError}
+          onConfirm={handleDeleteIntervention}
+          onCancel={() => { setShowDeleteConfirm(false); setDeleteError('') }}
+        />
+      )}
     </div>
   )
 }
@@ -89,6 +141,7 @@ function Step1Card({
   const [category, setCategory] = useState(intervention?.root_cause_category ?? '')
   const [notes,    setNotes]    = useState(intervention?.root_cause_notes ?? '')
   const [error,    setError]    = useState('')
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
 
   function handleStart() {
     startTrans(async () => {
@@ -184,17 +237,47 @@ function Step1Card({
         <div className="rounded-lg bg-zinc-50 px-3 py-2.5">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-medium text-zinc-700">{intervention.root_cause_category}</p>
-            <button
-              onClick={() => setEditing(true)}
-              className="shrink-0 text-xs text-zinc-400 hover:text-zinc-600"
-            >
-              Edit
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-zinc-400 hover:text-zinc-600"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="text-xs text-red-400 hover:text-red-600"
+              >
+                Delete
+              </button>
+            </div>
           </div>
           {intervention.root_cause_notes && (
             <p className="mt-1 text-xs text-zinc-500">{intervention.root_cause_notes}</p>
           )}
+          {error && <p className="mt-1 text-xs text-[#E24B4A]">{error}</p>}
         </div>
+      )}
+
+      {showClearConfirm && intervention && (
+        <ConfirmDialog
+          title="Delete root cause?"
+          message="The category and notes for this intervention will be cleared. You can re-enter them anytime."
+          confirmLabel="Delete root cause"
+          isPending={isPending}
+          error={error}
+          onConfirm={() => {
+            startTrans(async () => {
+              try {
+                await clearInterventionStep1(intervention.id)
+                setShowClearConfirm(false)
+                setError('')
+                router.refresh()
+              } catch (e) { setError(String(e)) }
+            })
+          }}
+          onCancel={() => { setShowClearConfirm(false); setError('') }}
+        />
       )}
     </div>
   )
@@ -242,6 +325,8 @@ function Step2Card({
   // ── Per-item edit state (after step2 complete) ───────────────────────────────
   // editingIdx: index of item being edited (-1 = new item being added)
   const [editingIdx,  setEditingIdx]  = useState<number | null>(null)
+  const [deletingIdx, setDeletingIdx] = useState<number | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [editDraft,   setEditDraft]   = useState<ActionItem>({ description: '', owner: '', due_date: '', completed_at: null })
   const [editError,   setEditError]   = useState('')
   const [completingIdx, setCompletingIdx] = useState<number | null>(null)
@@ -532,12 +617,20 @@ function Step2Card({
                     {item.completed_at && <span className="text-[#5BAE5B]">Done {fmtDate(item.completed_at)}</span>}
                   </div>
                 </div>
-                <button
-                  onClick={() => startEdit(i)}
-                  className="shrink-0 text-xs text-zinc-400 hover:text-zinc-600"
-                >
-                  Edit
-                </button>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    onClick={() => startEdit(i)}
+                    className="text-xs text-zinc-400 hover:text-zinc-600"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => { setDeletingIdx(i); setDeleteError('') }}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
               {/* Inline completion popup */}
@@ -622,6 +715,30 @@ function Step2Card({
           <span>+</span> Add another item
         </button>
       )}
+
+      {deletingIdx !== null && items[deletingIdx] && (
+        <ConfirmDialog
+          title="Delete action item?"
+          message={`"${items[deletingIdx].description}" will be removed from this action plan. This cannot be undone.`}
+          confirmLabel="Delete item"
+          isPending={isPending}
+          error={deleteError}
+          onConfirm={() => {
+            const idx = deletingIdx
+            startTrans(async () => {
+              try {
+                const updated = items.filter((_, i) => i !== idx)
+                await persistItems(updated)
+                setItems(updated)
+                setDeletingIdx(null)
+                setDeleteError('')
+                router.refresh()
+              } catch (e) { setDeleteError(String(e)) }
+            })
+          }}
+          onCancel={() => { setDeletingIdx(null); setDeleteError('') }}
+        />
+      )}
     </div>
   )
 }
@@ -644,6 +761,19 @@ function Step3Card({
   const [today, setToday] = useState('')
   useEffect(() => { setToday(new Date().toISOString().slice(0, 10)) }, [])
 
+  const [editingDate,  setEditingDate]  = useState(false)
+  const [editDate,     setEditDate]     = useState('')
+  const [showReview,   setShowReview]   = useState(false)
+  const [reviewNote,   setReviewNote]   = useState('')
+  const [reviewDate,   setReviewDate]   = useState('')
+  const [extendInReview, setExtendInReview] = useState(false)
+
+  function plusDays(iso: string, days: number): string {
+    const d = new Date(iso)
+    d.setDate(d.getDate() + days)
+    return d.toISOString().slice(0, 10)
+  }
+
   if (locked) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
@@ -663,16 +793,43 @@ function Step3Card({
       )
     : null
 
-  function handleExtend() {
+  function handleSaveDate() {
     if (!intervention) return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(editDate)) { setError('Pick a valid date'); return }
     startTrans(async () => {
-      try { await extendIntervention(intervention.id); router.refresh() }
-      catch (e) { setError(String(e)) }
+      try {
+        await updateResurfaceDate(intervention.id, editDate)
+        setEditingDate(false)
+        setError('')
+        router.refresh()
+      } catch (e) { setError(String(e)) }
+    })
+  }
+
+  function handleSaveReview() {
+    if (!intervention) return
+    if (!reviewNote.trim()) { setError('Note is required'); return }
+    const dateToSend = extendInReview ? reviewDate : null
+    if (extendInReview && !/^\d{4}-\d{2}-\d{2}$/.test(reviewDate)) {
+      setError('Pick a valid date')
+      return
+    }
+    startTrans(async () => {
+      try {
+        await saveReview(intervention.id, reviewNote, dateToSend)
+        setShowReview(false)
+        setReviewNote('')
+        setReviewDate('')
+        setExtendInReview(false)
+        setError('')
+        router.refresh()
+      } catch (e) { setError(String(e)) }
     })
   }
 
   function handleClose() {
     if (!intervention) return
+    if (!outcomeNote.trim()) { setError('Note is required'); return }
     startTrans(async () => {
       try {
         await closeIntervention(intervention.id, intervention.learner_id, outcome, outcomeNote)
@@ -694,28 +851,144 @@ function Step3Card({
       <div className="space-y-3">
         {intervention?.resurface_date && (
           <div className="rounded-lg bg-zinc-50 px-3 py-2.5 text-xs">
-            <div className="text-zinc-400">Resurface date</div>
-            <div className={`mt-0.5 font-medium ${needsReview ? 'text-amber-700' : 'text-zinc-700'}`}>
-              {fmtDate(intervention.resurface_date)}
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-zinc-400">Resurface date</div>
+              {!editingDate && !showReview && !showClose && (
+                <button
+                  onClick={() => { setEditingDate(true); setEditDate(intervention.resurface_date ?? ''); setError('') }}
+                  className="text-xs text-zinc-400 hover:text-zinc-600"
+                >
+                  Edit
+                </button>
+              )}
             </div>
-            {daysUntil !== null && (
-              <div className={`mt-0.5 ${daysUntil < 0 ? 'text-amber-600' : 'text-zinc-400'}`}>
-                {daysUntil < 0
-                  ? `${Math.abs(daysUntil)} day${Math.abs(daysUntil) !== 1 ? 's' : ''} overdue`
-                  : daysUntil === 0
-                  ? 'Due today'
-                  : `${daysUntil} day${daysUntil !== 1 ? 's' : ''} remaining`}
+            {editingDate ? (
+              <div className="mt-1 space-y-2">
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                />
+                {error && <p className="text-xs text-[#E24B4A]">{error}</p>}
+                <div className="flex gap-2">
+                  <button onClick={handleSaveDate} disabled={isPending} className={primaryBtn}>
+                    {isPending ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => { setEditingDate(false); setError('') }}
+                    className={ghostBtn}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className={`mt-0.5 font-medium ${needsReview ? 'text-amber-700' : 'text-zinc-700'}`}>
+                  {fmtDate(intervention.resurface_date)}
+                </div>
+                {daysUntil !== null && (
+                  <div className={`mt-0.5 ${daysUntil < 0 ? 'text-amber-600' : 'text-zinc-400'}`}>
+                    {daysUntil < 0
+                      ? `${Math.abs(daysUntil)} day${Math.abs(daysUntil) !== 1 ? 's' : ''} overdue`
+                      : daysUntil === 0
+                      ? 'Due today'
+                      : `${daysUntil} day${daysUntil !== 1 ? 's' : ''} remaining`}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
 
-        {!showClose ? (
+        {!showClose && !showReview && !editingDate && (
           <div className="flex gap-2">
-            <button onClick={handleExtend} disabled={isPending} className={ghostBtn}>Extend +14d</button>
-            <button onClick={() => setShowClose(true)} className={ghostBtn}>Close</button>
+            <button
+              onClick={() => {
+                setShowReview(true)
+                setReviewNote('')
+                setReviewDate(intervention?.resurface_date ? plusDays(intervention.resurface_date, 7) : '')
+                setExtendInReview(false)
+                setError('')
+              }}
+              className={ghostBtn}
+            >
+              Review
+            </button>
+            <button onClick={() => { setShowClose(true); setError('') }} className={ghostBtn}>Close</button>
           </div>
-        ) : (
+        )}
+
+        {showReview && (
+          <div className="space-y-2 border-t border-zinc-100 pt-3">
+            <div>
+              <label className={labelCls}>Review note *</label>
+              <textarea
+                className={`${inputCls} min-h-[60px] resize-y`}
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+                placeholder="What's the latest update on this learner?"
+              />
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                checked={extendInReview}
+                onChange={(e) => setExtendInReview(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-zinc-300 accent-[#5BAE5B]"
+              />
+              <span className="text-xs text-zinc-700">Also extend resurface date</span>
+            </label>
+            {extendInReview && (
+              <input
+                type="date"
+                className={inputCls}
+                value={reviewDate}
+                onChange={(e) => setReviewDate(e.target.value)}
+              />
+            )}
+            {error && <p className="text-xs text-[#E24B4A]">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={handleSaveReview} disabled={isPending} className={primaryBtn}>
+                {isPending ? 'Saving…' : 'Save review'}
+              </button>
+              <button
+                onClick={() => { setShowReview(false); setError('') }}
+                className={ghostBtn}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Review history */}
+        {intervention && intervention.reviews && intervention.reviews.length > 0 && !showReview && !showClose && (
+          <div className="space-y-1.5 border-t border-zinc-100 pt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              Review history ({intervention.reviews.length})
+            </p>
+            <ul className="space-y-1.5">
+              {[...intervention.reviews].reverse().map((r, i) => (
+                <li key={i} className="rounded-lg bg-zinc-50 px-3 py-2 text-xs">
+                  <div className="flex items-baseline justify-between gap-2 text-[10px] text-zinc-400">
+                    <span>{r.by_name ?? 'Staff'}</span>
+                    <span>{fmtDate(r.at)}</span>
+                  </div>
+                  <p className="mt-0.5 text-zinc-700">{r.note}</p>
+                  {r.new_resurface_date && (
+                    <p className="mt-0.5 text-[10px] text-zinc-400">
+                      Resurface date set to {fmtDate(r.new_resurface_date)}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {showClose && (
           <div className="space-y-2 border-t border-zinc-100 pt-3">
             <div>
               <label className={labelCls}>Outcome</label>
@@ -736,7 +1009,7 @@ function Step3Card({
               </div>
             </div>
             <div>
-              <label className={labelCls}>Note — optional</label>
+              <label className={labelCls}>Note *</label>
               <textarea
                 className={`${inputCls} min-h-[60px] resize-y`}
                 value={outcomeNote}
@@ -746,7 +1019,11 @@ function Step3Card({
             </div>
             {error && <p className="text-xs text-[#E24B4A]">{error}</p>}
             <div className="flex gap-2">
-              <button onClick={handleClose} disabled={isPending} className={primaryBtn}>
+              <button
+                onClick={handleClose}
+                disabled={isPending}
+                className="rounded-lg bg-[#5BAE5B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4d9d4d] disabled:opacity-50"
+              >
                 {isPending ? 'Closing…' : 'Confirm close'}
               </button>
               <button onClick={() => { setShowClose(false); setError('') }} className={ghostBtn}>Cancel</button>
@@ -754,7 +1031,7 @@ function Step3Card({
           </div>
         )}
 
-        {error && !showClose && <p className="text-xs text-[#E24B4A]">{error}</p>}
+        {error && !showClose && !showReview && !editingDate && <p className="text-xs text-[#E24B4A]">{error}</p>}
       </div>
     </div>
   )
@@ -780,6 +1057,50 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   })
+}
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = 'Delete',
+  isPending,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  title:        string
+  message:      string
+  confirmLabel?: string
+  isPending:    boolean
+  error?:       string
+  onConfirm:    () => void
+  onCancel:     () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6">
+        <h2 className="mb-2 text-base font-semibold text-zinc-900">{title}</h2>
+        <p className="mb-5 text-sm text-zinc-500">{message}</p>
+        {error && <p className="mb-3 text-xs text-[#E24B4A]">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={isPending}
+            className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className="rounded-lg bg-[#E24B4A] px-4 py-2 text-sm font-medium text-white hover:bg-[#c43d3c] disabled:opacity-50"
+          >
+            {isPending ? 'Deleting…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const inputCls   = 'w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1'

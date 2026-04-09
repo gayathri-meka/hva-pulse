@@ -3,100 +3,25 @@ import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 import LearningDashboard, {
-  type ComputedMetric,
   type LearnerRow,
   type MetricCol,
-  type SeriesPoint,
 } from '@/components/learning/LearningDashboard'
-import InterventionPanel, { type Intervention, type StaffUser } from '@/components/learning/InterventionPanel'
+import InterventionPanel, { type Intervention, type StaffUser, type ActionItem, type ReviewEntry } from '@/components/learning/InterventionPanel'
 import LearnerSearchBox from '@/components/learning/LearnerSearchBox'
 import MetricsSection, { type MetricRow } from '@/components/learning/MetricsSection'
+import InterventionsTable, { type InterventionRow } from '@/components/learning/InterventionsTable'
+import InterventionHistory, { type ClosedIntervention } from '@/components/learning/InterventionHistory'
+import {
+  type RawRow,
+  type MetricDef,
+  topoSortMetrics,
+  computeAllForLearner,
+} from '@/lib/learning/compute'
 
 export const dynamic = 'force-dynamic'
 
 interface Props {
-  searchParams: Promise<{ filter?: string; lf?: string; sub_cohort?: string; learner?: string }>
-}
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type RawRow = {
-  source_id: string
-  learner_id: string
-  dimensions: Record<string, string | null>
-  value: string | null
-}
-
-type MetricDef = {
-  id: string
-  name: string
-  source_id: string
-  aggregation: string
-  filters: { column: string; operator: string; value: string }[]
-  time_dimension: string | null
-  time_sort_order: string | null
-}
-
-// ── Computation helpers ────────────────────────────────────────────────────────
-
-function applyFilters(rows: RawRow[], filters: MetricDef['filters']): RawRow[] {
-  return rows.filter((r) =>
-    filters.every((f) => {
-      const v = String(r.dimensions?.[f.column] ?? '')
-      return f.operator === 'eq' ? v === f.value : true
-    })
-  )
-}
-
-function aggregate(rows: RawRow[], agg: string): number | null {
-  if (agg === 'COUNT') return rows.length > 0 ? rows.length : null
-  const nums = rows.flatMap((r) => {
-    const n = parseFloat(r.value ?? '')
-    return isNaN(n) ? [] : [n]
-  })
-  if (nums.length === 0) return null
-  if (agg === 'SUM') return nums.reduce((a, b) => a + b, 0)
-  if (agg === 'AVG') return nums.reduce((a, b) => a + b, 0) / nums.length
-  if (agg === 'MIN') return Math.min(...nums)
-  if (agg === 'MAX') return Math.max(...nums)
-  return null
-}
-
-function sortPeriods(periods: string[], sortOrder: string | null): string[] {
-  const s = [...periods]
-  if (sortOrder === 'numerical')     s.sort((a, b) => parseFloat(a) - parseFloat(b))
-  else if (sortOrder === 'chronological') s.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-  else s.sort() // alphabetical
-  return s
-}
-
-function computeForLearner(rows: RawRow[], metric: MetricDef): ComputedMetric {
-  const filtered = applyFilters(rows, metric.filters)
-
-  if (!metric.time_dimension) {
-    return { kind: 'single', value: aggregate(filtered, metric.aggregation) }
-  }
-
-  // Group by time dimension
-  const groups = new Map<string, RawRow[]>()
-  for (const row of filtered) {
-    const period = String(row.dimensions?.[metric.time_dimension] ?? '').trim()
-    if (!period) continue
-    if (!groups.has(period)) groups.set(period, [])
-    groups.get(period)!.push(row)
-  }
-
-  const periods = sortPeriods(Array.from(groups.keys()), metric.time_sort_order)
-  const series: SeriesPoint[] = periods.map((p) => ({
-    period: p,
-    value:  aggregate(groups.get(p) ?? [], metric.aggregation),
-  }))
-
-  const current = series.length > 0 ? series[series.length - 1].value : null
-  const prev    = series.length > 1 ? series[series.length - 2].value : null
-  const delta   = current !== null && prev !== null ? current - prev : null
-
-  return { kind: 'series', series, current, delta }
+  searchParams: Promise<{ filter?: string; lf?: string; sub_cohort?: string; learner?: string; view?: string }>
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -105,7 +30,7 @@ export default async function LearningPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
 
-  const { filter = 'all', lf, sub_cohort, learner: selectedLearnerId } = await searchParams
+  const { filter = 'all', lf, sub_cohort, learner: selectedLearnerId, view: interventionView = 'learner' } = await searchParams
   const subCohorts = sub_cohort ? sub_cohort.split(',').filter(Boolean) : []
   const supabase = await createServerSupabaseClient()
   const isLF = appUser.role === 'LF'
@@ -115,7 +40,7 @@ export default async function LearningPage({ searchParams }: Props) {
     let q = supabase
       .from('learners')
       .select('learner_id, lf_name, lf_user_id, batch_name, sub_cohort, status, new_lf, new_batch, new_mentor, users!learners_user_id_fkey(name, email)')
-      .eq('cohort_fy', '2025-26')
+      .eq('is_current_cohort', true)
       .order('lf_name')
     if (isLF)            q = q.eq('lf_user_id', appUser.id)
     else if (lf)         q = q.eq('lf_name', lf)
@@ -132,7 +57,7 @@ export default async function LearningPage({ searchParams }: Props) {
   ] = await Promise.all([
     learnersQuery,
     supabase.from('metrics').select('*').order('created_at'),
-    supabase.from('learners').select('sub_cohort').eq('cohort_fy', '2025-26'),
+    supabase.from('learners').select('sub_cohort').eq('is_current_cohort', true),
     supabase.from('interventions').select('id, learner_id, status, resurface_date').neq('status', 'closed'),
   ])
 
@@ -155,23 +80,26 @@ export default async function LearningPage({ searchParams }: Props) {
       .map((l) => (l.users as unknown as { email: string } | null)?.email?.trim().toLowerCase())
       .filter((e): e is string => !!e)
 
-    const sourceIds = [...new Set(metricDefs.map((m) => m.source_id))]
+    const sourceIds = [...new Set(metricDefs.map((m) => m.source_id).filter((s): s is string => !!s))]
+    const metricsInOrder = topoSortMetrics(metricDefs)
 
     // Fetch all raw rows in pages — Supabase caps single queries at db.max_rows (default 1000)
     const PAGE = 1000
     const rawRowsData: { source_id: string; learner_id: string; dimensions: unknown; value: string | null }[] = []
-    let offset = 0
-    while (true) {
-      const { data: page } = await supabase
-        .from('metric_raw_rows')
-        .select('source_id, learner_id, dimensions, value')
-        .in('source_id', sourceIds)
-        .in('learner_id', emails)
-        .range(offset, offset + PAGE - 1)
-      if (!page || page.length === 0) break
-      rawRowsData.push(...page)
-      if (page.length < PAGE) break
-      offset += PAGE
+    if (sourceIds.length > 0) {
+      let offset = 0
+      while (true) {
+        const { data: page } = await supabase
+          .from('metric_raw_rows')
+          .select('source_id, learner_id, dimensions, value')
+          .in('source_id', sourceIds)
+          .in('learner_id', emails)
+          .range(offset, offset + PAGE - 1)
+        if (!page || page.length === 0) break
+        rawRowsData.push(...page)
+        if (page.length < PAGE) break
+        offset += PAGE
+      }
     }
 
     const rawRows: RawRow[] = rawRowsData.map((r) => ({
@@ -194,11 +122,12 @@ export default async function LearningPage({ searchParams }: Props) {
       const email = user?.email?.trim().toLowerCase() ?? ''
       const name  = user?.name ?? l.learner_id
 
-      const metrics: Record<string, ComputedMetric> = {}
-      for (const metric of metricDefs) {
-        const rows = bySourceLearner.get(`${metric.source_id}::${email}`) ?? []
-        metrics[metric.id] = computeForLearner(rows, metric)
+      // For each metric source, isolate this learner's rows
+      const rowsBySource = new Map<string, RawRow[]>()
+      for (const sid of sourceIds) {
+        rowsBySource.set(sid, bySourceLearner.get(`${sid}::${email}`) ?? [])
       }
+      const metrics = computeAllForLearner(metricsInOrder, rowsBySource)
 
       return {
         learner_id:   l.learner_id,
@@ -255,6 +184,7 @@ export default async function LearningPage({ searchParams }: Props) {
   type SelectedLearnerData = {
     learner_id: string; name: string; email: string
     batch_name: string | null; lf_name: string | null; status: string | null
+    new_lf: string | null; new_batch: string | null
   }
 
   let cohortLearners: CohortLearner[] = []
@@ -262,13 +192,15 @@ export default async function LearningPage({ searchParams }: Props) {
   let selectedLearnerData: SelectedLearnerData | null = null
   let selectedIntervention: Intervention | null = null
   let selectedMetricRows: MetricRow[] = []
+  let selectedHistory: ClosedIntervention[] = []
+  let interventionRows: InterventionRow[] = []
 
   if (filter === 'interventions') {
     const [{ data: allCohort }, { data: staff }] = await Promise.all([
       supabase
         .from('learners')
         .select('learner_id, users!learners_user_id_fkey(name, email)')
-        .eq('cohort_fy', '2025-26')
+        .eq('is_current_cohort', true)
         .order('lf_name'),
       supabase.from('users').select('id, name, role').in('role', ['admin', 'LF']).order('name'),
     ])
@@ -279,20 +211,63 @@ export default async function LearningPage({ searchParams }: Props) {
     })
     staffUsers = (staff ?? []) as StaffUser[]
 
+    if (interventionView === 'table') {
+      const { data: ivRows } = await supabase
+        .from('interventions')
+        .select('id, learner_id, status, root_cause_category, action_items, resurface_date')
+        .neq('status', 'closed')
+        .order('resurface_date', { ascending: true, nullsFirst: false })
+
+      const learnerNameById = new Map(cohortLearners.map((l) => [l.learner_id, l.name]))
+      interventionRows = (ivRows ?? []).map((iv) => {
+        const items = (iv.action_items ?? []) as ActionItem[]
+        return {
+          id:                 iv.id,
+          learner_id:         iv.learner_id,
+          learner_name:       learnerNameById.get(iv.learner_id) ?? iv.learner_id,
+          status:             iv.status as InterventionRow['status'],
+          root_cause_filled:  !!iv.root_cause_category,
+          total_action_items: items.length,
+          done_action_items:  items.filter((it) => !!it.completed_at).length,
+          resurface_date:     iv.resurface_date ?? null,
+        }
+      })
+    }
+
     if (selectedLearnerId) {
-      const [{ data: sl }, { data: iv }] = await Promise.all([
+      const [{ data: sl }, { data: iv }, { data: closedRaw }] = await Promise.all([
         supabase
           .from('learners')
-          .select('learner_id, lf_name, batch_name, status, users!learners_user_id_fkey(name, email)')
+          .select('learner_id, lf_name, batch_name, status, new_lf, new_batch, users!learners_user_id_fkey(name, email)')
           .eq('learner_id', selectedLearnerId)
           .single(),
         supabase
           .from('interventions')
-          .select('id, learner_id, status, root_cause_category, root_cause_notes, step1_completed_at, action_items, step2_completed_at, resurface_date, last_reviewed_at')
+          .select('id, learner_id, status, root_cause_category, root_cause_notes, step1_completed_at, action_items, step2_completed_at, resurface_date, last_reviewed_at, reviews')
           .eq('learner_id', selectedLearnerId)
           .neq('status', 'closed')
           .maybeSingle(),
+        supabase
+          .from('interventions')
+          .select('id, status, root_cause_category, root_cause_notes, action_items, reviews, outcome, outcome_note, closed_at, created_at, closed_by_user:users!interventions_closer_fkey(name)')
+          .eq('learner_id', selectedLearnerId)
+          .eq('status', 'closed')
+          .order('closed_at', { ascending: false }),
       ])
+
+      selectedHistory = (closedRaw ?? []).map((iv) => ({
+        id:                  iv.id,
+        status:              'closed',
+        root_cause_category: iv.root_cause_category ?? null,
+        root_cause_notes:    iv.root_cause_notes ?? null,
+        action_items:        (iv.action_items ?? []) as ActionItem[],
+        reviews:             (iv.reviews ?? []) as ReviewEntry[],
+        outcome:             (iv.outcome ?? null) as ClosedIntervention['outcome'],
+        outcome_note:        iv.outcome_note ?? null,
+        closed_at:           iv.closed_at ?? null,
+        closed_by_name:      (iv.closed_by_user as unknown as { name: string } | null)?.name ?? null,
+        opened_at:           iv.created_at ?? null,
+      }))
 
       if (sl) {
         const u = sl.users as unknown as { name: string; email: string } | null
@@ -304,6 +279,8 @@ export default async function LearningPage({ searchParams }: Props) {
           batch_name: sl.batch_name ?? null,
           lf_name:    sl.lf_name ?? null,
           status:     (sl as unknown as { status: string }).status ?? null,
+          new_lf:     (sl as unknown as { new_lf: string | null }).new_lf ?? null,
+          new_batch:  (sl as unknown as { new_batch: string | null }).new_batch ?? null,
         }
 
         // Fetch + compute metrics for this learner
@@ -325,10 +302,12 @@ export default async function LearningPage({ searchParams }: Props) {
             if (!bySource.has(row.source_id)) bySource.set(row.source_id, [])
             bySource.get(row.source_id)!.push(row)
           }
+          const ordered = topoSortMetrics(metricDefs)
+          const computed = computeAllForLearner(ordered, bySource)
           selectedMetricRows = metricDefs.map((m) => ({
             id:       m.id,
             name:     m.name,
-            computed: computeForLearner(bySource.get(m.source_id) ?? [], m),
+            computed: computed[m.id],
           }))
         }
       }
@@ -345,6 +324,7 @@ export default async function LearningPage({ searchParams }: Props) {
           step2_completed_at:  iv.step2_completed_at ?? null,
           resurface_date:      iv.resurface_date ?? null,
           last_reviewed_at:    iv.last_reviewed_at ?? null,
+          reviews:             (iv.reviews ?? []) as Intervention['reviews'],
         }
       }
     }
@@ -382,32 +362,60 @@ export default async function LearningPage({ searchParams }: Props) {
       )}
 
       {filter === 'interventions' && (
-        <div className="space-y-6">
-          {/* Learner search */}
-          <LearnerSearchBox learners={cohortLearners} selectedId={selectedLearnerId ?? null} />
+        <div className="space-y-6 pb-32">
+          {/* Sub-tabs: Learner-wise | Table view */}
+          <div className="flex items-center gap-1 border-b border-zinc-200">
+            {[
+              { key: 'learner', label: 'Learner-wise' },
+              { key: 'table',   label: 'Table view'  },
+            ].map(({ key, label }) => (
+              <Link
+                key={key}
+                href={`/learning?filter=interventions&view=${key}`}
+                className={`relative pb-2.5 px-1 mr-4 text-sm font-medium transition-colors ${
+                  interventionView === key ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
+                }`}
+              >
+                {label}
+                {interventionView === key && <span className="absolute bottom-0 left-0 h-0.5 w-full bg-[#5BAE5B]" />}
+              </Link>
+            ))}
+          </div>
 
-          {/* Selected learner view */}
-          {selectedLearnerData && (
-            <div className="space-y-6">
-              {/* Learner info card */}
-              <LearnerInfoCard learner={selectedLearnerData} />
+          {interventionView === 'learner' && (
+            <>
+              {/* Learner search */}
+              <LearnerSearchBox learners={cohortLearners} selectedId={selectedLearnerId ?? null} />
 
-              {/* Metrics */}
-              {selectedMetricRows.length > 0 && (
-                <MetricsSection metrics={selectedMetricRows} />
+              {/* Selected learner view */}
+              {selectedLearnerData && (
+                <div className="space-y-6">
+                  <LearnerInfoCard learner={selectedLearnerData} />
+
+                  {selectedMetricRows.length > 0 && (
+                    <MetricsSection metrics={selectedMetricRows} />
+                  )}
+
+                  <InterventionPanel
+                    learnerId={selectedLearnerData.learner_id}
+                    intervention={selectedIntervention}
+                    staffUsers={staffUsers}
+                  />
+
+                  {selectedHistory.length > 0 && (
+                    <InterventionHistory history={selectedHistory} />
+                  )}
+                </div>
               )}
 
-              {/* Intervention */}
-              <InterventionPanel
-                learnerId={selectedLearnerData.learner_id}
-                intervention={selectedIntervention}
-                staffUsers={staffUsers}
-              />
-            </div>
+              {!selectedLearnerId && (
+                <p className="text-sm text-zinc-400">Select a learner to view or start an intervention.</p>
+              )}
+            </>
           )}
 
-          {!selectedLearnerId && (
-            <p className="text-sm text-zinc-400">Select a learner to view or start an intervention.</p>
+          {interventionView === 'table' && (
+            <InterventionsTable rows={interventionRows} />
           )}
         </div>
       )}
@@ -427,7 +435,11 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 function LearnerInfoCard({ learner }: {
-  learner: { learner_id: string; name: string; email: string; batch_name: string | null; lf_name: string | null; status: string | null }
+  learner: {
+    learner_id: string; name: string; email: string
+    batch_name: string | null; lf_name: string | null; status: string | null
+    new_lf: string | null; new_batch: string | null
+  }
 }) {
   const initials = learner.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
 
@@ -441,10 +453,12 @@ function LearnerInfoCard({ learner }: {
           <div>
             <h2 className="text-base font-bold text-zinc-900">{learner.name}</h2>
             <p className="text-sm text-zinc-500">{learner.email}</p>
-            <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-400">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
               <span className="font-mono">{learner.learner_id}</span>
               {learner.batch_name && <span>{learner.batch_name}</span>}
               {learner.lf_name    && <span>LF: {learner.lf_name}</span>}
+              {learner.new_batch  && <span>New Batch: {learner.new_batch}</span>}
+              {learner.new_lf     && <span>New LF: {learner.new_lf}</span>}
             </div>
           </div>
         </div>

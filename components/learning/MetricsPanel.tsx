@@ -18,15 +18,23 @@ export type Source = {
   metric_source_columns: SourceColumn[]
 }
 
+export type CompositeInput = {
+  metric_id:      string
+  weight:         number
+  summary_method: 'last' | 'avg' | 'sum' | null
+}
+
 export type MetricDef = {
   id: string
   name: string
-  source_id: string
-  aggregation: string
+  kind: 'simple' | 'composite'
+  source_id: string | null
+  aggregation: string | null
   filters: { column: string; operator: string; value: string }[]
   description: string | null
   time_dimension: string | null
   time_sort_order: string | null
+  composite_inputs: CompositeInput[]
 }
 
 interface Props {
@@ -47,55 +55,79 @@ export default function MetricsPanel({ metrics, sources }: Props) {
   }
 
   const sourceMap = Object.fromEntries(sources.map((s) => [s.id, s.name]))
+  const metricMap = Object.fromEntries(metrics.map((m) => [m.id, m]))
+
+  const simpleMetrics    = metrics.filter((m) => m.kind === 'simple')
+  const compositeMetrics = metrics.filter((m) => m.kind === 'composite')
+
+  function renderMetric(m: MetricDef) {
+    return (
+      <div
+        key={m.id}
+        className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-zinc-900">{m.name}</div>
+          {m.description && (
+            <div className="mt-0.5 text-xs text-zinc-500">{m.description}</div>
+          )}
+        </div>
+
+        {m.kind === 'simple' ? (
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            m.time_dimension
+              ? 'bg-[#EEEDFE] text-[#3C3489]'
+              : 'bg-zinc-50 border border-zinc-200 text-zinc-500'
+          }`}>
+            {m.time_dimension ? 'tracked over time' : 'single value'}
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-[#FEF3C7] px-2.5 py-0.5 text-xs font-medium text-[#92400E]">
+            composite
+          </span>
+        )}
+
+        <button
+          onClick={() => setEditing(m)}
+          className="shrink-0 text-xs text-zinc-400 hover:text-zinc-700"
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => handleDelete(m)}
+          className="shrink-0 text-xs text-red-400 hover:text-red-600"
+        >
+          Delete
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Simple metrics */}
+      <div className="space-y-3">
         <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Defined Metrics
+          Simple metrics
         </span>
+        {simpleMetrics.length === 0 ? (
+          <p className="text-sm text-zinc-400">No simple metrics defined yet.</p>
+        ) : (
+          <div className="space-y-2.5">{simpleMetrics.map(renderMetric)}</div>
+        )}
       </div>
 
-      {metrics.length === 0 ? (
-        <p className="text-sm text-zinc-400">No metrics defined yet.</p>
-      ) : (
-        <div className="space-y-2.5">
-          {metrics.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-zinc-900">{m.name}</div>
-                {m.description && (
-                  <div className="mt-0.5 text-xs text-zinc-500">{m.description}</div>
-                )}
-              </div>
-
-              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                m.time_dimension
-                  ? 'bg-[#EEEDFE] text-[#3C3489]'
-                  : 'bg-zinc-50 border border-zinc-200 text-zinc-500'
-              }`}>
-                {m.time_dimension ? 'tracked over time' : 'single value'}
-              </span>
-
-              <button
-                onClick={() => setEditing(m)}
-                className="shrink-0 text-xs text-zinc-400 hover:text-zinc-700"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDelete(m)}
-                className="shrink-0 text-xs text-red-400 hover:text-red-600"
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Composite metrics */}
+      <div className="space-y-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Composite metrics
+        </span>
+        {compositeMetrics.length === 0 ? (
+          <p className="text-sm text-zinc-400">No composite metrics defined yet.</p>
+        ) : (
+          <div className="space-y-2.5">{compositeMetrics.map(renderMetric)}</div>
+        )}
+      </div>
 
       <button
         onClick={() => setAdding(true)}
@@ -106,12 +138,20 @@ export default function MetricsPanel({ metrics, sources }: Props) {
       </button>
 
       {adding && (
-        <MetricModal sources={sources} sourceMap={sourceMap} onClose={() => setAdding(false)} />
+        <MetricModal
+          sources={sources}
+          sourceMap={sourceMap}
+          allMetrics={metrics}
+          metricMap={metricMap}
+          onClose={() => setAdding(false)}
+        />
       )}
       {editing && (
         <MetricModal
           sources={sources}
           sourceMap={sourceMap}
+          allMetrics={metrics}
+          metricMap={metricMap}
           existing={editing}
           onClose={() => setEditing(null)}
         />
@@ -127,11 +167,15 @@ type Filter = { column: string; value: string }
 function MetricModal({
   sources,
   sourceMap,
+  allMetrics,
+  metricMap,
   existing,
   onClose,
 }: {
   sources: Source[]
   sourceMap: Record<string, string>
+  allMetrics: MetricDef[]
+  metricMap: Record<string, MetricDef>
   existing?: MetricDef
   onClose: () => void
 }) {
@@ -139,12 +183,20 @@ function MetricModal({
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
+  const [kind, setKind] = useState<'simple' | 'composite'>(existing?.kind ?? 'simple')
+
   const [name,       setName]       = useState(existing?.name ?? '')
   const [sourceId,   setSourceId]   = useState(existing?.source_id ?? '')
   const [aggregation, setAggregation] = useState(existing?.aggregation ?? 'COUNT')
   const [filters,    setFilters]    = useState<Filter[]>(
     existing?.filters?.map((f) => ({ column: f.column, value: f.value })) ?? []
   )
+
+  // Composite state
+  const [compositeInputs, setCompositeInputs] = useState<CompositeInput[]>(
+    existing?.composite_inputs ?? []
+  )
+  const [manualDescription, setManualDescription] = useState(existing?.description ?? '')
   const [trackTime,  setTrackTime]  = useState(!!existing?.time_dimension)
   const [timeDim,    setTimeDim]    = useState(existing?.time_dimension ?? '')
   const [timeSortOrder, setTimeSortOrder] = useState<'alphabetical' | 'chronological' | 'numerical'>(
@@ -207,7 +259,7 @@ function MetricModal({
     return dimensions.find((d) => d.column_name === colName)?.label ?? colName
   }
 
-  // Live plain-English preview
+  // Live plain-English preview (simple)
   function buildDescription(): string {
     if (!sourceId || !aggregation) return ''
     const parts: string[] = [aggregation]
@@ -223,27 +275,70 @@ function MetricModal({
     return parts.join(' · ')
   }
 
-  const description = buildDescription()
+  // Live formula preview (composite)
+  function buildFormula(): string {
+    const parts = compositeInputs
+      .filter((ci) => ci.metric_id)
+      .map((ci) => {
+        const m = metricMap[ci.metric_id]
+        if (!m) return ''
+        const isSeries = m.kind === 'simple' && !!m.time_dimension
+        const wrap = isSeries
+          ? `${(ci.summary_method ?? 'last').toUpperCase()}(${m.name})`
+          : m.name
+        return `${wrap} × ${ci.weight}`
+      })
+      .filter(Boolean)
+    return parts.join(' + ')
+  }
+
+  const description = kind === 'simple' ? buildDescription() : (manualDescription || buildFormula())
 
   function handleSave() {
-    if (!name.trim())   { setError('Name is required'); return }
-    if (!sourceId)      { setError('Pick a data source'); return }
-    if (trackTime && !timeDim) { setError('Pick a time dimension'); return }
+    if (!name.trim()) { setError('Name is required'); return }
 
-    const cleanFilters = filters
-      .filter((f) => f.column && f.value.trim())
-      .map((f) => ({ column: f.column, operator: 'eq', value: f.value.trim() }))
+    if (kind === 'simple') {
+      if (!sourceId)             { setError('Pick a data source'); return }
+      if (trackTime && !timeDim) { setError('Pick a time dimension'); return }
 
-    const payload = {
-      name:          name.trim(),
-      sourceId,
-      aggregation,
-      filters:       cleanFilters,
-      timeDimension: trackTime ? timeDim : null,
-      timeSortOrder: trackTime ? timeSortOrder : null,
-      description,
+      const cleanFilters = filters
+        .filter((f) => f.column && f.value.trim())
+        .map((f) => ({ column: f.column, operator: 'eq', value: f.value.trim() }))
+
+      const payload = {
+        kind:          'simple' as const,
+        name:          name.trim(),
+        sourceId,
+        aggregation,
+        filters:       cleanFilters,
+        timeDimension: trackTime ? timeDim : null,
+        timeSortOrder: trackTime ? timeSortOrder : null,
+        description,
+      }
+      runSave(payload)
+      return
     }
 
+    // composite
+    const valid = compositeInputs.filter((ci) => ci.metric_id && Number.isFinite(ci.weight))
+    if (valid.length === 0) { setError('Add at least one input'); return }
+    for (const ci of valid) {
+      const m = metricMap[ci.metric_id]
+      if (!m) { setError('Invalid input metric'); return }
+      if (m.kind === 'simple' && m.time_dimension && !ci.summary_method) {
+        setError(`Pick a summary method for "${m.name}"`)
+        return
+      }
+    }
+    runSave({
+      kind:            'composite' as const,
+      name:            name.trim(),
+      description,
+      compositeInputs: valid,
+    })
+  }
+
+  function runSave(payload: Parameters<typeof createMetricDef>[0]) {
     startTransition(async () => {
       try {
         if (isEdit && existing) {
@@ -274,18 +369,50 @@ function MetricModal({
 
         <div className="space-y-4">
 
+          {/* Kind toggle */}
+          {!isEdit && (
+            <div className="flex gap-2">
+              {(['simple', 'composite'] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setKind(k)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+                    kind === k
+                      ? 'bg-zinc-900 text-white'
+                      : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                  }`}
+                >
+                  {k === 'simple' ? 'Simple metric' : 'Composite metric'}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Name */}
           <Field label="Metric name">
             <input
               autoFocus
               className={inputCls}
-              placeholder="e.g. English attendance"
+              placeholder={kind === 'simple' ? 'e.g. English attendance' : 'e.g. Engagement score'}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </Field>
 
-          {/* Source */}
+          {/* ── Composite mode ──────────────────────────────────────────── */}
+          {kind === 'composite' && (
+            <CompositeEditor
+              allMetrics={allMetrics.filter((m) => !existing || m.id !== existing.id)}
+              metricMap={metricMap}
+              inputs={compositeInputs}
+              setInputs={setCompositeInputs}
+              description={manualDescription}
+              setDescription={setManualDescription}
+            />
+          )}
+
+          {/* ── Simple mode ─────────────────────────────────────────────── */}
+          {kind === 'simple' && (
           <Field label="Data source">
             <SelectBox value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
               <option value="">Select a source…</option>
@@ -294,8 +421,9 @@ function MetricModal({
               ))}
             </SelectBox>
           </Field>
+          )}
 
-          {sourceId && (
+          {kind === 'simple' && sourceId && (
             <>
               {/* Aggregation */}
               <Field label="Aggregation">
@@ -350,9 +478,9 @@ function MetricModal({
                     ))}
                     <button
                       onClick={addFilter}
-                      className="text-xs text-zinc-500 hover:text-zinc-700"
+                      className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:border-zinc-300 hover:text-zinc-800"
                     >
-                      + Add filter
+                      <span className="text-base leading-none">+</span> Add filter
                     </button>
                   </div>
                 </Field>
@@ -458,6 +586,115 @@ function MetricModal({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+function CompositeEditor({
+  allMetrics,
+  metricMap,
+  inputs,
+  setInputs,
+  description,
+  setDescription,
+}: {
+  allMetrics:     MetricDef[]
+  metricMap:      Record<string, MetricDef>
+  inputs:         CompositeInput[]
+  setInputs:      (updater: (prev: CompositeInput[]) => CompositeInput[]) => void
+  description:    string
+  setDescription: (val: string) => void
+}) {
+  function addInput() {
+    setInputs((prev) => [...prev, { metric_id: '', weight: 1, summary_method: null }])
+  }
+  function updateInput(i: number, patch: Partial<CompositeInput>) {
+    setInputs((prev) => prev.map((ci, idx) => (idx === i ? { ...ci, ...patch } : ci)))
+  }
+  function removeInput(i: number) {
+    setInputs((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  return (
+    <div className="space-y-3">
+      <Field label="Description (optional)">
+        <input
+          className={inputCls}
+          placeholder="What does this score represent?"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </Field>
+
+      <Field label="Inputs">
+        <div className="space-y-2">
+          {inputs.map((ci, i) => {
+            const m = ci.metric_id ? metricMap[ci.metric_id] : null
+            const isSeries = m?.kind === 'simple' && !!m.time_dimension
+            return (
+              <div key={i} className="space-y-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5">
+                <div className="flex items-center gap-2">
+                  <SelectBox
+                    className="min-w-0 flex-1"
+                    value={ci.metric_id}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      const nextMetric = metricMap[next]
+                      const nextIsSeries = nextMetric?.kind === 'simple' && !!nextMetric.time_dimension
+                      updateInput(i, {
+                        metric_id:      next,
+                        summary_method: nextIsSeries ? (ci.summary_method ?? 'last') : null,
+                      })
+                    }}
+                  >
+                    <option value="">Pick a metric…</option>
+                    {allMetrics.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </SelectBox>
+                  <span className="shrink-0 text-xs text-zinc-400">×</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="w-16 shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+                    value={ci.weight}
+                    onChange={(e) => updateInput(i, { weight: parseFloat(e.target.value) || 0 })}
+                  />
+                  <button
+                    onClick={() => removeInput(i)}
+                    className="shrink-0 text-zinc-300 hover:text-red-500"
+                  >
+                    ×
+                  </button>
+                </div>
+                {isSeries && (
+                  <div className="flex gap-1.5 pt-0.5">
+                    {(['last', 'avg', 'sum'] as const).map((sm) => (
+                      <button
+                        key={sm}
+                        onClick={() => updateInput(i, { summary_method: sm })}
+                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors ${
+                          ci.summary_method === sm
+                            ? 'bg-zinc-900 text-white'
+                            : 'bg-white border border-zinc-200 text-zinc-500 hover:bg-zinc-100'
+                        }`}
+                      >
+                        {sm === 'last' ? 'Last value' : sm === 'avg' ? 'Average' : 'Sum'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          <button
+            onClick={addInput}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:border-zinc-300 hover:text-zinc-800"
+          >
+            <span className="text-base leading-none">+</span> Add input
+          </button>
+        </div>
+      </Field>
+    </div>
+  )
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

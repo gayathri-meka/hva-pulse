@@ -13,44 +13,37 @@ async function requireAdmin() {
 
 // ── Metric actions ────────────────────────────────────────────────────────────
 
-export async function createMetricDef(data: {
-  name: string
-  sourceId: string
-  aggregation: string
-  filters: { column: string; operator: string; value: string }[]
-  timeDimension: string | null
-  timeSortOrder: string | null
-  description: string
-}) {
-  await requireAdmin()
-  const supabase = await createServerSupabaseClient()
-  const { error } = await supabase.from('metrics').insert({
-    name:            data.name,
-    source_id:       data.sourceId,
-    aggregation:     data.aggregation,
-    filters:         data.filters,
-    time_dimension:  data.timeDimension,
-    time_sort_order: data.timeSortOrder,
-    description:     data.description,
-  })
-  if (error) throw new Error(error.message)
-  revalidatePath('/learning/settings')
+export type CompositeInput = {
+  metric_id:      string
+  weight:         number
+  summary_method: 'last' | 'avg' | 'sum' | null
 }
 
-export async function updateMetricDef(id: string, data: {
-  name: string
-  sourceId: string
-  aggregation: string
-  filters: { column: string; operator: string; value: string }[]
-  timeDimension: string | null
-  timeSortOrder: string | null
-  description: string
-}) {
+export type CreateMetricInput =
+  | {
+      kind: 'simple'
+      name: string
+      sourceId: string
+      aggregation: string
+      filters: { column: string; operator: string; value: string }[]
+      timeDimension: string | null
+      timeSortOrder: string | null
+      description: string
+    }
+  | {
+      kind: 'composite'
+      name: string
+      description: string
+      compositeInputs: CompositeInput[]
+    }
+
+export async function createMetricDef(data: CreateMetricInput) {
   await requireAdmin()
   const supabase = await createServerSupabaseClient()
-  const { error } = await supabase
-    .from('metrics')
-    .update({
+
+  if (data.kind === 'simple') {
+    const { error } = await supabase.from('metrics').insert({
+      kind:            'simple',
       name:            data.name,
       source_id:       data.sourceId,
       aggregation:     data.aggregation,
@@ -59,8 +52,92 @@ export async function updateMetricDef(id: string, data: {
       time_sort_order: data.timeSortOrder,
       description:     data.description,
     })
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+    if (error) throw new Error(error.message)
+  } else {
+    if (!data.compositeInputs?.length) throw new Error('Composite metric needs at least one input')
+    await assertNoCycles(supabase, null, data.compositeInputs)
+    const { error } = await supabase.from('metrics').insert({
+      kind:             'composite',
+      name:             data.name,
+      description:      data.description,
+      composite_inputs: data.compositeInputs,
+    })
+    if (error) throw new Error(error.message)
+  }
+
+  revalidatePath('/learning/settings')
+  revalidatePath('/learning')
+}
+
+/** Walk the dependency graph; throw if adding `inputs` to metric `selfId` (null for new) would create a cycle. */
+async function assertNoCycles(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  selfId: string | null,
+  inputs: CompositeInput[],
+) {
+  const { data: all } = await supabase.from('metrics').select('id, kind, composite_inputs')
+  const byId = new Map<string, { kind: string; composite_inputs: CompositeInput[] }>()
+  for (const m of all ?? []) {
+    byId.set(m.id, { kind: m.kind, composite_inputs: (m.composite_inputs ?? []) as CompositeInput[] })
+  }
+
+  // Simulated self-row (or override if editing)
+  if (selfId) byId.set(selfId, { kind: 'composite', composite_inputs: inputs })
+
+  function visit(id: string, stack: Set<string>): void {
+    if (stack.has(id)) throw new Error('Composite metric cycle detected — a metric cannot depend on itself transitively')
+    const node = byId.get(id)
+    if (!node || node.kind !== 'composite') return
+    stack.add(id)
+    for (const inp of node.composite_inputs) visit(inp.metric_id, stack)
+    stack.delete(id)
+  }
+
+  // Walk from this metric's inputs (or itself if editing)
+  if (selfId) visit(selfId, new Set())
+  else for (const inp of inputs) visit(inp.metric_id, new Set([':new:']))
+}
+
+export async function updateMetricDef(id: string, data: CreateMetricInput) {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+
+  if (data.kind === 'simple') {
+    const { error } = await supabase
+      .from('metrics')
+      .update({
+        kind:            'simple',
+        name:            data.name,
+        source_id:       data.sourceId,
+        aggregation:     data.aggregation,
+        filters:         data.filters,
+        time_dimension:  data.timeDimension,
+        time_sort_order: data.timeSortOrder,
+        description:     data.description,
+        composite_inputs: [],
+      })
+      .eq('id', id)
+    if (error) throw new Error(error.message)
+  } else {
+    if (!data.compositeInputs?.length) throw new Error('Composite metric needs at least one input')
+    await assertNoCycles(supabase, id, data.compositeInputs)
+    const { error } = await supabase
+      .from('metrics')
+      .update({
+        kind:             'composite',
+        name:             data.name,
+        description:      data.description,
+        composite_inputs: data.compositeInputs,
+        source_id:        null,
+        aggregation:      null,
+        filters:          [],
+        time_dimension:   null,
+        time_sort_order:  null,
+      })
+      .eq('id', id)
+    if (error) throw new Error(error.message)
+  }
+
   revalidatePath('/learning/settings')
   revalidatePath('/learning')
 }
@@ -192,7 +269,7 @@ export async function saveInterventionStep2(
   const supabase = await createServerSupabaseClient()
   const now      = new Date()
   const resurface = new Date(now)
-  resurface.setDate(resurface.getDate() + 14)
+  resurface.setDate(resurface.getDate() + 7)
 
   const { error } = await supabase
     .from('interventions')
@@ -222,30 +299,93 @@ export async function saveActionItems(
   revalidatePath('/learning')
 }
 
-export async function extendIntervention(id: string) {
+export async function clearInterventionStep1(id: string) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
-
-  const { data: intervention } = await supabase
+  const { data: existing } = await supabase
     .from('interventions')
-    .select('resurface_date')
+    .select('step2_completed_at, learner_id')
     .eq('id', id)
     .single()
-  if (!intervention) throw new Error('Intervention not found')
+  if (!existing) throw new Error('Intervention not found')
+  // If step 2 isn't done, status reverts to 'open'; otherwise leave status alone.
+  const updates: Record<string, unknown> = {
+    root_cause_category: null,
+    root_cause_notes:    null,
+    step1_completed_at:  null,
+    updated_at:          new Date().toISOString(),
+  }
+  if (!existing.step2_completed_at) updates.status = 'open'
 
-  const base = intervention.resurface_date ? new Date(intervention.resurface_date) : new Date()
-  base.setDate(base.getDate() + 14)
+  const { error } = await supabase.from('interventions').update(updates).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${existing.learner_id}`)
+}
 
+export async function deleteIntervention(id: string) {
+  await requireStaff()
+  const supabase = await createServerSupabaseClient()
+  const { data: existing } = await supabase
+    .from('interventions')
+    .select('learner_id')
+    .eq('id', id)
+    .single()
+  const { error } = await supabase.from('interventions').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  if (existing?.learner_id) revalidatePath(`/learning/${existing.learner_id}`)
+}
+
+/** Update resurface date directly (no review side-effects). */
+export async function updateResurfaceDate(id: string, newDate: string) {
+  await requireStaff()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error('Invalid date')
+  const supabase = await createServerSupabaseClient()
   const { error } = await supabase
     .from('interventions')
     .update({
-      resurface_date:   base.toISOString().slice(0, 10),
-      last_reviewed_at: new Date().toISOString(),
-      updated_at:       new Date().toISOString(),
+      resurface_date: newDate,
+      updated_at:     new Date().toISOString(),
     })
     .eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
+}
+
+/** Save a review entry. Optionally extend the resurface date. */
+export async function saveReview(id: string, note: string, newDate: string | null) {
+  if (!note.trim()) throw new Error('Note is required')
+  if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error('Invalid date')
+  const user = await requireStaff()
+  const supabase = await createServerSupabaseClient()
+
+  const { data: existing } = await supabase
+    .from('interventions')
+    .select('reviews, learner_id')
+    .eq('id', id)
+    .single()
+  if (!existing) throw new Error('Intervention not found')
+
+  const newReview = {
+    at:                 new Date().toISOString(),
+    by:                 user.id,
+    by_name:            user.name ?? null,
+    note:               note.trim(),
+    new_resurface_date: newDate,
+  }
+
+  const updates: Record<string, unknown> = {
+    reviews:          [...((existing.reviews ?? []) as unknown[]), newReview],
+    last_reviewed_at: new Date().toISOString(),
+    updated_at:       new Date().toISOString(),
+  }
+  if (newDate) updates.resurface_date = newDate
+
+  const { error } = await supabase.from('interventions').update(updates).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${existing.learner_id}`)
 }
 
 export async function closeIntervention(
@@ -254,17 +394,18 @@ export async function closeIntervention(
   outcome: 'resolved' | 'dropped' | 'other',
   outcomeNote: string,
 ) {
+  if (!outcomeNote.trim()) throw new Error('Outcome note is required')
   const user = await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
     .from('interventions')
     .update({
-      status:      'closed',
+      status:       'closed',
       outcome,
-      outcome_note: outcomeNote || null,
-      closed_at:   new Date().toISOString(),
-      closed_by:   user.id,
-      updated_at:  new Date().toISOString(),
+      outcome_note: outcomeNote.trim(),
+      closed_at:    new Date().toISOString(),
+      closed_by:    user.id,
+      updated_at:   new Date().toISOString(),
     })
     .eq('id', id)
   if (error) throw new Error(error.message)

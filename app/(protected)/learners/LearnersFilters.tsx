@@ -43,6 +43,7 @@ export default function LearnersFilters({ fyYears, isLF, viewAll }: Props) {
     router.push(`/learners?${params.toString()}`)
   }
 
+  // URL: missing → defaults to current year on the server; 'all' → no filter; year string → that year
   const activeFy = searchParams.get('fy') ?? ''
 
   return (
@@ -53,7 +54,7 @@ export default function LearnersFilters({ fyYears, isLF, viewAll }: Props) {
           onChange={(e) => update('fy', e.target.value)}
           className={selectCls}
         >
-          <option value="">All Years</option>
+          <option value="all">All Years</option>
           {fyYears.map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
@@ -61,9 +62,9 @@ export default function LearnersFilters({ fyYears, isLF, viewAll }: Props) {
         <Chevron />
       </div>
 
-      {activeFy && (
+      {activeFy && activeFy !== 'all' && (
         <button
-          onClick={() => update('fy', '')}
+          onClick={() => update('fy', 'all')}
           className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-600"
         >
           Clear filters

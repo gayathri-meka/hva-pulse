@@ -18,7 +18,25 @@ import {
   type FilterFn,
   type Column,
   type VisibilityState,
+  type ColumnSizingState,
+  type ColumnOrderState,
+  type Header,
 } from '@tanstack/react-table'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 // ── Shared types ───────────────────────────────────────────────────────────────
 
@@ -49,6 +67,8 @@ export type MetricCol = {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const VISIBILITY_KEY = 'learning-dashboard-col-visibility'
+const SIZING_KEY     = 'learning-dashboard-col-sizing'
+const ORDER_KEY      = 'learning-dashboard-col-order'
 
 const STATUS_BADGE: Record<string, string> = {
   Ongoing:          'bg-emerald-100 text-emerald-700',
@@ -215,7 +235,7 @@ const fixedColumns = [
     filterFn:     nameSearchFilter,
     cell: (info) => (
       <Link
-        href={`/learning/${info.row.original.learner_id}`}
+        href={`/learning?filter=interventions&view=learner&learner=${info.row.original.learner_id}`}
         className="font-medium text-zinc-900 hover:underline"
       >
         {info.getValue()}
@@ -268,12 +288,39 @@ const fixedColumns = [
   }),
 ]
 
-const interventionColumn = col.display({
-  id:           'intervention',
-  header:       'Intervention',
-  enableHiding: false,
-  cell:         (info) => <InterventionCell row={info.row.original} />,
-})
+// Label + sort priority: Needs review → Open → In progress → Monitoring → No intervention
+function interventionLabel(iv: LearnerRow['intervention']): string {
+  if (!iv) return 'No intervention'
+  const today = new Date().toISOString().slice(0, 10)
+  if (iv.status === 'monitoring' && iv.resurface_date && iv.resurface_date <= today) return 'Needs review'
+  if (iv.status === 'open')        return 'Open'
+  if (iv.status === 'in_progress') return 'In progress'
+  if (iv.status === 'monitoring')  return 'Monitoring'
+  return 'No intervention'
+}
+
+const INTERVENTION_RANK: Record<string, number> = {
+  'Needs review':    0,
+  'Open':            1,
+  'In progress':     2,
+  'Monitoring':      3,
+  'No intervention': 4,
+}
+
+const interventionColumn = col.accessor(
+  (row) => interventionLabel(row.intervention),
+  {
+    id:            'intervention',
+    header:        'Intervention',
+    enableHiding:  false,
+    enableSorting: true,
+    filterFn:      multiSelectFilter,
+    sortingFn:     (a, b) =>
+      INTERVENTION_RANK[interventionLabel(a.original.intervention)] -
+      INTERVENTION_RANK[interventionLabel(b.original.intervention)],
+    cell: (info) => <InterventionCell row={info.row.original} />,
+  }
+)
 
 // ── Popover state ──────────────────────────────────────────────────────────────
 
@@ -303,18 +350,26 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
   }, [searchParams])
 
   const [sorting,          setSorting]          = useState<SortingState>([])
-  const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([])
+  const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([
+    { id: 'status', value: ['Ongoing'] },
+  ])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnSizing,     setColumnSizing]     = useState<ColumnSizingState>({})
+  const [columnOrder,      setColumnOrder]      = useState<ColumnOrderState>([])
   const [nameSearch,       setNameSearch]       = useState('')
   const [showColMenu,      setShowColMenu]      = useState(false)
   const [popover,          setPopover]          = useState<PopoverState | null>(null)
   const colMenuRef                              = useRef<HTMLDivElement>(null)
 
-  // Hydrate column visibility from localStorage
+  // Hydrate column visibility + sizing + order from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(VISIBILITY_KEY)
-      if (stored) setColumnVisibility(JSON.parse(stored))
+      const v = localStorage.getItem(VISIBILITY_KEY)
+      if (v) setColumnVisibility(JSON.parse(v))
+      const s = localStorage.getItem(SIZING_KEY)
+      if (s) setColumnSizing(JSON.parse(s))
+      const o = localStorage.getItem(ORDER_KEY)
+      if (o) setColumnOrder(JSON.parse(o))
     } catch {}
   }, [])
 
@@ -374,7 +429,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
   const table = useReactTable({
     data:    learners,
     columns: allColumns,
-    state:   { sorting, columnFilters, columnVisibility },
+    state:   { sorting, columnFilters, columnVisibility, columnSizing, columnOrder },
     onSortingChange:       setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater) => {
@@ -384,6 +439,21 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
         return next
       })
     },
+    onColumnSizingChange: (updater) => {
+      setColumnSizing((old) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        try { localStorage.setItem(SIZING_KEY, JSON.stringify(next)) } catch {}
+        return next
+      })
+    },
+    onColumnOrderChange: (updater) => {
+      setColumnOrder((old) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        try { localStorage.setItem(ORDER_KEY, JSON.stringify(next)) } catch {}
+        return next
+      })
+    },
+    columnResizeMode:       'onChange',
     getCoreRowModel:        getCoreRowModel(),
     getSortedRowModel:      getSortedRowModel(),
     getFilteredRowModel:    getFilteredRowModel(),
@@ -397,6 +467,20 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
     filteredCount === learners.length
       ? `${learners.length} learner${learners.length !== 1 ? 's' : ''}`
       : `${filteredCount} of ${learners.length} learners`
+
+  // Drag-to-reorder columns
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const current = columnOrder.length ? columnOrder : table.getAllLeafColumns().map((c) => c.id)
+    const oldIdx  = current.indexOf(active.id as string)
+    const newIdx  = current.indexOf(over.id as string)
+    if (oldIdx < 0 || newIdx < 0) return
+    const next = arrayMove(current, oldIdx, newIdx)
+    setColumnOrder(next)
+    try { localStorage.setItem(ORDER_KEY, JSON.stringify(next)) } catch {}
+  }
 
   if (metrics.length === 0) {
     return (
@@ -522,26 +606,15 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
       </div>
 
       {/* Table */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={table.getFlatHeaders().map((h) => h.id)} strategy={horizontalListSortingStrategy}>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="border-collapse text-sm" style={{ width: '100%' }}>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
                 {table.getFlatHeaders().map((header) => (
-                  <th
-                    key={header.id}
-                    className="select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
-                  >
-                    <div
-                      className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === 'asc'  && <span className="text-zinc-400">↑</span>}
-                      {header.column.getIsSorted() === 'desc' && <span className="text-zinc-400">↓</span>}
-                    </div>
-                    {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
-                  </th>
+                  <SortableHeader key={header.id} header={header} />
                 ))}
               </tr>
             </thead>
@@ -569,6 +642,8 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
           </table>
         </div>
       </div>
+      </SortableContext>
+      </DndContext>
 
       {/* Sparkline popover */}
       {popover && (
@@ -669,6 +744,46 @@ function Sparkline({ series }: { series: SeriesPoint[] }) {
         return <rect key={i} x={x} y={y} width={barW} height={barH} rx={1} fill={fill} />
       })}
     </svg>
+  )
+}
+
+// ── Sortable header (drag-to-reorder) ──────────────────────────────────────────
+
+function SortableHeader({ header }: { header: Header<LearnerRow, unknown> }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: header.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    width:    header.getSize(),
+    opacity:  isDragging ? 0.5 : 1,
+  }
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      className="relative select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className={header.column.getCanSort() ? 'flex cursor-grab items-center gap-1 active:cursor-grabbing' : 'cursor-grab active:cursor-grabbing'}
+        onClick={header.column.getToggleSortingHandler()}
+      >
+        {flexRender(header.column.columnDef.header, header.getContext())}
+        {header.column.getIsSorted() === 'asc'  && <span className="text-zinc-400">↑</span>}
+        {header.column.getIsSorted() === 'desc' && <span className="text-zinc-400">↓</span>}
+      </div>
+      {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+      {header.column.getCanResize() && (
+        <div
+          onMouseDown={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
+          onTouchStart={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
+        />
+      )}
+    </th>
   )
 }
 
