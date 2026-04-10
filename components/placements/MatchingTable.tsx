@@ -39,6 +39,7 @@ export type MatchingRow = {
   name:                    string
   batch:                   string
   lf:                      string
+  sub_cohort:              string | null
   year_of_graduation:      number | null
   degree:                  string | null
   specialisation:          string | null
@@ -52,6 +53,7 @@ export type MatchingRow = {
   is_blacklisted:          'Yes' | 'No'
   blacklisted_date:        string | null
   new_lf:                  string | null
+  new_batch:               string | null
   app_id:                  string | null
   status:                  MatchingStatus
   reasons:                 string[]
@@ -68,6 +70,8 @@ export type MatchingRow = {
   not_shortlisted_details: AppDetail[]
   ongoing_count:           number
   ongoing_details:         AppDetail[]
+  rejected_count:          number
+  rejected_details:        AppDetail[]
   feedback_details:        AppDetail[]
 }
 
@@ -203,11 +207,12 @@ const HIDEABLE_COLS = [
   { id: 'batch',              label: 'Batch' },
   { id: 'lf',                 label: 'LF' },
   { id: 'new_lf',             label: 'New LF' },
+  { id: 'new_batch',          label: 'New Batch' },
   { id: 'applied_count',      label: 'Applied' },
   { id: 'not_interested_count', label: 'Not Interested' },
   { id: 'not_shortlisted_count', label: 'Not Shortlisted' },
   { id: 'ongoing_count',      label: 'Ongoing Interviews' },
-  { id: 'feedback_count',     label: 'Feedback' },
+  { id: 'rejected_count',     label: 'Rejected' },
   { id: 'year_of_graduation', label: 'Grad Year' },
   { id: 'degree',             label: 'Degree' },
   { id: 'specialisation',     label: 'Specialisation' },
@@ -222,15 +227,15 @@ const HIDEABLE_COLS = [
 ]
 
 const BASE_ORDER: ColumnOrderState = [
-  'name', 'batch', 'lf', 'new_lf',
-  'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'feedback_count',
+  'name', 'batch', 'lf', 'new_lf', 'new_batch',
+  'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'rejected_count',
   'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
   'current_location', 'is_blacklisted', 'status',
 ]
 const ROLE_ORDER: ColumnOrderState = [
   'name', 'status', 'batch', 'lf', 'new_lf',
-  'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'feedback_count',
+  'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'rejected_count',
   'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
   'current_location', 'is_blacklisted',
@@ -244,7 +249,12 @@ function loadSizing(): ColumnSizingState {
 }
 
 // ── Table component ───────────────────────────────────────────────────────────
-export default function MatchingTable({ rows, roleSelected = true }: { rows: MatchingRow[]; roleSelected?: boolean }) {
+export default function MatchingTable({ rows, roleSelected = true, subCohortOptions = [] }: {
+  rows: MatchingRow[]
+  roleSelected?: boolean
+  subCohortOptions?: string[]
+}) {
+  const [activeSubCohorts, setActiveSubCohorts] = useState<Set<string>>(new Set())
   const [sorting, setSorting]                   = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>(loadSizing)
   const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])
@@ -343,6 +353,12 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
     }),
     col.accessor('new_lf', {
       header: 'New LF',
+      size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('new_batch', {
+      header: 'New Batch',
       size: 140,
       filterFn: multiSelectFilter,
       cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
@@ -482,16 +498,15 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
         ) : <span className="text-zinc-300">0</span>
       },
     }),
-    col.display({
-      id: 'feedback_count',
-      header: 'Feedback',
-      size: 90,
+    col.accessor('rejected_count', {
+      header: 'Rejected',
+      size: 80,
       cell: (info) => {
-        const details = info.row.original.feedback_details
-        const v = details.length
+        const v = info.getValue()
+        const details = info.row.original.rejected_details
         return v > 0 ? (
-          <button onClick={() => setDetailPopup({ title: `${info.row.original.name} — Feedback (${v})`, rows: details })}
-            className="font-medium text-amber-600 hover:underline tabular-nums">{v}</button>
+          <button onClick={() => setDetailPopup({ title: `${info.row.original.name} — Rejected (${v})`, rows: details })}
+            className="font-medium text-red-600 hover:underline tabular-nums">{v}</button>
         ) : <span className="text-zinc-300">0</span>
       },
     }),
@@ -571,8 +586,12 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
     [roleSelected],
   )
 
+  const filteredBySubCohort = activeSubCohorts.size > 0
+    ? rows.filter((r) => r.sub_cohort && activeSubCohorts.has(r.sub_cohort))
+    : rows
+
   const table = useReactTable({
-    data: rows,
+    data: filteredBySubCohort,
     columns,
     state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { ...columnVisibility, status: roleSelected } },
     onSortingChange: setSorting,
@@ -600,9 +619,38 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
     getRowId: (row) => row.learner_id,
   })
 
+  const filteredCount = table.getFilteredRowModel().rows.length
+  const totalCount    = filteredBySubCohort.length
+  const rowCountText  =
+    filteredCount === totalCount
+      ? `${totalCount} learner${totalCount !== 1 ? 's' : ''}`
+      : `${filteredCount} of ${totalCount} learners`
+
   return (
     <>
-      <div className="mb-3 flex justify-end" ref={colMenuRef}>
+      {/* Toolbar: sub-cohort pills + row count + columns button */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {subCohortOptions.map((sc) => (
+            <button
+              key={sc}
+              onClick={() => {
+                const next = new Set(activeSubCohorts)
+                next.has(sc) ? next.delete(sc) : next.add(sc)
+                setActiveSubCohorts(next)
+              }}
+              className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                activeSubCohorts.has(sc)
+                  ? 'border-zinc-800 bg-zinc-800 text-white'
+                  : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+              }`}
+            >
+              {sc}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3" ref={colMenuRef}>
+          <span className="text-sm text-zinc-500">{rowCountText}</span>
         <div className="relative">
           <button
             onClick={() => setShowColMenu((v) => !v)}
@@ -634,6 +682,7 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
               })}
             </div>
           )}
+        </div>
         </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">

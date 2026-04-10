@@ -93,6 +93,7 @@ export default async function MatchingPage({ searchParams }: Props) {
       not_interested_count: 0, not_interested_details: [],
       not_shortlisted_count: 0, not_shortlisted_details: [],
       ongoing_count: 0, ongoing_details: [],
+      rejected_count: 0, rejected_details: [],
       feedback_details: [],
     }
 
@@ -113,6 +114,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     const applied_details         = apps.map(toDetail)
     const not_shortlisted_details = apps.filter((a) => a.status === 'not_shortlisted').map(toDetail)
     const ongoing_details         = apps.filter((a) => a.status === 'interviews_ongoing').map(toDetail)
+    const rejected_details        = apps.filter((a) => a.status === 'rejected').map(toDetail)
     const feedback_details        = apps
       .filter((a) => (a.status === 'not_shortlisted' || a.status === 'rejected') && (a.not_shortlisted_reason || a.rejection_feedback || (a.not_shortlisted_reasons?.length ?? 0) > 0 || (a.rejection_reasons?.length ?? 0) > 0))
       .map(toDetail)
@@ -131,6 +133,8 @@ export default async function MatchingPage({ searchParams }: Props) {
       not_shortlisted_details,
       ongoing_count:           ongoing_details.length,
       ongoing_details,
+      rejected_count:          rejected_details.length,
+      rejected_details,
       feedback_details,
     }
   }
@@ -154,6 +158,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     readiness:          string | null
     blacklisted_date:   string | null
     new_lf:             string | null
+    new_batch:          string | null
   }
   const allLearners = ((rawLearners ?? []) as RawLearner[]).map((l) => ({
     learner_id:         l.learner_id,
@@ -161,7 +166,9 @@ export default async function MatchingPage({ searchParams }: Props) {
     name:               l.users?.name ?? '',
     batch:              l.batch_name ?? '',
     lf:                 l.lf_name ?? '',
+    sub_cohort:         (l as unknown as { sub_cohort: string | null }).sub_cohort ?? null,
     new_lf:             l.new_lf ?? null,
+    new_batch:          l.new_batch ?? null,
     year_of_graduation: l.year_of_graduation,
     degree:             l.degree,
     specialisation:     l.specialisation,
@@ -179,6 +186,11 @@ export default async function MatchingPage({ searchParams }: Props) {
   const filtered = allLearners
     .filter((l) => !learnerFilter || l.learner_id === learnerFilter)
     .sort((a, b) => a.name.localeCompare(b.name))
+
+  // ── Sub-cohort options ───────────────────────────────────────────────────
+  const subCohortOptions = Array.from(
+    new Set(((rawLearners ?? []) as { sub_cohort: string | null }[]).map((l) => l.sub_cohort).filter(Boolean))
+  ).sort() as string[]
 
   // ── Derive placement status per learner ──────────────────────────────────
   // Map user_id → { status, not_shortlisted_reason, rejection_feedback }
@@ -218,6 +230,7 @@ export default async function MatchingPage({ searchParams }: Props) {
     is_blacklisted:     (l.blacklisted_date !== null ? 'Yes' : 'No') as 'Yes' | 'No',
     blacklisted_date:   l.blacklisted_date,
     new_lf:             l.new_lf,
+    new_batch:          l.new_batch,
   })
 
   const rows: MatchingRow[] = filtered.map((l) => {
@@ -228,6 +241,7 @@ export default async function MatchingPage({ searchParams }: Props) {
         name:                    l.name,
         batch:                   l.batch,
         lf:                      l.lf,
+        sub_cohort:              l.sub_cohort,
         ...sharedLearnerFields(l),
         app_id:                  null,
         status:                  'not_applied' as MatchingStatus,
@@ -253,6 +267,7 @@ export default async function MatchingPage({ searchParams }: Props) {
       name:                    l.name,
       batch:                   l.batch,
       lf:                      l.lf,
+      sub_cohort:              l.sub_cohort,
       ...sharedLearnerFields(l),
       app_id:                  appDetail?.id ?? null,
       status,
@@ -291,7 +306,7 @@ export default async function MatchingPage({ searchParams }: Props) {
         </Suspense>
       )}
 
-      <MatchingTable key={roleId ?? 'all'} rows={filteredRows} roleSelected={!!roleId} />
+      <MatchingTable key={roleId ?? 'all'} rows={filteredRows} roleSelected={!!roleId} subCohortOptions={subCohortOptions} />
 
     </div>
   )
