@@ -4,15 +4,23 @@ import { useState, useTransition } from 'react'
 import {
   previewSheetSource,
   createDataSource,
+  previewBqSource,
+  createBqDataSource,
   deleteDataSource,
   syncDataSource,
+  updateDataSourceDetails,
 } from '@/app/(protected)/learning/actions'
 
 export type DataSource = {
   id: string
   name: string
-  sheet_id: string
-  sheet_tab: string
+  source_type: 'sheet' | 'bigquery'
+  sheet_id: string | null
+  sheet_tab: string | null
+  bq_project: string | null
+  bq_dataset: string | null
+  bq_table: string | null
+  bq_filter: string | null
   last_synced_at: string | null
   row_count: number | null
   sync_error: string | null
@@ -29,7 +37,7 @@ interface Props {
 }
 
 export default function DataSourcesPanel({ sources }: Props) {
-  const [connecting, setConnecting] = useState(false)
+  const [connectType, setConnectType] = useState<'sheet' | 'bigquery' | null>(null)
 
   return (
     <div className="space-y-4">
@@ -49,15 +57,25 @@ export default function DataSourcesPanel({ sources }: Props) {
         </div>
       )}
 
-      <button
-        onClick={() => setConnecting(true)}
-        className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
-      >
-        <span className="text-base leading-none">+</span>
-        Connect a sheet
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setConnectType('sheet')}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
+        >
+          <span className="text-base leading-none">+</span>
+          Connect a sheet
+        </button>
+        <button
+          onClick={() => setConnectType('bigquery')}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
+        >
+          <span className="text-base leading-none">+</span>
+          Connect BigQuery view
+        </button>
+      </div>
 
-      {connecting && <ConnectModal onClose={() => setConnecting(false)} />}
+      {connectType === 'sheet' && <ConnectModal onClose={() => setConnectType(null)} />}
+      {connectType === 'bigquery' && <ConnectBqModal onClose={() => setConnectType(null)} />}
     </div>
   )
 }
@@ -67,6 +85,7 @@ export default function DataSourcesPanel({ sources }: Props) {
 function SourceCard({ source }: { source: DataSource }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [editing, setEditing] = useState(false)
 
   function handleSync() {
     setError('')
@@ -136,10 +155,19 @@ function SourceCard({ source }: { source: DataSource }) {
           </div>
         )}
 
-        {/* Tab */}
+        {/* Source detail */}
         <div className="w-44 shrink-0">
-          <div className="text-xs text-zinc-400">Tab:</div>
-          <div className="truncate text-xs text-zinc-600">{source.sheet_tab}</div>
+          {source.source_type === 'bigquery' ? (
+            <>
+              <div className="text-xs text-zinc-400">View:</div>
+              <div className="truncate text-xs text-zinc-600">{source.bq_table}</div>
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-zinc-400">Tab:</div>
+              <div className="truncate text-xs text-zinc-600">{source.sheet_tab}</div>
+            </>
+          )}
         </div>
 
         {/* Actions */}
@@ -151,6 +179,12 @@ function SourceCard({ source }: { source: DataSource }) {
           {isPending ? 'Syncing…' : 'Sync now'}
         </button>
         <button
+          onClick={() => setEditing(true)}
+          className="shrink-0 text-xs text-zinc-400 hover:text-zinc-700"
+        >
+          Edit
+        </button>
+        <button
           onClick={handleDelete}
           disabled={isPending}
           className="shrink-0 text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
@@ -160,6 +194,8 @@ function SourceCard({ source }: { source: DataSource }) {
       </div>
 
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+
+      {editing && <EditSourceModal source={source} onClose={() => setEditing(false)} />}
     </div>
   )
 }
@@ -351,6 +387,282 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
           </>
         )}
 
+      </div>
+    </div>
+  )
+}
+
+// ── BigQuery connect modal ────────────────────────────────────────────────────
+
+function ConnectBqModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<'form' | 'mapping'>('form')
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
+
+  const [name,      setName]      = useState('')
+  const [bqProject, setBqProject] = useState('hyperverge-chabtbot')
+  const [bqDataset, setBqDataset] = useState('sensai-441917.sensai_prod')
+  const [bqTable,   setBqTable]   = useState('')
+  const [bqFilter,  setBqFilter]  = useState('')
+  const [columns,   setColumns]   = useState<ColumnMapping[]>([])
+
+  function handlePreview() {
+    if (!name.trim())      { setError('Name is required'); return }
+    if (!bqProject.trim()) { setError('Billing project is required'); return }
+    if (!bqDataset.trim()) { setError('Dataset is required'); return }
+    if (!bqTable.trim())   { setError('View name is required'); return }
+    setError('')
+    startTransition(async () => {
+      try {
+        const result = await previewBqSource(bqProject.trim(), bqDataset.trim(), bqTable.trim())
+        setColumns(result.columns.map((col) => ({ column_name: col, role: 'ignored', label: '' })))
+        setStep('mapping')
+      } catch (e) {
+        setError(String(e))
+      }
+    })
+  }
+
+  function setRole(colName: string, role: ColumnMapping['role']) {
+    setColumns((prev) => {
+      let next = prev.map((c) => (c.column_name === colName ? { ...c, role } : c))
+      if (role === 'learner_id')
+        next = next.map((c) => c.column_name !== colName && c.role === 'learner_id' ? { ...c, role: 'ignored' } : c)
+      if (role === 'value')
+        next = next.map((c) => c.column_name !== colName && c.role === 'value' ? { ...c, role: 'ignored' } : c)
+      return next
+    })
+  }
+
+  function setDimensionLabel(colName: string, label: string) {
+    setColumns((prev) => prev.map((c) => (c.column_name === colName ? { ...c, label } : c)))
+  }
+
+  function handleSave() {
+    if (!columns.some((c) => c.role === 'learner_id')) {
+      setError('Mark one column as Learner ID'); return
+    }
+    const unlabelled = columns.find((c) => c.role === 'dimension' && !c.label.trim())
+    if (unlabelled) {
+      setError(`Add a label for dimension column "${unlabelled.column_name}"`); return
+    }
+    setError('')
+    startTransition(async () => {
+      try {
+        await createBqDataSource({
+          name:      name.trim(),
+          bqProject: bqProject.trim(),
+          bqDataset: bqDataset.trim(),
+          bqTable:   bqTable.trim(),
+          bqFilter:  bqFilter.trim(),
+          columns:   columns.map((c) => ({
+            column_name: c.column_name,
+            role:        c.role,
+            label:       c.role === 'dimension' ? c.label.trim() : null,
+          })),
+        })
+        onClose()
+      } catch (e) {
+        setError(String(e))
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+        {step === 'form' && (
+          <>
+            <h2 className="mb-1 text-base font-semibold text-zinc-900">Connect a BigQuery View</h2>
+            <p className="mb-4 text-xs leading-relaxed text-zinc-500">
+              Point to a view in BigQuery. The view should be in long format — one row per data point,
+              with a learner email column. You&apos;ll assign column roles on the next step.
+            </p>
+
+            <div className="space-y-3">
+              <Field label="Source name">
+                <input autoFocus className={inputCls} placeholder="e.g. sensai Task Scores"
+                  value={name} onChange={(e) => setName(e.target.value)} />
+              </Field>
+              <Field label="Billing project (where BQ jobs run)">
+                <input className={inputCls} placeholder="hyperverge-chabtbot"
+                  value={bqProject} onChange={(e) => setBqProject(e.target.value)} />
+              </Field>
+              <Field label="Dataset (project.dataset)">
+                <input className={inputCls} placeholder="sensai-441917.sensai_prod"
+                  value={bqDataset} onChange={(e) => setBqDataset(e.target.value)} />
+              </Field>
+              <Field label="View / table name">
+                <input className={inputCls} placeholder="pulse_weekly_completion"
+                  value={bqTable} onChange={(e) => setBqTable(e.target.value)} />
+              </Field>
+              <Field label="Row filter (optional SQL WHERE clause)">
+                <input className={inputCls} placeholder="e.g. course_id IN (301, 319, 480, 481)"
+                  value={bqFilter} onChange={(e) => setBqFilter(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePreview()} />
+              </Field>
+            </div>
+
+            {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={onClose} className={cancelBtn}>Cancel</button>
+              <button onClick={handlePreview} disabled={isPending} className={primaryBtn}>
+                {isPending ? 'Connecting…' : 'Preview columns →'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'mapping' && (
+          <>
+            <h2 className="mb-1 text-base font-semibold text-zinc-900">Map columns</h2>
+            <p className="mb-4 text-xs leading-relaxed text-zinc-500">
+              Assign a role to each column. Dimension columns need a friendly label — that&apos;s
+              what you&apos;ll see when building metric filters.
+            </p>
+
+            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {columns.map((col) => (
+                <div key={col.column_name} className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-36 shrink-0 truncate font-mono text-xs text-zinc-700">
+                      {col.column_name}
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {ROLES.map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => setRole(col.column_name, r)}
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                            col.role === r ? ROLE_ACTIVE[r] : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                          }`}
+                        >
+                          {ROLE_LABEL[r]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {col.role === 'dimension' && (
+                    <input
+                      className={`mt-2 ${inputCls}`}
+                      placeholder="Friendly label, e.g. Course"
+                      value={col.label}
+                      onChange={(e) => setDimensionLabel(col.column_name, e.target.value)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={() => { setStep('form'); setError('') }} className={cancelBtn}>← Back</button>
+              <button onClick={handleSave} disabled={isPending} className={primaryBtn}>
+                {isPending ? 'Saving…' : 'Save source'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Edit source modal ─────────────────────────────────────────────────────────
+
+function EditSourceModal({ source, onClose }: { source: DataSource; onClose: () => void }) {
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
+
+  const [name, setName] = useState(source.name)
+
+  // Sheet fields
+  const [sheetId, setSheetId] = useState(source.sheet_id ?? '')
+  const [sheetTab, setSheetTab] = useState(source.sheet_tab ?? '')
+
+  // BQ fields
+  const [bqProject, setBqProject] = useState(source.bq_project ?? '')
+  const [bqDataset, setBqDataset] = useState(source.bq_dataset ?? '')
+  const [bqTable, setBqTable]     = useState(source.bq_table ?? '')
+  const [bqFilter, setBqFilter]   = useState(source.bq_filter ?? '')
+
+  const isBq = source.source_type === 'bigquery'
+
+  function handleSave() {
+    if (!name.trim()) { setError('Name is required'); return }
+    if (!isBq && !sheetId.trim()) { setError('Sheet ID is required'); return }
+    if (!isBq && !sheetTab.trim()) { setError('Tab name is required'); return }
+    if (isBq && !bqProject.trim()) { setError('Billing project is required'); return }
+    if (isBq && !bqDataset.trim()) { setError('Dataset is required'); return }
+    if (isBq && !bqTable.trim()) { setError('View name is required'); return }
+    setError('')
+    startTransition(async () => {
+      try {
+        await updateDataSourceDetails(source.id, {
+          name:      name.trim(),
+          sheetId:   isBq ? undefined : sheetId.trim(),
+          sheetTab:  isBq ? undefined : sheetTab.trim(),
+          bqProject: isBq ? bqProject.trim() : undefined,
+          bqDataset: isBq ? bqDataset.trim() : undefined,
+          bqTable:   isBq ? bqTable.trim() : undefined,
+          bqFilter:  isBq ? bqFilter.trim() : undefined,
+        })
+        onClose()
+      } catch (e) {
+        setError(String(e))
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+        <h2 className="mb-4 text-base font-semibold text-zinc-900">Edit source</h2>
+
+        <div className="space-y-3">
+          <Field label="Source name">
+            <input autoFocus className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+
+          {isBq ? (
+            <>
+              <Field label="Billing project">
+                <input className={inputCls} value={bqProject} onChange={(e) => setBqProject(e.target.value)} />
+              </Field>
+              <Field label="Dataset">
+                <input className={inputCls} value={bqDataset} onChange={(e) => setBqDataset(e.target.value)} />
+              </Field>
+              <Field label="View / table name">
+                <input className={inputCls} value={bqTable} onChange={(e) => setBqTable(e.target.value)} />
+              </Field>
+              <Field label="Row filter (optional SQL WHERE clause)">
+                <input className={inputCls} placeholder="e.g. course_id IN (301, 319, 480, 481)"
+                  value={bqFilter} onChange={(e) => setBqFilter(e.target.value)} />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Sheet ID">
+                <input className={inputCls} value={sheetId} onChange={(e) => setSheetId(e.target.value)} />
+              </Field>
+              <Field label="Tab name">
+                <input className={inputCls} value={sheetTab} onChange={(e) => setSheetTab(e.target.value)} />
+              </Field>
+            </>
+          )}
+        </div>
+
+        {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button onClick={onClose} className={cancelBtn}>Cancel</button>
+          <button onClick={handleSave} disabled={isPending} className={primaryBtn}>
+            {isPending ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
       </div>
     </div>
   )

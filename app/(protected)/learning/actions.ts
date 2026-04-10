@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser, requireStaff } from '@/lib/auth'
 import { getSheetRaw, getSheetRows } from '@/lib/google'
+import { runBigQuery } from '@/lib/bigquery'
 
 async function requireAdmin() {
   const user = await getAppUser()
@@ -186,6 +187,85 @@ export async function previewSheetSource(urlOrId: string, tabName: string) {
   const columns = headers.map(normalizeHeader).filter(Boolean)
   if (columns.length === 0) throw new Error('No columns found — check the tab name and make sure row 1 is the header.')
   return { sheetId, columns }
+}
+
+/** Preview a BigQuery table/view — returns column names for role mapping. */
+export async function previewBqSource(bqProject: string, bqDataset: string, bqTable: string) {
+  await requireAdmin()
+  const fqTable = `${bqDataset}.${bqTable}`
+  const rows = await runBigQuery(bqProject, `SELECT * FROM \`${fqTable}\` LIMIT 1`)
+  if (rows.length === 0) throw new Error('View returned 0 rows — is it empty or does the name have a typo?')
+  const columns = Object.keys(rows[0])
+  if (columns.length === 0) throw new Error('No columns found')
+  return { columns }
+}
+
+export async function createBqDataSource(data: {
+  name: string
+  bqProject: string
+  bqDataset: string
+  bqTable: string
+  bqFilter: string
+  columns: { column_name: string; role: string; label: string | null }[]
+}) {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+
+  const { data: source, error } = await supabase
+    .from('metric_sources')
+    .insert({
+      name:        data.name,
+      source_type: 'bigquery',
+      bq_project:  data.bqProject,
+      bq_dataset:  data.bqDataset,
+      bq_table:    data.bqTable,
+      bq_filter:   data.bqFilter || null,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+
+  const { error: colErr } = await supabase.from('metric_source_columns').insert(
+    data.columns.map((c) => ({
+      source_id:   source.id,
+      column_name: c.column_name,
+      role:        c.role,
+      label:       c.label || null,
+    }))
+  )
+  if (colErr) throw new Error(colErr.message)
+
+  revalidatePath('/learning/settings')
+}
+
+/** Update an existing data source's connection details (not column mappings). */
+export async function updateDataSourceDetails(id: string, data: {
+  name: string
+  // Sheet fields
+  sheetId?: string
+  sheetTab?: string
+  // BQ fields
+  bqProject?: string
+  bqDataset?: string
+  bqTable?: string
+  bqFilter?: string
+}) {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('metric_sources')
+    .update({
+      name:       data.name,
+      sheet_id:   data.sheetId ?? null,
+      sheet_tab:  data.sheetTab ?? null,
+      bq_project: data.bqProject ?? null,
+      bq_dataset: data.bqDataset ?? null,
+      bq_table:   data.bqTable ?? null,
+      bq_filter:  data.bqFilter ?? null,
+    })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning/settings')
 }
 
 export async function createDataSource(data: {
@@ -439,25 +519,46 @@ export async function syncDataSource(id: string) {
 
   if (!learnerIdCol) throw new Error('No learner_id column mapped')
 
-  try {
-    const rows = await getSheetRows(source.sheet_id, source.sheet_tab)
+  const sourceType = (source as unknown as { source_type?: string }).source_type ?? 'sheet'
 
-    // Full replace — delete all existing rows for this source then bulk insert
+  try {
+    // ── Fetch rows from the appropriate source ────────────────────────────────
+    let rawRows: Record<string, string | null>[]
+
+    if (sourceType === 'bigquery') {
+      const { bq_project, bq_dataset, bq_table, bq_filter } = source as unknown as {
+        bq_project: string; bq_dataset: string; bq_table: string; bq_filter: string | null
+      }
+      if (!bq_project || !bq_dataset || !bq_table) {
+        throw new Error('BigQuery source missing project/dataset/table')
+      }
+      const fqTable = `${bq_dataset}.${bq_table}`
+      const where = bq_filter?.trim() ? ` WHERE ${bq_filter.trim()}` : ''
+      rawRows = await runBigQuery(bq_project, `SELECT * FROM \`${fqTable}\`${where}`)
+    } else {
+      rawRows = await getSheetRows(source.sheet_id, source.sheet_tab)
+    }
+
+    // ── Full replace — delete all existing rows for this source then bulk insert
     await supabase.from('metric_raw_rows').delete().eq('source_id', id)
 
-    const newRows = rows
+    const newRows = rawRows
       .filter((r) => r[learnerIdCol.column_name]?.trim())
       .map((r) => ({
         source_id:  id,
-        learner_id: r[learnerIdCol.column_name].trim().toLowerCase(),
+        learner_id: (r[learnerIdCol.column_name] ?? '').trim().toLowerCase(),
         value:      valueCol ? (r[valueCol.column_name] || null) : null,
         dimensions: Object.fromEntries(
           dimensionCols.map((c) => [c.column_name, r[c.column_name] || null])
         ),
       }))
 
-    if (newRows.length > 0) {
-      const { error: insertErr } = await supabase.from('metric_raw_rows').insert(newRows)
+    // Insert in batches (BQ views can return 250k+ rows; Supabase chokes on
+    // single inserts of that size)
+    const BATCH = 5000
+    for (let i = 0; i < newRows.length; i += BATCH) {
+      const batch = newRows.slice(i, i + BATCH)
+      const { error: insertErr } = await supabase.from('metric_raw_rows').insert(batch)
       if (insertErr) throw new Error(insertErr.message)
     }
 
