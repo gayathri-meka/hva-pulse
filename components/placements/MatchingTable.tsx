@@ -614,18 +614,9 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
     getRowId: (row) => row.learner_id,
   })
 
-  const filteredCount = table.getFilteredRowModel().rows.length
-  const totalCount    = rows.length
-  const rowCountText  =
-    filteredCount === totalCount
-      ? `${totalCount} learner${totalCount !== 1 ? 's' : ''}`
-      : `${filteredCount} of ${totalCount} learners`
-
   return (
     <>
-      {/* Toolbar: row count + columns button */}
       <div className="mb-3 flex items-center justify-end gap-3" ref={colMenuRef}>
-        <span className="text-sm text-zinc-500">{rowCountText}</span>
         <div className="relative">
           <button
             onClick={() => setShowColMenu((v) => !v)}
