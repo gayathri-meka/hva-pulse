@@ -254,7 +254,6 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
   roleSelected?: boolean
   subCohortOptions?: string[]
 }) {
-  const [activeSubCohorts, setActiveSubCohorts] = useState<Set<string>>(new Set())
   const [sorting, setSorting]                   = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>(loadSizing)
   const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])
@@ -586,12 +585,8 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
     [roleSelected],
   )
 
-  const filteredBySubCohort = activeSubCohorts.size > 0
-    ? rows.filter((r) => r.sub_cohort && activeSubCohorts.has(r.sub_cohort))
-    : rows
-
   const table = useReactTable({
-    data: filteredBySubCohort,
+    data: rows,
     columns,
     state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { ...columnVisibility, status: roleSelected } },
     onSortingChange: setSorting,
@@ -620,7 +615,7 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
   })
 
   const filteredCount = table.getFilteredRowModel().rows.length
-  const totalCount    = filteredBySubCohort.length
+  const totalCount    = rows.length
   const rowCountText  =
     filteredCount === totalCount
       ? `${totalCount} learner${totalCount !== 1 ? 's' : ''}`
@@ -628,29 +623,9 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
 
   return (
     <>
-      {/* Toolbar: sub-cohort pills + row count + columns button */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          {subCohortOptions.map((sc) => (
-            <button
-              key={sc}
-              onClick={() => {
-                const next = new Set(activeSubCohorts)
-                next.has(sc) ? next.delete(sc) : next.add(sc)
-                setActiveSubCohorts(next)
-              }}
-              className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
-                activeSubCohorts.has(sc)
-                  ? 'border-zinc-800 bg-zinc-800 text-white'
-                  : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
-              }`}
-            >
-              {sc}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-3" ref={colMenuRef}>
-          <span className="text-sm text-zinc-500">{rowCountText}</span>
+      {/* Toolbar: row count + columns button */}
+      <div className="mb-3 flex items-center justify-end gap-3" ref={colMenuRef}>
+        <span className="text-sm text-zinc-500">{rowCountText}</span>
         <div className="relative">
           <button
             onClick={() => setShowColMenu((v) => !v)}
@@ -682,7 +657,6 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
               })}
             </div>
           )}
-        </div>
         </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
