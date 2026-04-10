@@ -25,13 +25,17 @@ export type MetricDef = {
   time_dimension:   string | null
   time_sort_order:  string | null
   composite_inputs: CompositeInput[]
+  fill_gaps:        boolean
+  filter_logic:     'and' | 'or'
 }
 
 // ── Simple metric helpers ──────────────────────────────────────────────────────
 
-export function applyFilters(rows: RawRow[], filters: MetricDef['filters']): RawRow[] {
+export function applyFilters(rows: RawRow[], filters: MetricDef['filters'], logic: 'and' | 'or' = 'and'): RawRow[] {
+  if (filters.length === 0) return rows
+  const match = logic === 'and' ? 'every' : 'some'
   return rows.filter((r) =>
-    filters.every((f) => {
+    filters[match]((f) => {
       const v = String(r.dimensions?.[f.column] ?? '')
       return f.operator === 'eq' ? v === f.value : true
     })
@@ -62,7 +66,7 @@ export function sortPeriods(periods: string[], sortOrder: string | null): string
 
 export function computeSimpleForLearner(rows: RawRow[], metric: MetricDef): ComputedMetric {
   if (!metric.aggregation) return { kind: 'single', value: null }
-  const filtered = applyFilters(rows, metric.filters)
+  const filtered = applyFilters(rows, metric.filters, metric.filter_logic)
 
   if (!metric.time_dimension) {
     return { kind: 'single', value: aggregate(filtered, metric.aggregation) }
@@ -77,16 +81,51 @@ export function computeSimpleForLearner(rows: RawRow[], metric: MetricDef): Comp
   }
 
   const periods = sortPeriods(Array.from(groups.keys()), metric.time_sort_order)
-  const series: SeriesPoint[] = periods.map((p) => ({
+  let series: SeriesPoint[] = periods.map((p) => ({
     period: p,
     value:  aggregate(groups.get(p) ?? [], metric.aggregation!),
   }))
+
+  // Zero-fill weekly gaps when opted in (fill_gaps defaults to true).
+  if (metric.fill_gaps) {
+    series = zeroFillWeeklyGaps(series)
+  }
 
   const current = series.length > 0 ? series[series.length - 1].value : null
   const prev    = series.length > 1 ? series[series.length - 2].value : null
   const delta   = current !== null && prev !== null ? current - prev : null
 
   return { kind: 'series', series, current, delta }
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** Fill missing weeks with value: 0 from the learner's first activity
+ *  through the current week. Only activates when every period matches
+ *  YYYY-MM-DD format. Trailing zeros after last activity surface inactivity. */
+function zeroFillWeeklyGaps(series: SeriesPoint[]): SeriesPoint[] {
+  if (series.length === 0) return series
+  if (!series.every((s) => ISO_DATE_RE.test(s.period))) return series
+
+  const existing = new Map(series.map((s) => [s.period, s]))
+  const start    = new Date(series[0].period)
+
+  // End at the Monday of the current week (not the learner's last activity)
+  const now       = new Date()
+  const dayOfWeek = now.getDay()
+  const monday    = new Date(now)
+  monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7))
+  const end = monday
+
+  const filled: SeriesPoint[] = []
+  const cursor = new Date(start)
+  while (cursor <= end) {
+    const iso = cursor.toISOString().slice(0, 10)
+    const real = existing.get(iso)
+    filled.push(real ?? { period: iso, value: 0 })
+    cursor.setDate(cursor.getDate() + 7)
+  }
+  return filled
 }
 
 // ── Composite metric helpers ───────────────────────────────────────────────────

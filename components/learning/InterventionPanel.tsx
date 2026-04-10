@@ -1078,7 +1078,7 @@ function ConfirmDialog({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6">
+      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6">
         <h2 className="mb-2 text-base font-semibold text-zinc-900">{title}</h2>
         <p className="mb-5 text-sm text-zinc-500">{message}</p>
         {error && <p className="mb-3 text-xs text-[#E24B4A]">{error}</p>}

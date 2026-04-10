@@ -29,6 +29,8 @@ export type CreateMetricInput =
       filters: { column: string; operator: string; value: string }[]
       timeDimension: string | null
       timeSortOrder: string | null
+      fillGaps: boolean
+      filterLogic: 'and' | 'or'
       description: string
     }
   | {
@@ -51,6 +53,8 @@ export async function createMetricDef(data: CreateMetricInput) {
       filters:         data.filters,
       time_dimension:  data.timeDimension,
       time_sort_order: data.timeSortOrder,
+      fill_gaps:       data.fillGaps ?? true,
+      filter_logic:    data.filterLogic ?? 'and',
       description:     data.description,
     })
     if (error) throw new Error(error.message)
@@ -114,6 +118,8 @@ export async function updateMetricDef(id: string, data: CreateMetricInput) {
         filters:         data.filters,
         time_dimension:  data.timeDimension,
         time_sort_order: data.timeSortOrder,
+        fill_gaps:       data.fillGaps ?? true,
+        filter_logic:    data.filterLogic ?? 'and',
         description:     data.description,
         composite_inputs: [],
       })

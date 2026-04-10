@@ -426,10 +426,21 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
 
   const allColumns = useMemo(() => [...fixedColumns, ...metricColumns, interventionColumn], [metricColumns])
 
+  // Reconcile stored column order with actual columns — append any new columns
+  // that weren't in the saved order, remove any that no longer exist
+  const reconciledOrder = useMemo(() => {
+    if (columnOrder.length === 0) return []
+    const allIds = new Set(allColumns.map((c) => c.id!).filter(Boolean))
+    const validOrder = columnOrder.filter((id) => allIds.has(id))
+    const missing    = allColumns.map((c) => c.id!).filter((id) => id && !validOrder.includes(id))
+    if (missing.length === 0 && validOrder.length === columnOrder.length) return columnOrder
+    return [...validOrder, ...missing]
+  }, [columnOrder, allColumns])
+
   const table = useReactTable({
     data:    learners,
     columns: allColumns,
-    state:   { sorting, columnFilters, columnVisibility, columnSizing, columnOrder },
+    state:   { sorting, columnFilters, columnVisibility, columnSizing, columnOrder: reconciledOrder },
     onSortingChange:       setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater) => {
@@ -473,7 +484,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e
     if (!over || active.id === over.id) return
-    const current = columnOrder.length ? columnOrder : table.getAllLeafColumns().map((c) => c.id)
+    const current = reconciledOrder.length ? reconciledOrder : table.getAllLeafColumns().map((c) => c.id)
     const oldIdx  = current.indexOf(active.id as string)
     const newIdx  = current.indexOf(over.id as string)
     if (oldIdx < 0 || newIdx < 0) return
@@ -599,6 +610,20 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
                     })}
                   </>
                 )}
+                {reconciledOrder.length > 0 && (
+                  <>
+                    <hr className="my-1.5 border-zinc-100" />
+                    <button
+                      onClick={() => {
+                        setColumnOrder([])
+                        try { localStorage.removeItem(ORDER_KEY) } catch {}
+                      }}
+                      className="w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600"
+                    >
+                      Reset column order
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -645,13 +670,18 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
       </SortableContext>
       </DndContext>
 
-      {/* Sparkline popover */}
-      {popover && (
+      {/* Sparkline popover — flips above if not enough room below */}
+      {popover && (() => {
+        const popoverH  = Math.min(popover.series.length * 28 + 8, 256) // estimate height (28px per row, capped at max-h-64)
+        const spaceBelow = window.innerHeight - popover.top - 6
+        const flipAbove  = spaceBelow < popoverH
+        const top = flipAbove ? popover.top - popoverH - 6 : popover.top + 6
+        return (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setPopover(null)} />
           <div
-            className="fixed z-30 w-48 rounded-xl border border-zinc-200 bg-white py-1 shadow-xl"
-            style={{ top: popover.top + 6, left: popover.left }}
+            className="fixed z-30 w-48 max-h-64 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-xl"
+            style={{ top, left: popover.left }}
           >
             {popover.series.map((p, i) => (
               <div
@@ -668,7 +698,8 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
             ))}
           </div>
         </>
-      )}
+        )
+      })()}
     </div>
   )
 }

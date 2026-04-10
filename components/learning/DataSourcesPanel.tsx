@@ -281,7 +281,7 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6">
 
         {step === 'form' && (
           <>
@@ -470,7 +470,7 @@ function ConnectBqModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6">
         {step === 'form' && (
           <>
             <h2 className="mb-1 text-base font-semibold text-zinc-900">Connect a BigQuery View</h2>
@@ -619,7 +619,7 @@ function EditSourceModal({ source, onClose }: { source: DataSource; onClose: () 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6">
         <h2 className="mb-4 text-base font-semibold text-zinc-900">Edit source</h2>
 
         <div className="space-y-3">
