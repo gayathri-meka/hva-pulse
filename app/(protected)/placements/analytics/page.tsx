@@ -54,7 +54,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   let prefsQuery = supabase.from('role_preferences').select('reasons').eq('preference', 'not_interested')
   let tatQuery  = supabase
     .from('applications')
-    .select('created_at, status, shortlisting_decision_taken_at, interviews_started_at, hiring_decision_taken_at')
+    .select('created_at, status, shortlisting_decision_taken_at, interviews_started_at, hiring_decision_taken_at, users(name), roles(role_title, companies(company_name))')
     .gte('created_at', TAT_CUTOFF_DATE)
 
   if (filterUserIds) {
@@ -63,7 +63,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     tatQuery   = tatQuery.in('user_id',   filterUserIds)
   }
 
-  const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps }, { data: settingsRow }] = await Promise.all([
+  const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps, error: tatError }, { data: settingsRow }] = await Promise.all([
     supabase.from('roles').select('id, created_at, status'), // roles are not learner-specific
     appsQuery,
     prefsQuery,
@@ -147,6 +147,8 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     shortlisting_decision_taken_at:  string | null
     interviews_started_at:           string | null
     hiring_decision_taken_at:        string | null
+    users:                           { name: string } | null
+    roles:                           { role_title: string; companies: { company_name: string } | null } | null
   }
 
   function avgDays(pairs: [string | null | undefined, string | null | undefined][]): { avg: number | null; n: number } {
@@ -158,34 +160,40 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     return { avg: Math.round(diffs.reduce((s, d) => s + d, 0) / diffs.length), n: diffs.length }
   }
 
-  const tat = (tatApps ?? []) as TatApp[]
+  if (tatError) console.error('[TAT] Query error:', tatError)
+  const tat = (tatApps ?? []) as unknown as TatApp[]
 
-  const tatStage1 = avgDays(tat.map((a) => [a.created_at, a.shortlisting_decision_taken_at]))
-  const tatStage2 = avgDays(
+  // Stage 1 — Time to screening (HVA's control)
+  // created_at → shortlisting_decision_taken_at for all apps with a screening decision
+  const tatScreening = avgDays(tat.map((a) => [a.created_at, a.shortlisting_decision_taken_at]))
+
+  // Stage 2 — Screening to final outcome (company's control)
+  // shortlisting_decision_taken_at → hiring_decision_taken_at for shortlisted apps that reached a final outcome
+  const tatOutcome = avgDays(
     tat
-      .filter((a) => a.shortlisting_decision_taken_at && a.interviews_started_at)
-      .map((a) => [a.shortlisting_decision_taken_at, a.interviews_started_at])
+      .filter((a) => (a.status === 'hired' || a.status === 'rejected') && a.shortlisting_decision_taken_at && a.hiring_decision_taken_at)
+      .map((a) => [a.shortlisting_decision_taken_at, a.hiring_decision_taken_at])
   )
-  const tatStage3 = avgDays(
-    tat
-      .filter((a) => a.interviews_started_at && a.hiring_decision_taken_at)
-      .map((a) => [a.interviews_started_at, a.hiring_decision_taken_at])
-  )
-  const tatTotal = avgDays(
-    tat
-      .filter((a) => (a.status === 'hired' || a.status === 'rejected') && a.hiring_decision_taken_at)
-      .map((a) => [a.created_at, a.hiring_decision_taken_at])
-  )
+
+  // Rejection breakdown: of all rejected, how many got interviews?
+  const rejectedApps          = tat.filter((a) => a.status === 'rejected')
+  const rejectedWithInterview = rejectedApps.filter((a) => a.interviews_started_at).length
+  const rejectedNoInterview   = rejectedApps.length - rejectedWithInterview
+
+  // Build detail rows for the popup table
+  const tatDetails = tat.map((a) => ({
+    learnerName:  (a.users as unknown as { name: string } | null)?.name ?? '—',
+    companyName:  (a.roles as unknown as { role_title: string; companies: { company_name: string } | null } | null)?.companies?.company_name ?? '—',
+    roleName:     (a.roles as unknown as { role_title: string } | null)?.role_title ?? '—',
+    status:       a.status,
+    appliedAt:    a.created_at,
+    screenedAt:   a.shortlisting_decision_taken_at,
+    interviewAt:  a.interviews_started_at,
+    outcomeAt:    a.hiring_decision_taken_at,
+  }))
 
   const tatCutoffLabel = new Date(TAT_CUTOFF_DATE + 'T00:00:00')
     .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-
-  // TODO: remove dummy data once migration 009 is applied and real timestamps accumulate
-  const DUMMY_TAT = true
-  const [_tatTotal, _tatStage1, _tatStage2, _tatStage3] = [tatTotal, tatStage1, tatStage2, tatStage3]
-  const [effectiveTatTotal, effectiveTatStage1, effectiveTatStage2, effectiveTatStage3] = DUMMY_TAT
-    ? [{ avg: 34, n: 15 }, { avg: 12, n: 25 }, { avg: 8, n: 18 }, { avg: 14, n: 10 }]
-    : [_tatTotal, _tatStage1, _tatStage2, _tatStage3]
 
   const yetToStart        = allApps.filter((a) => a.status === 'shortlisted').length
   const interviewsOngoing = allApps.filter((a) => a.status === 'interviews_ongoing').length
@@ -286,12 +294,13 @@ export default async function AnalyticsPage({ searchParams }: Props) {
           interviewsOngoingAge={interviewsOngoingAge}
         />
         <TatDeepDive
-          total={effectiveTatTotal}
-          stage1={effectiveTatStage1}
-          stage2={effectiveTatStage2}
-          stage3={effectiveTatStage3}
+          screening={tatScreening}
+          outcome={tatOutcome}
+          rejectedTotal={rejectedApps.length}
+          rejectedWithInterview={rejectedWithInterview}
+          rejectedNoInterview={rejectedNoInterview}
           cutoffDate={tatCutoffLabel}
-          isDummy={DUMMY_TAT}
+          details={tatDetails}
         />
       </div>
     </div>

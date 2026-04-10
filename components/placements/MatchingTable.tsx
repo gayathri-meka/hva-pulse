@@ -19,11 +19,20 @@ import {
   type ColumnOrderState,
   type Column,
   type FilterFn,
+  type VisibilityState,
 } from '@tanstack/react-table'
 
 export type MatchingStatus =
   | 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
   | 'not_applied' | 'not_interested'
+
+export type AppDetail = {
+  company:  string
+  role:     string
+  status:   string
+  feedback: string | null
+  reasons:  string[]
+}
 
 export type MatchingRow = {
   learner_id:              string
@@ -50,6 +59,16 @@ export type MatchingRow = {
   not_shortlisted_reasons: string[]
   rejection_feedback:      string | null
   rejection_reasons:       string[]
+  // Cross-role aggregates
+  applied_count:           number
+  applied_details:         AppDetail[]
+  not_interested_count:    number
+  not_interested_details:  { company: string; role: string; reasons: string[] }[]
+  not_shortlisted_count:   number
+  not_shortlisted_details: AppDetail[]
+  ongoing_count:           number
+  ongoing_details:         AppDetail[]
+  feedback_details:        AppDetail[]
 }
 
 // ── Status display ────────────────────────────────────────────────────────────
@@ -178,13 +197,41 @@ function FilterDropdown({ column }: { column: Column<MatchingRow, unknown> }) {
 }
 
 // ── Column ordering ───────────────────────────────────────────────────────────
+const VISIBILITY_KEY = 'hva-col-matching-visibility'
+
+const HIDEABLE_COLS = [
+  { id: 'batch',              label: 'Batch' },
+  { id: 'lf',                 label: 'LF' },
+  { id: 'new_lf',             label: 'New LF' },
+  { id: 'applied_count',      label: 'Applied' },
+  { id: 'not_interested_count', label: 'Not Interested' },
+  { id: 'not_shortlisted_count', label: 'Not Shortlisted' },
+  { id: 'ongoing_count',      label: 'Ongoing Interviews' },
+  { id: 'feedback_count',     label: 'Feedback' },
+  { id: 'year_of_graduation', label: 'Grad Year' },
+  { id: 'degree',             label: 'Degree' },
+  { id: 'specialisation',     label: 'Specialisation' },
+  { id: 'readiness',          label: 'Readiness' },
+  { id: 'prs_score',          label: 'PRS' },
+  { id: 'proactiveness',      label: 'Proactiveness' },
+  { id: 'articulation',       label: 'Articulation' },
+  { id: 'comprehension',      label: 'Comprehension' },
+  { id: 'tech_score',         label: 'Tech Score' },
+  { id: 'current_location',   label: 'Location' },
+  { id: 'is_blacklisted',     label: 'Blacklisted' },
+]
+
 const BASE_ORDER: ColumnOrderState = [
-  'name', 'batch', 'lf', 'new_lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
+  'name', 'batch', 'lf', 'new_lf',
+  'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'feedback_count',
+  'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
   'current_location', 'is_blacklisted', 'status',
 ]
 const ROLE_ORDER: ColumnOrderState = [
-  'name', 'status', 'batch', 'lf', 'new_lf', 'year_of_graduation', 'degree', 'specialisation', 'readiness',
+  'name', 'status', 'batch', 'lf', 'new_lf',
+  'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'feedback_count',
+  'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
   'current_location', 'is_blacklisted',
 ]
@@ -198,9 +245,33 @@ function loadSizing(): ColumnSizingState {
 
 // ── Table component ───────────────────────────────────────────────────────────
 export default function MatchingTable({ rows, roleSelected = true }: { rows: MatchingRow[]; roleSelected?: boolean }) {
-  const [sorting, setSorting]             = useState<SortingState>([{ id: 'prs_score', desc: true }])
-  const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [sorting, setSorting]                   = useState<SortingState>([{ id: 'prs_score', desc: true }])
+  const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>(loadSizing)
+  const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [showColMenu, setShowColMenu]           = useState(false)
+  const colMenuRef                              = useRef<HTMLDivElement>(null)
+
+  // Hydrate column visibility from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VISIBILITY_KEY)
+      if (stored) setColumnVisibility(JSON.parse(stored))
+    } catch {}
+  }, [])
+
+  // Click-outside for column menu
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setShowColMenu(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  const [detailPopup, setDetailPopup] = useState<{ title: string; rows: AppDetail[] } | null>(null)
+  const [niPopup, setNiPopup]         = useState<{ title: string; rows: { company: string; role: string; reasons: string[] }[] } | null>(null)
+
   const [statusMap, setStatusMap]         = useState<Record<string, string>>(() =>
     Object.fromEntries(rows.filter((r) => r.app_id).map((r) => [r.app_id!, r.status]))
   )
@@ -363,6 +434,67 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
         )
       },
     }),
+    col.accessor('applied_count', {
+      header: 'Applied',
+      size: 80,
+      cell: (info) => {
+        const v = info.getValue()
+        const details = info.row.original.applied_details
+        return v > 0 ? (
+          <button onClick={() => setDetailPopup({ title: `${info.row.original.name} — Applications (${v})`, rows: details })}
+            className="font-medium text-blue-600 hover:underline tabular-nums">{v}</button>
+        ) : <span className="text-zinc-300">0</span>
+      },
+    }),
+    col.accessor('not_interested_count', {
+      header: 'Not Interested',
+      size: 110,
+      cell: (info) => {
+        const v = info.getValue()
+        const details = info.row.original.not_interested_details
+        return v > 0 ? (
+          <button onClick={() => setNiPopup({ title: `${info.row.original.name} — Not Interested (${v})`, rows: details })}
+            className="font-medium text-zinc-700 hover:underline tabular-nums">{v}</button>
+        ) : <span className="text-zinc-300">0</span>
+      },
+    }),
+    col.accessor('not_shortlisted_count', {
+      header: 'Not Shortlisted',
+      size: 120,
+      cell: (info) => {
+        const v = info.getValue()
+        const details = info.row.original.not_shortlisted_details
+        return v > 0 ? (
+          <button onClick={() => setDetailPopup({ title: `${info.row.original.name} — Not Shortlisted (${v})`, rows: details })}
+            className="font-medium text-red-600 hover:underline tabular-nums">{v}</button>
+        ) : <span className="text-zinc-300">0</span>
+      },
+    }),
+    col.accessor('ongoing_count', {
+      header: 'Ongoing',
+      size: 80,
+      cell: (info) => {
+        const v = info.getValue()
+        const details = info.row.original.ongoing_details
+        return v > 0 ? (
+          <button onClick={() => setDetailPopup({ title: `${info.row.original.name} — Ongoing Interviews (${v})`, rows: details })}
+            className="font-medium text-violet-600 hover:underline tabular-nums">{v}</button>
+        ) : <span className="text-zinc-300">0</span>
+      },
+    }),
+    col.display({
+      id: 'feedback_count',
+      header: 'Feedback',
+      size: 90,
+      cell: (info) => {
+        const details = info.row.original.feedback_details
+        const v = details.length
+        return v > 0 ? (
+          <button onClick={() => setDetailPopup({ title: `${info.row.original.name} — Feedback (${v})`, rows: details })}
+            className="font-medium text-amber-600 hover:underline tabular-nums">{v}</button>
+        ) : <span className="text-zinc-300">0</span>
+      },
+    }),
     col.accessor('status', {
       header: 'Status',
       size: 180,
@@ -442,9 +574,16 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { status: roleSelected } },
+    state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { ...columnVisibility, status: roleSelected } },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: (updater) => {
+      setColumnVisibility((old) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        try { localStorage.setItem(VISIBILITY_KEY, JSON.stringify(next)) } catch {}
+        return next
+      })
+    },
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater
@@ -463,6 +602,40 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
 
   return (
     <>
+      <div className="mb-3 flex justify-end" ref={colMenuRef}>
+        <div className="relative">
+          <button
+            onClick={() => setShowColMenu((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+              <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+              <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" />
+            </svg>
+            Columns
+          </button>
+
+          {showColMenu && (
+            <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
+              {HIDEABLE_COLS.map(({ id, label }) => {
+                const column = table.getColumn(id)
+                if (!column) return null
+                return (
+                  <label key={id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-zinc-50">
+                    <input
+                      type="checkbox"
+                      checked={column.getIsVisible()}
+                      onChange={column.getToggleVisibilityHandler()}
+                      className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900"
+                    />
+                    <span className="text-xs text-zinc-700">{label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table
@@ -590,6 +763,102 @@ export default function MatchingTable({ rows, roleSelected = true }: { rows: Mat
               >
                 Confirm
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Application detail popup */}
+      {detailPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
+              <h2 className="text-base font-semibold text-zinc-900">{detailPopup.title}</h2>
+              <button onClick={() => setDetailPopup(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(90vh - 70px)' }}>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-100 text-left">
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Company</th>
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Role</th>
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Status</th>
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Feedback / Reasons</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {detailPopup.rows.map((d, i) => (
+                    <tr key={i} className="hover:bg-zinc-50">
+                      <td className="px-3 py-2 font-medium text-zinc-900">{d.company}</td>
+                      <td className="px-3 py-2 text-zinc-600">{d.role}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[d.status as MatchingStatus] ?? 'bg-zinc-100 text-zinc-600'}`}>
+                          {STATUS_LABEL[d.status as MatchingStatus] ?? d.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-zinc-500">
+                        {d.reasons.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-0.5">
+                            {d.reasons.map((r, j) => (
+                              <span key={j} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{r}</span>
+                            ))}
+                          </div>
+                        )}
+                        {d.feedback && <p className="text-zinc-500">{d.feedback}</p>}
+                        {!d.feedback && d.reasons.length === 0 && <span className="text-zinc-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Not interested detail popup */}
+      {niPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
+              <h2 className="text-base font-semibold text-zinc-900">{niPopup.title}</h2>
+              <button onClick={() => setNiPopup(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(90vh - 70px)' }}>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-100 text-left">
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Company</th>
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Role</th>
+                    <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Reasons</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {niPopup.rows.map((d, i) => (
+                    <tr key={i} className="hover:bg-zinc-50">
+                      <td className="px-3 py-2 font-medium text-zinc-900">{d.company}</td>
+                      <td className="px-3 py-2 text-zinc-600">{d.role}</td>
+                      <td className="px-3 py-2">
+                        {d.reasons.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {d.reasons.map((r, j) => (
+                              <span key={j} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{r}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-xs text-zinc-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
