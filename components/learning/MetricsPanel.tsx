@@ -124,6 +124,19 @@ export default function MetricsPanel({ metrics, sources }: Props) {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Defined Metrics
+        </span>
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
+        >
+          <span className="text-base leading-none">+</span>
+          Add metric
+        </button>
+      </div>
+
       {/* Simple metrics */}
       <div className="space-y-3">
         <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -147,14 +160,6 @@ export default function MetricsPanel({ metrics, sources }: Props) {
           <div className="space-y-2.5">{compositeMetrics.map(renderMetric)}</div>
         )}
       </div>
-
-      <button
-        onClick={() => setAdding(true)}
-        className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
-      >
-        <span className="text-base leading-none">+</span>
-        Add metric
-      </button>
 
       {adding && (
         <MetricModal
@@ -181,7 +186,7 @@ export default function MetricsPanel({ metrics, sources }: Props) {
 
 // ── Modal ──────────────────────────────────────────────────────────────────────
 
-type Filter = { column: string; value: string }
+type Filter = { column: string; operator: string; value: string }
 
 function MetricModal({
   sources,
@@ -208,7 +213,7 @@ function MetricModal({
   const [sourceId,   setSourceId]   = useState(existing?.source_id ?? '')
   const [aggregation, setAggregation] = useState(existing?.aggregation ?? 'COUNT')
   const [filters,    setFilters]    = useState<Filter[]>(
-    existing?.filters?.map((f) => ({ column: f.column, value: f.value })) ?? []
+    existing?.filters?.map((f) => ({ column: f.column, operator: f.operator ?? 'eq', value: f.value })) ?? []
   )
 
   // Composite state
@@ -265,7 +270,7 @@ function MetricModal({
   function addFilter() {
     const firstDim = dimensions[0]
     if (!firstDim) return
-    setFilters((f) => [...f, { column: firstDim.column_name, value: '' }])
+    setFilters((f) => [...f, { column: firstDim.column_name, operator: 'eq', value: '' }])
   }
 
   function updateFilter(i: number, field: keyof Filter, val: string) {
@@ -287,7 +292,7 @@ function MetricModal({
     parts.push(sourceMap[sourceId] ?? sourceId)
     for (const f of filters) {
       if (f.column && f.value.trim()) {
-        parts.push(`${labelFor(f.column)} = ${f.value.trim()}`)
+        parts.push(`${labelFor(f.column)} ${FILTER_OP_SYMBOL[f.operator] ?? '='} ${f.value.trim()}`)
       }
     }
     if (trackTime && timeDim) {
@@ -324,7 +329,7 @@ function MetricModal({
 
       const cleanFilters = filters
         .filter((f) => f.column && f.value.trim())
-        .map((f) => ({ column: f.column, operator: 'eq', value: f.value.trim() }))
+        .map((f) => ({ column: f.column, operator: f.operator, value: f.value.trim() }))
 
       const payload = {
         kind:          'simple' as const,
@@ -492,7 +497,7 @@ function MetricModal({
                     {filters.map((f, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <SelectBox
-                          className="flex-1"
+                          className="min-w-0 flex-1"
                           value={f.column}
                           onChange={(e) => updateFilter(i, 'column', e.target.value)}
                         >
@@ -502,7 +507,15 @@ function MetricModal({
                             </option>
                           ))}
                         </SelectBox>
-                        <span className="shrink-0 text-xs text-zinc-400">=</span>
+                        <SelectBox
+                          className="w-28 shrink-0"
+                          value={f.operator}
+                          onChange={(e) => updateFilter(i, 'operator', e.target.value)}
+                        >
+                          {FILTER_OPERATORS.map((op) => (
+                            <option key={op.value} value={op.value}>{op.label}</option>
+                          ))}
+                        </SelectBox>
                         <input
                           className={`${inputCls} flex-1`}
                           placeholder="value"
@@ -774,6 +787,17 @@ function SelectBox({ className = '', children, ...props }: React.SelectHTMLAttri
       </svg>
     </div>
   )
+}
+
+const FILTER_OPERATORS = [
+  { value: 'eq',          label: '=' },
+  { value: 'neq',         label: '≠' },
+  { value: 'starts_with', label: 'starts with' },
+  { value: 'contains',    label: 'contains' },
+] as const
+
+const FILTER_OP_SYMBOL: Record<string, string> = {
+  eq: '=', neq: '≠', starts_with: 'starts with', contains: 'contains',
 }
 
 const AGGREGATIONS = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX'] as const

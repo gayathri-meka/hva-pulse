@@ -767,7 +767,7 @@ function Sparkline({ series }: { series: SeriesPoint[] }) {
     <svg width={w} height={H}>
       {visible.map((p, i) => {
         const v    = p.value ?? 0
-        const pos  = range === 0 ? 0.5 : (v - min) / range
+        const pos  = range === 0 ? (max === 0 ? 0 : 0.5) : (v - min) / range
         const barH = Math.max(2, Math.round(pos * (H - 2)) + 2)
         const x    = i * (barW + gap)
         const y    = H - barH
@@ -799,6 +799,7 @@ function SortableHeader({ header }: { header: Header<LearnerRow, unknown> }) {
       <div
         {...attributes}
         {...listeners}
+        suppressHydrationWarning
         className={header.column.getCanSort() ? 'flex cursor-grab items-center gap-1 active:cursor-grabbing' : 'cursor-grab active:cursor-grabbing'}
         onClick={header.column.getToggleSortingHandler()}
       >

@@ -36,8 +36,15 @@ export function applyFilters(rows: RawRow[], filters: MetricDef['filters'], logi
   const match = logic === 'and' ? 'every' : 'some'
   return rows.filter((r) =>
     filters[match]((f) => {
-      const v = String(r.dimensions?.[f.column] ?? '')
-      return f.operator === 'eq' ? v === f.value : true
+      const v = String(r.dimensions?.[f.column] ?? '').toLowerCase()
+      const fv = f.value.toLowerCase()
+      switch (f.operator) {
+        case 'eq':          return v === fv
+        case 'neq':         return v !== fv
+        case 'starts_with': return v.startsWith(fv)
+        case 'contains':    return v.includes(fv)
+        default:            return true
+      }
     })
   )
 }

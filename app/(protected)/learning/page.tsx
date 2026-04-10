@@ -30,7 +30,7 @@ export default async function LearningPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
 
-  const { filter = 'all', lf, sub_cohort, learner: selectedLearnerId, view: interventionView = 'learner' } = await searchParams
+  const { filter = 'all', lf, sub_cohort, learner: selectedLearnerId, view: interventionView = 'table' } = await searchParams
   const subCohorts = sub_cohort ? sub_cohort.split(',').filter(Boolean) : []
   const supabase = await createServerSupabaseClient()
   const isLF = appUser.role === 'LF'
@@ -366,8 +366,8 @@ export default async function LearningPage({ searchParams }: Props) {
           {/* Sub-tabs: Learner-wise | Table view */}
           <div className="flex items-center gap-1 border-b border-zinc-200">
             {[
-              { key: 'learner', label: 'Learner-wise' },
               { key: 'table',   label: 'Table view'  },
+              { key: 'learner', label: 'Learner-wise' },
             ].map(({ key, label }) => (
               <Link
                 key={key}
