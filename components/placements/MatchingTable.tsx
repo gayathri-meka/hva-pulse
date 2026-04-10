@@ -208,6 +208,7 @@ const HIDEABLE_COLS = [
   { id: 'lf',                 label: 'LF' },
   { id: 'new_lf',             label: 'New LF' },
   { id: 'new_batch',          label: 'New Batch' },
+  { id: 'sub_cohort',         label: 'Sub Cohort' },
   { id: 'applied_count',      label: 'Applied' },
   { id: 'not_interested_count', label: 'Not Interested' },
   { id: 'not_shortlisted_count', label: 'Not Shortlisted' },
@@ -227,7 +228,7 @@ const HIDEABLE_COLS = [
 ]
 
 const BASE_ORDER: ColumnOrderState = [
-  'name', 'batch', 'lf', 'new_lf', 'new_batch',
+  'name', 'batch', 'lf', 'new_lf', 'new_batch', 'sub_cohort',
   'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'rejected_count',
   'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
@@ -359,6 +360,12 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
     col.accessor('new_batch', {
       header: 'New Batch',
       size: 140,
+      filterFn: multiSelectFilter,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('sub_cohort', {
+      header: 'Sub Cohort',
+      size: 110,
       filterFn: multiSelectFilter,
       cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
     }),
