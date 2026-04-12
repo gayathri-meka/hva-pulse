@@ -6,7 +6,7 @@ import NavLinks from './NavLinks'
 import { signOut } from '@/app/actions'
 
 interface Props {
-  role: 'admin' | 'LF'
+  role: 'admin' | 'staff'
   onClose?: () => void
 }
 

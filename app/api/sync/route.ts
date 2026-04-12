@@ -40,7 +40,7 @@ export async function POST() {
     const { data: lfUsers } = await supabase
       .from('users')
       .select('id, name')
-      .eq('role', 'LF')
+      .eq('role', 'staff')
 
     const lfNameToUserId = new Map<string, string>()
     for (const lf of lfUsers ?? []) {

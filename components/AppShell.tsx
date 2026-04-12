@@ -8,7 +8,7 @@ export default function AppShell({
   role,
   children,
 }: {
-  role: 'admin' | 'LF'
+  role: 'admin' | 'staff'
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)

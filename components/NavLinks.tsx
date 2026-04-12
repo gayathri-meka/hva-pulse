@@ -98,18 +98,18 @@ const ADMIN_LINKS: NavItem[] = [
   },
 ]
 
-const LF_LINKS: NavItem[] = [
+const STAFF_LINKS: NavItem[] = [
   { href: '/dashboard',  label: 'Dashboard',   Icon: DashboardIcon  },
-  { href: '/learners',   label: 'My Learners', Icon: LearnersIcon   },
+  { href: '/learners',   label: 'Learners',    Icon: LearnersIcon   },
   { href: '/learning',   label: 'Learning',    Icon: LearningIcon   },
   { href: '/placements', label: 'Placements',  Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
   { href: '/alumni',     label: 'Alumni',      Icon: AlumniIcon     },
   { href: '/ask-pulse',  label: 'Ask Pulse',   Icon: AskPulseIcon   },
 ]
 
-export default function NavLinks({ role }: { role: 'admin' | 'LF' }) {
+export default function NavLinks({ role }: { role: 'admin' | 'staff' }) {
   const pathname = usePathname()
-  const links    = role === 'admin' ? ADMIN_LINKS : LF_LINKS
+  const links    = role === 'admin' ? ADMIN_LINKS : STAFF_LINKS
 
   return (
     <nav className="flex flex-col gap-0.5 px-3">

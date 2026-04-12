@@ -15,7 +15,7 @@ interface Props {
 export default async function CompaniesPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
 
   const { view } = await searchParams
   const initialView = view === 'table' ? 'table' : 'cards'

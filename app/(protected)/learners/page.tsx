@@ -26,7 +26,7 @@ export default async function LearnersPage({ searchParams }: Props) {
 
   const supabase    = await createServerSupabaseClient()
   const isSnapshot  = tab === 'snapshot'
-  const filterByLF  = appUser.role === 'LF' && viewAll !== '1'
+  const filterByLF  = false // Staff sees all learners (no LF scoping)
 
   // ── Always fetch learners (needed for both tabs) ───────────────────────────
   let query = supabase.from('learners').select('*, users!learners_user_id_fkey(name, email)')
@@ -146,7 +146,7 @@ export default async function LearnersPage({ searchParams }: Props) {
     }
   }
 
-  const title = appUser.role === 'LF' && viewAll !== '1' ? 'My Learners' : 'Learners'
+  const title = 'Learners'
 
   return (
     <div>
@@ -193,7 +193,7 @@ export default async function LearnersPage({ searchParams }: Props) {
           <LearnersTable
             learners={learners}
             cohorts={cohorts}
-            isLF={appUser.role === 'LF'}
+            isLF={false}
             viewAll={viewAll === '1'}
           />
         </Suspense>

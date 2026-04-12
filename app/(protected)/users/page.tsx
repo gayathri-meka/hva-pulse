@@ -29,7 +29,7 @@ export default async function UsersPage({ searchParams }: Props) {
   }[]
 
   const adminCount   = users.filter((u) => u.role === 'admin').length
-  const lfCount      = users.filter((u) => u.role === 'LF').length
+  const staffCount   = users.filter((u) => u.role === 'staff').length
   const learnerCount = users.filter((u) => u.role === 'learner').length
 
   const filtered = roleFilter ? users.filter((u) => u.role === roleFilter) : users
@@ -39,7 +39,7 @@ export default async function UsersPage({ searchParams }: Props) {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-zinc-900">Users</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {adminCount} admin{adminCount !== 1 ? 's' : ''} · {lfCount} LF{lfCount !== 1 ? 's' : ''} · {learnerCount} learner{learnerCount !== 1 ? 's' : ''}
+          {adminCount} admin{adminCount !== 1 ? 's' : ''} · {staffCount} staff · {learnerCount} learner{learnerCount !== 1 ? 's' : ''}
         </p>
       </div>
 
@@ -48,7 +48,7 @@ export default async function UsersPage({ searchParams }: Props) {
         {[
           { label: 'All', value: '' },
           { label: 'Admin', value: 'admin' },
-          { label: 'LF', value: 'LF' },
+          { label: 'Staff', value: 'staff' },
           { label: 'Learner', value: 'learner' },
         ].map(({ label, value }) => (
           <a

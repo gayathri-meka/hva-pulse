@@ -33,8 +33,6 @@ export default async function LearningPage({ searchParams }: Props) {
   const { filter = 'all', lf, sub_cohort, learner: selectedLearnerId, view: interventionView = 'table' } = await searchParams
   const subCohorts = sub_cohort ? sub_cohort.split(',').filter(Boolean) : []
   const supabase = await createServerSupabaseClient()
-  const isLF = appUser.role === 'LF'
-
   // Learners (active cohort, with email via users join)
   const learnersQuery = (() => {
     let q = supabase
@@ -42,8 +40,7 @@ export default async function LearningPage({ searchParams }: Props) {
       .select('learner_id, lf_name, lf_user_id, batch_name, sub_cohort, status, new_lf, new_batch, new_mentor, users!learners_user_id_fkey(name, email)')
       .eq('is_current_cohort', true)
       .order('lf_name')
-    if (isLF)            q = q.eq('lf_user_id', appUser.id)
-    else if (lf)         q = q.eq('lf_name', lf)
+    if (lf)              q = q.eq('lf_name', lf)
     if (subCohorts.length) q = q.in('sub_cohort', subCohorts)
     return q
   })()
@@ -202,7 +199,7 @@ export default async function LearningPage({ searchParams }: Props) {
         .select('learner_id, users!learners_user_id_fkey(name, email)')
         .eq('is_current_cohort', true)
         .order('lf_name'),
-      supabase.from('users').select('id, name, role').in('role', ['admin', 'LF']).order('name'),
+      supabase.from('users').select('id, name, role').in('role', ['admin', 'staff']).order('name'),
     ])
 
     cohortLearners = (allCohort ?? []).map((l) => {

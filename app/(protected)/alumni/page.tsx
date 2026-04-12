@@ -34,7 +34,7 @@ export default async function AlumniPage({
 }) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'LF') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
 
   const { view } = await searchParams
   const activeTab = view === 'analytics' ? 'analytics' : 'roster'

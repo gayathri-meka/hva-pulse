@@ -78,7 +78,7 @@ async function getLearners(
       .from('users')
       .select('id')
       .ilike('name', `%${args.lf_name}%`)
-      .eq('role', 'LF')
+      .eq('role', 'staff')
     lfUserIds = (lfUsers ?? []).map((u) => u.id)
     if (lfUserIds.length === 0) return { learners: [], total: 0 }
   }

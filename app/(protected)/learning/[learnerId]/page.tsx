@@ -62,7 +62,7 @@ export default async function LearnerLearningPage({ params }: Props) {
       .eq('learner_id', learnerId)
       .eq('status', 'closed')
       .order('closed_at', { ascending: false }),
-    supabase.from('users').select('id, name, role').in('role', ['admin', 'LF']).order('name'),
+    supabase.from('users').select('id, name, role').in('role', ['admin', 'staff']).order('name'),
   ])
 
   const interventionHistory: ClosedIntervention[] = (closedRaw ?? []).map((iv) => ({
