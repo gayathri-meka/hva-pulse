@@ -70,6 +70,16 @@ function ReasonsEditor({ title, description, settingsKey, initial }: {
     setItems((prev) => prev.filter((_, idx) => idx !== i))
   }
 
+  function moveItem(i: number, dir: -1 | 1) {
+    setItems((prev) => {
+      const next = [...prev]
+      const j = i + dir
+      if (j < 0 || j >= next.length) return prev
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+
   function startEdit(i: number) {
     setEditing(i)
     setEditVal(items[i])
@@ -116,6 +126,22 @@ function ReasonsEditor({ title, description, settingsKey, initial }: {
               </>
             ) : (
               <>
+                <div className="flex shrink-0 flex-col">
+                  <button
+                    onClick={() => moveItem(i, -1)}
+                    disabled={i === 0}
+                    className="text-zinc-300 hover:text-zinc-600 disabled:opacity-30"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path fillRule="evenodd" d="M8 3.293l-4.354 4.354a.5.5 0 0 0 .708.708L8 4.707l3.646 3.648a.5.5 0 0 0 .708-.708L8 3.293Z" clipRule="evenodd" /></svg>
+                  </button>
+                  <button
+                    onClick={() => moveItem(i, 1)}
+                    disabled={i === items.length - 1}
+                    className="text-zinc-300 hover:text-zinc-600 disabled:opacity-30"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path fillRule="evenodd" d="M8 12.707l4.354-4.354a.5.5 0 0 1 .708.708l-5.008 5.008a.5.5 0 0 1-.708 0L2.338 9.061a.5.5 0 1 1 .708-.708L8 12.707Z" clipRule="evenodd" /></svg>
+                  </button>
+                </div>
                 <span className="flex-1 text-sm text-zinc-700">{item}</span>
                 <button onClick={() => startEdit(i)} className="text-xs text-zinc-400 hover:text-zinc-600">Edit</button>
                 <button onClick={() => removeItem(i)} className="text-xs text-red-400 hover:text-red-600">Remove</button>

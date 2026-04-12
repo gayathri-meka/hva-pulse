@@ -64,6 +64,36 @@ function buildStatusUpdate(status: string, note?: string, reasons?: string[]): R
   return updates
 }
 
+/** Update reasons/feedback on an existing application without changing its status. */
+export async function updateApplicationReasons(
+  appId: string,
+  reasons: string[],
+  note: string | undefined,
+) {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+
+  // Read current status to know which columns to update
+  const { data: app } = await supabase.from('applications').select('status').eq('id', appId).single()
+  if (!app) throw new Error('Application not found')
+
+  const updates: Record<string, unknown> = {}
+  if (app.status === 'not_shortlisted') {
+    updates.not_shortlisted_reasons = reasons
+    updates.not_shortlisted_reason  = note ?? null
+  } else if (app.status === 'rejected') {
+    updates.rejection_reasons  = reasons
+    updates.rejection_feedback = note ?? null
+  } else {
+    throw new Error('Can only edit reasons for not_shortlisted or rejected applications')
+  }
+
+  const { error } = await supabase.from('applications').update(updates).eq('id', appId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/placements/applications')
+  revalidatePath('/placements/matching')
+}
+
 export async function createCompany(formData: FormData) {
   await requireAdmin()
 

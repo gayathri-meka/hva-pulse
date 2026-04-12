@@ -18,7 +18,7 @@ function loadSizing(): ColumnSizingState {
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
 import Link from 'next/link'
-import { updateApplicationStatus, bulkUpdateApplicationStatus } from '@/app/(protected)/placements/actions'
+import { updateApplicationStatus, bulkUpdateApplicationStatus, updateApplicationReasons } from '@/app/(protected)/placements/actions'
 import ExportButton from './ExportButton'
 import StatusFilter from './StatusFilter'
 import ExpandableNote from '@/components/ui/ExpandableNote'
@@ -95,6 +95,7 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
   const [reasonsError, setReasonsError]     = useState(false)
   const [salaryText, setSalaryText]         = useState('')
   const [placementDate, setPlacementDate]   = useState(() => new Date().toISOString().slice(0, 10))
+  const [editingReasons, setEditingReasons] = useState<{ id: string; status: 'not_shortlisted' | 'rejected'; reasons: Set<string>; note: string } | null>(null)
   const [bulkSelect, setBulkSelect]         = useState('')
   const [, startTransition] = useTransition()
 
@@ -305,7 +306,25 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
                 </svg>
               </div>
             </div>
-            {note && <ExpandableNote note={note} />}
+            {note && (
+              <div className="flex items-start gap-1">
+                <ExpandableNote note={note} />
+                <button
+                  onClick={() => {
+                    const row = info.row.original
+                    const st = statusMap[id] ?? row.status
+                    if (st === 'not_shortlisted') {
+                      setEditingReasons({ id, status: 'not_shortlisted', reasons: new Set(row.not_shortlisted_reasons ?? []), note: row.not_shortlisted_reason ?? '' })
+                    } else if (st === 'rejected') {
+                      setEditingReasons({ id, status: 'rejected', reasons: new Set(row.rejection_reasons ?? []), note: row.rejection_feedback ?? '' })
+                    }
+                  }}
+                  className="mt-0.5 shrink-0 text-[10px] text-zinc-400 hover:text-zinc-600"
+                >
+                  edit
+                </button>
+              </div>
+            )}
           </div>
         )
       },
@@ -559,6 +578,68 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
                 className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit reasons modal */}
+      {editingReasons && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6">
+            <h2 className="mb-1 text-base font-semibold text-zinc-900">
+              Edit {editingReasons.status === 'not_shortlisted' ? 'Not Shortlisted' : 'Rejection'} Reasons
+            </h2>
+            <p className="mb-4 text-xs text-zinc-400">Update the reasons and note for this application.</p>
+
+            <div className="space-y-1.5 mb-4">
+              {(editingReasons.status === 'not_shortlisted' ? NS_REASONS : REJECTION_REASONS).map((r) => (
+                <label key={r} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-zinc-50">
+                  <input
+                    type="checkbox"
+                    checked={editingReasons.reasons.has(r)}
+                    onChange={() => setEditingReasons((prev) => {
+                      if (!prev) return prev
+                      const next = new Set(prev.reasons)
+                      next.has(r) ? next.delete(r) : next.add(r)
+                      return { ...prev, reasons: next }
+                    })}
+                    className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900"
+                  />
+                  <span className="text-sm text-zinc-700">{r}</span>
+                </label>
+              ))}
+            </div>
+
+            <textarea
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
+              rows={2}
+              placeholder="Additional note (optional)"
+              value={editingReasons.note}
+              onChange={(e) => setEditingReasons((prev) => prev ? { ...prev, note: e.target.value } : prev)}
+            />
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                onClick={() => setEditingReasons(null)}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!editingReasons) return
+                  const reasons = Array.from(editingReasons.reasons)
+                  const note = editingReasons.note.trim() || undefined
+                  startTransition(async () => {
+                    await updateApplicationReasons(editingReasons.id, reasons, note)
+                    setEditingReasons(null)
+                  })
+                }}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+              >
+                Save
               </button>
             </div>
           </div>
