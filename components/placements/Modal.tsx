@@ -34,7 +34,7 @@ export default function Modal({ title, onClose, children, wide, full }: Props) {
         aria-hidden="true"
       />
       {/* Panel */}
-      <div className={`relative flex flex-col rounded-xl bg-white shadow-xl ${panelClass}`}>
+      <div className={`relative flex flex-col max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl ${panelClass}`}>
         <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-100 px-6 py-4">
           <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
           <button

@@ -212,7 +212,7 @@ function WeeklyModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
+        className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-sm font-semibold text-zinc-900">Role Posting Momentum</p>
@@ -290,7 +290,7 @@ function ReasonsModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
+        className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <NotInterestedReasons reasonCounts={reasonCounts} title={title} subtitle={subtitle} />
