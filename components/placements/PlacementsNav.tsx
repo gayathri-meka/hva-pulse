@@ -9,17 +9,18 @@ const OUTREACH_SUBTABS = [
 ]
 
 const TABS = [
-  { href: '/placements/personas',      label: 'Job Outreach',   isOutreach: true  },
-  { href: '/placements/companies',     label: 'Companies',      isOutreach: false },
-  { href: '/placements/applications',  label: 'Applications',   isOutreach: false },
-  { href: '/placements/not-interested', label: 'Not Interested', isOutreach: false },
-  { href: '/placements/matching',      label: 'Matching',       isOutreach: false },
-  { href: '/placements/analytics',     label: 'Analytics',      isOutreach: false },
+  { href: '/placements/analytics',     label: 'Analytics',      isOutreach: false, adminOnly: false },
+  { href: '/placements/companies',     label: 'Companies',      isOutreach: false, adminOnly: false },
+  { href: '/placements/applications',  label: 'Applications',   isOutreach: false, adminOnly: false },
+  { href: '/placements/not-interested', label: 'Not Interested', isOutreach: false, adminOnly: false },
+  { href: '/placements/matching',      label: 'Matching',       isOutreach: false, adminOnly: false },
+  { href: '/placements/personas',      label: 'Job Outreach',   isOutreach: true,  adminOnly: false },
+  { href: '/placements/settings',      label: 'Settings',       isOutreach: false, adminOnly: true  },
 ]
 
 const OUTREACH_PATHS = OUTREACH_SUBTABS.map((t) => t.href)
 
-export default function PlacementsNav() {
+export default function PlacementsNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname()
 
   const outreachActive = OUTREACH_PATHS.some((p) => pathname.startsWith(p))
@@ -28,7 +29,7 @@ export default function PlacementsNav() {
     <div>
       {/* Primary tabs */}
       <div className="flex gap-1 overflow-x-auto border-b border-zinc-200">
-        {TABS.map(({ href, label, isOutreach }) => {
+        {TABS.filter((t) => !t.adminOnly || isAdmin).map(({ href, label, isOutreach }) => {
           const active = isOutreach
             ? outreachActive
             : pathname.startsWith(href)

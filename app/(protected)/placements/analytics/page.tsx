@@ -9,10 +9,9 @@ import AnalyticsFilters from '@/components/placements/AnalyticsFilters'
 import PlacementHealth from '@/components/placements/PlacementHealth'
 import type { PlacementThresholds } from './actions'
 
-// ── TAT Deep Dive cutoff ──────────────────────────────────────────────────────
-// Only applications created on or after this date are counted for TAT metrics.
-// Update this to the date from which the team commits to setting status timestamps.
-const TAT_CUTOFF_DATE = '2026-03-05'
+// TAT cutoff date is now configurable via Placements → Settings.
+// Falls back to '2026-03-05' if not yet set in the settings table.
+const DEFAULT_TAT_CUTOFF = '2026-03-05'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +47,10 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   const filterUserIds = filteredLearners
     ? filteredLearners.map((l) => l.user_id).filter((id): id is string => !!id)
     : null
+
+  // ── Load TAT cutoff from settings ────────────────────────────────────────────
+  const { data: tatCutoffRow } = await supabase.from('settings').select('value').eq('key', 'tat_cutoff_date').maybeSingle()
+  const TAT_CUTOFF_DATE = (tatCutoffRow?.value as string) ?? DEFAULT_TAT_CUTOFF
 
   // ── Main data queries (filtered when applicable) ───────────────────────────
   let appsQuery = supabase.from('applications').select('status, not_shortlisted_reasons, rejection_reasons, created_at')
