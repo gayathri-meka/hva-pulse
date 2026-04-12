@@ -149,9 +149,9 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
                 onChange={(e) => setEditRole(e.target.value)}
                 className="w-full appearance-none rounded-md border border-zinc-200 bg-white py-1.5 pl-2.5 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               >
-                <option value="admin">admin</option>
+                <option value="admin">Admin</option>
                 <option value="staff">Staff</option>
-                <option value="learner">learner</option>
+                <option value="learner">Learner</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
