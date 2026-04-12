@@ -9,7 +9,15 @@ import {
   deleteDataSource,
   syncDataSource,
   updateDataSourceDetails,
+  updateDataSourceColumns,
 } from '@/app/(protected)/learning/actions'
+
+export type SourceColumn = {
+  id: string
+  column_name: string
+  role: 'learner_id' | 'value' | 'dimension' | 'ignored'
+  label: string | null
+}
 
 export type DataSource = {
   id: string
@@ -24,6 +32,7 @@ export type DataSource = {
   last_synced_at: string | null
   row_count: number | null
   sync_error: string | null
+  metric_source_columns: SourceColumn[]
 }
 
 type ColumnMapping = {
@@ -589,7 +598,31 @@ function EditSourceModal({ source, onClose }: { source: DataSource; onClose: () 
   const [bqTable, setBqTable]     = useState(source.bq_table ?? '')
   const [bqFilter, setBqFilter]   = useState(source.bq_filter ?? '')
 
+  // Column mappings
+  const [columns, setColumns] = useState<ColumnMapping[]>(
+    source.metric_source_columns.map((c) => ({
+      column_name: c.column_name,
+      role:        c.role,
+      label:       c.label ?? '',
+    }))
+  )
+
   const isBq = source.source_type === 'bigquery'
+
+  function setRole(colName: string, role: ColumnMapping['role']) {
+    setColumns((prev) => {
+      let next = prev.map((c) => (c.column_name === colName ? { ...c, role } : c))
+      if (role === 'learner_id')
+        next = next.map((c) => c.column_name !== colName && c.role === 'learner_id' ? { ...c, role: 'ignored' } : c)
+      if (role === 'value')
+        next = next.map((c) => c.column_name !== colName && c.role === 'value' ? { ...c, role: 'ignored' } : c)
+      return next
+    })
+  }
+
+  function setDimensionLabel(colName: string, label: string) {
+    setColumns((prev) => prev.map((c) => (c.column_name === colName ? { ...c, label } : c)))
+  }
 
   function handleSave() {
     if (!name.trim()) { setError('Name is required'); return }
@@ -598,6 +631,9 @@ function EditSourceModal({ source, onClose }: { source: DataSource; onClose: () 
     if (isBq && !bqProject.trim()) { setError('Billing project is required'); return }
     if (isBq && !bqDataset.trim()) { setError('Dataset is required'); return }
     if (isBq && !bqTable.trim()) { setError('View name is required'); return }
+    if (!columns.some((c) => c.role === 'learner_id')) { setError('Mark one column as Learner ID'); return }
+    const unlabelled = columns.find((c) => c.role === 'dimension' && !c.label.trim())
+    if (unlabelled) { setError(`Add a label for dimension "${unlabelled.column_name}"`); return }
     setError('')
     startTransition(async () => {
       try {
@@ -610,6 +646,13 @@ function EditSourceModal({ source, onClose }: { source: DataSource; onClose: () 
           bqTable:   isBq ? bqTable.trim() : undefined,
           bqFilter:  isBq ? bqFilter.trim() : undefined,
         })
+        await updateDataSourceColumns(source.id,
+          columns.map((c) => ({
+            column_name: c.column_name,
+            role:        c.role,
+            label:       c.role === 'dimension' ? c.label.trim() : null,
+          }))
+        )
         onClose()
       } catch (e) {
         setError(String(e))
@@ -654,6 +697,45 @@ function EditSourceModal({ source, onClose }: { source: DataSource; onClose: () 
             </>
           )}
         </div>
+
+        {/* Column mappings */}
+        {columns.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-medium text-zinc-500">Column mappings</p>
+            <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+              {columns.map((col) => (
+                <div key={col.column_name} className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-36 shrink-0 truncate font-mono text-xs text-zinc-700">
+                      {col.column_name}
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {ROLES.map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => setRole(col.column_name, r)}
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                            col.role === r ? ROLE_ACTIVE[r] : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                          }`}
+                        >
+                          {ROLE_LABEL[r]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {col.role === 'dimension' && (
+                    <input
+                      className={`mt-2 ${inputCls}`}
+                      placeholder="Friendly label"
+                      value={col.label}
+                      onChange={(e) => setDimensionLabel(col.column_name, e.target.value)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
 

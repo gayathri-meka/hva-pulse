@@ -501,6 +501,28 @@ export async function closeIntervention(
 
 // ── Data source actions ───────────────────────────────────────────────────────
 
+/** Update column role mappings for an existing data source. */
+export async function updateDataSourceColumns(
+  sourceId: string,
+  columns: { column_name: string; role: string; label: string | null }[],
+) {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+  // Delete existing mappings and replace
+  const { error: delErr } = await supabase.from('metric_source_columns').delete().eq('source_id', sourceId)
+  if (delErr) throw new Error(delErr.message)
+  const { error: insErr } = await supabase.from('metric_source_columns').insert(
+    columns.map((c) => ({
+      source_id:   sourceId,
+      column_name: c.column_name,
+      role:        c.role,
+      label:       c.label || null,
+    }))
+  )
+  if (insErr) throw new Error(insErr.message)
+  revalidatePath('/learning/settings')
+}
+
 export async function deleteDataSource(id: string) {
   await requireAdmin()
   const supabase = await createServerSupabaseClient()

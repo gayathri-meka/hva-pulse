@@ -17,13 +17,15 @@
 -- Cached per-transaction by Postgres, so multiple policy checks
 -- in one request only run the subquery once.
 
+-- NOTE: users.id ≠ auth.uid(). Pulse has a custom users table with its own
+-- UUIDs. The Supabase Auth user ID is different. We look up by email from the JWT.
 CREATE OR REPLACE FUNCTION public.auth_role()
 RETURNS text
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 AS $$
-  SELECT role FROM public.users WHERE id = auth.uid()
+  SELECT role FROM public.users WHERE email = auth.jwt() ->> 'email'
 $$;
 
 -- ── Enable RLS on every table ────────────────────────────────────────────────
@@ -72,33 +74,43 @@ CREATE POLICY staff_all ON public.metric_sources        FOR ALL USING (auth_role
 CREATE POLICY staff_all ON public.metric_source_columns FOR ALL USING (auth_role() IN ('admin', 'LF'));
 CREATE POLICY staff_all ON public.metric_raw_rows       FOR ALL USING (auth_role() IN ('admin', 'LF'));
 
+-- Helper: returns the Pulse users.id for the authenticated user (NOT auth.uid())
+CREATE OR REPLACE FUNCTION public.auth_user_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT id FROM public.users WHERE email = auth.jwt() ->> 'email'
+$$;
+
 -- ── Learner policies: own data only ──────────────────────────────────────────
 
 -- users: learners can read their own row
 CREATE POLICY learner_own ON public.users
-  FOR SELECT USING (auth_role() = 'learner' AND id = auth.uid());
+  FOR SELECT USING (auth_role() = 'learner' AND id = auth_user_id());
 
 -- learners: read own learner record (joined via user_id)
 CREATE POLICY learner_own ON public.learners
-  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth_user_id());
 
 -- applications: read + insert own applications
 CREATE POLICY learner_read_own ON public.applications
-  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth_user_id());
 CREATE POLICY learner_insert_own ON public.applications
-  FOR INSERT WITH CHECK (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR INSERT WITH CHECK (auth_role() = 'learner' AND user_id = auth_user_id());
 
 -- role_preferences: read + upsert own preferences
 CREATE POLICY learner_read_own ON public.role_preferences
-  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth_user_id());
 CREATE POLICY learner_write_own ON public.role_preferences
-  FOR ALL USING (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR ALL USING (auth_role() = 'learner' AND user_id = auth_user_id());
 
 -- resumes: read + insert own resumes
 CREATE POLICY learner_read_own ON public.resumes
-  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR SELECT USING (auth_role() = 'learner' AND user_id = auth_user_id());
 CREATE POLICY learner_write_own ON public.resumes
-  FOR ALL USING (auth_role() = 'learner' AND user_id = auth.uid());
+  FOR ALL USING (auth_role() = 'learner' AND user_id = auth_user_id());
 
 -- companies + roles: learners can read (needed for placement dashboard)
 CREATE POLICY learner_read ON public.companies
