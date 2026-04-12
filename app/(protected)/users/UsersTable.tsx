@@ -150,7 +150,7 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
                 className="w-full appearance-none rounded-md border border-zinc-200 bg-white py-1.5 pl-2.5 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               >
                 <option value="admin">admin</option>
-                <option value="LF">LF</option>
+                <option value="staff">Staff</option>
                 <option value="learner">learner</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">

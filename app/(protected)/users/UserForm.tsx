@@ -46,7 +46,7 @@ export default function UserForm() {
             >
               <option value="" disabled>Select role…</option>
               <option value="admin">Admin</option>
-              <option value="LF">LF</option>
+              <option value="staff">Staff</option>
               <option value="learner">Learner</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
