@@ -47,7 +47,7 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   applied: 0, shortlisted: 1, interviews_ongoing: 2, on_hold: 3, hired: 4, not_shortlisted: 5, rejected: 6,
 }
 
-const NS_REASONS = [
+const DEFAULT_NS_REASONS = [
   'Skill Mismatch',
   'Eligibility Mismatch',
   'Location Mismatch',
@@ -56,7 +56,7 @@ const NS_REASONS = [
   'Other',
 ]
 
-const REJECTION_REASONS = [
+const DEFAULT_REJECTION_REASONS = [
   'Gap in technical skills',
   'Gap in communication skills',
   'Didn\'t submit assignment',
@@ -76,9 +76,13 @@ interface Props {
   applications: ApplicationWithLearner[]
   statusCounts: Record<string, number>
   total: number
+  nsReasons?: string[]
+  rejectionReasons?: string[]
 }
 
-export default function ApplicationsList({ applications, statusCounts, total }: Props) {
+export default function ApplicationsList({ applications, statusCounts, total, nsReasons, rejectionReasons }: Props) {
+  const NS_REASONS = nsReasons ?? DEFAULT_NS_REASONS
+  const REJECTION_REASONS = rejectionReasons ?? DEFAULT_REJECTION_REASONS
   const [sorting, setSorting]           = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)

@@ -105,11 +105,11 @@ const APP_STATUS_OPTIONS = [
   'applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired',
 ] as const
 
-const NS_REASONS = [
+const DEFAULT_NS_REASONS = [
   'Skill Mismatch', 'Eligibility Mismatch', 'Location Mismatch',
   'Blacklisted', 'Joining Date Mismatch', 'Other',
 ]
-const REJECTION_REASONS = [
+const DEFAULT_REJECTION_REASONS = [
   'Gap in technical skills', 'Gap in communication skills', 'Copied', 'Other',
 ]
 
@@ -250,11 +250,15 @@ function loadSizing(): ColumnSizingState {
 }
 
 // ── Table component ───────────────────────────────────────────────────────────
-export default function MatchingTable({ rows, roleSelected = true, subCohortOptions = [] }: {
+export default function MatchingTable({ rows, roleSelected = true, subCohortOptions = [], nsReasons, rejectionReasons }: {
   rows: MatchingRow[]
   roleSelected?: boolean
   subCohortOptions?: string[]
+  nsReasons?: string[]
+  rejectionReasons?: string[]
 }) {
+  const NS_REASONS = nsReasons ?? DEFAULT_NS_REASONS
+  const REJECTION_REASONS = rejectionReasons ?? DEFAULT_REJECTION_REASONS
   const [sorting, setSorting]                   = useState<SortingState>([{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>(loadSizing)
   const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])

@@ -26,11 +26,15 @@ export default async function ApplicationsPage({ searchParams }: Props) {
     { data: roles },
     { data: rawApplications },
     { data: rawUsers },
+    { data: nsRow },
+    { data: rejRow },
   ] = await Promise.all([
     supabase.from('companies').select('id, company_name, created_at').order('company_name'),
     supabase.from('roles').select('id, company_id, role_title, location'),
     supabase.from('applications').select('*').order('created_at', { ascending: false }),
     supabase.from('users').select('id, name, email'),
+    supabase.from('settings').select('value').eq('key', 'ns_reasons').maybeSingle(),
+    supabase.from('settings').select('value').eq('key', 'rejection_reasons').maybeSingle(),
   ])
 
   // Build lookup maps
@@ -115,7 +119,13 @@ export default async function ApplicationsPage({ searchParams }: Props) {
           />
         </Suspense>
       </div>
-      <ApplicationsList applications={applications} statusCounts={statusCounts} total={byRole.length} />
+      <ApplicationsList
+        applications={applications}
+        statusCounts={statusCounts}
+        total={byRole.length}
+        nsReasons={(nsRow?.value as string[]) ?? undefined}
+        rejectionReasons={(rejRow?.value as string[]) ?? undefined}
+      />
     </div>
   )
 }

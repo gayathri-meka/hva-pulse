@@ -29,6 +29,8 @@ export default async function MatchingPage({ searchParams }: Props) {
     { data: rawPreferences },
     { data: allAppsRaw },
     { data: allPrefsRaw },
+    { data: nsRow },
+    { data: rejRow },
   ] = await Promise.all([
     supabase.from('roles').select('id, company_id, role_title, status').order('created_at', { ascending: false }),
     supabase.from('companies').select('id, company_name'),
@@ -43,6 +45,9 @@ export default async function MatchingPage({ searchParams }: Props) {
     supabase.from('applications').select('user_id, role_id, status, not_shortlisted_reason, not_shortlisted_reasons, rejection_feedback, rejection_reasons'),
     // Cross-role: all not-interested preferences
     supabase.from('role_preferences').select('user_id, role_id, reasons').eq('preference', 'not_interested'),
+    // Configurable reasons from settings
+    supabase.from('settings').select('value').eq('key', 'ns_reasons').maybeSingle(),
+    supabase.from('settings').select('value').eq('key', 'rejection_reasons').maybeSingle(),
   ])
 
   // ── Build role options for dropdown ──────────────────────────────────────────
@@ -306,7 +311,14 @@ export default async function MatchingPage({ searchParams }: Props) {
         </Suspense>
       )}
 
-      <MatchingTable key={roleId ?? 'all'} rows={filteredRows} roleSelected={!!roleId} subCohortOptions={subCohortOptions} />
+      <MatchingTable
+        key={roleId ?? 'all'}
+        rows={filteredRows}
+        roleSelected={!!roleId}
+        subCohortOptions={subCohortOptions}
+        nsReasons={(nsRow?.value as string[]) ?? undefined}
+        rejectionReasons={(rejRow?.value as string[]) ?? undefined}
+      />
 
     </div>
   )
