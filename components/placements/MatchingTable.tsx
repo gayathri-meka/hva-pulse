@@ -599,7 +599,7 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility },
+    state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { ...columnVisibility, status: roleSelected } },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater) => {
