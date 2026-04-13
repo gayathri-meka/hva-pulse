@@ -40,6 +40,7 @@ export type MatchingRow = {
   batch:                   string
   lf:                      string
   sub_cohort:              string | null
+  learner_status:          string | null
   year_of_graduation:      number | null
   degree:                  string | null
   specialisation:          string | null
@@ -209,6 +210,7 @@ const HIDEABLE_COLS = [
   { id: 'new_lf',             label: 'New LF' },
   { id: 'new_batch',          label: 'New Batch' },
   { id: 'sub_cohort',         label: 'Sub Cohort' },
+  { id: 'learner_status',     label: 'Program Status' },
   { id: 'applied_count',      label: 'Applied' },
   { id: 'not_interested_count', label: 'Not Interested' },
   { id: 'not_shortlisted_count', label: 'Not Shortlisted' },
@@ -228,7 +230,7 @@ const HIDEABLE_COLS = [
 ]
 
 const BASE_ORDER: ColumnOrderState = [
-  'name', 'batch', 'lf', 'new_lf', 'new_batch', 'sub_cohort',
+  'name', 'batch', 'lf', 'new_lf', 'new_batch', 'sub_cohort', 'learner_status',
   'applied_count', 'not_interested_count', 'not_shortlisted_count', 'ongoing_count', 'rejected_count',
   'year_of_graduation', 'degree', 'specialisation', 'readiness',
   'prs_score', 'proactiveness', 'articulation', 'comprehension', 'tech_score',
@@ -372,6 +374,28 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
       size: 110,
       filterFn: multiSelectFilter,
       cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
+    }),
+    col.accessor('learner_status', {
+      header: 'Program Status',
+      size: 130,
+      filterFn: multiSelectFilter,
+      cell: (info) => {
+        const val = info.getValue()
+        if (!val) return <span className="text-zinc-300">—</span>
+        const badge: Record<string, string> = {
+          Ongoing:          'bg-emerald-100 text-emerald-700',
+          'On Hold':        'bg-orange-100 text-orange-700',
+          Dropout:          'bg-red-100 text-red-700',
+          Discontinued:     'bg-zinc-200 text-zinc-600',
+          'Placed - Self':  'bg-blue-100 text-blue-700',
+          'Placed - HVA':   'bg-violet-100 text-violet-700',
+        }
+        return (
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badge[val] ?? 'bg-zinc-100 text-zinc-600'}`}>
+            {val}
+          </span>
+        )
+      },
     }),
     col.accessor('year_of_graduation', {
       header: 'Grad Year',
