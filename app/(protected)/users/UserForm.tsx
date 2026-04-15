@@ -48,6 +48,7 @@ export default function UserForm() {
               <option value="admin">Admin</option>
               <option value="staff">Staff</option>
               <option value="learner">Learner</option>
+                <option value="guest">Guest</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
