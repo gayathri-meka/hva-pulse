@@ -147,18 +147,24 @@ function detectArchetype(
   codingCourseCount: number,
 ): string {
   if (daysSinceActive > 21) return 'ghoster'
-  if (bruteForceCount > 8) return 'grinder'
+  // Brute-force rate: bf patterns relative to total questions attempted
+  // > 0.8% of questions show brute-force AND first-pass is below 70% → grinder
+  const bfRate = totalQuestions > 0 ? (bruteForceCount / totalQuestions) * 100 : 0
+  if (bruteForceCount >= 10 && bfRate > 0.5 && overallFirstPass < 70) return 'grinder'
+  if (bruteForceCount >= 15) return 'grinder' // high absolute count regardless
   if (totalQuestions < 100 && codingCourseCount <= 1) return 'skimmer'
   if (overallFirstPass < 55) return 'struggler'
+  if (overallFirstPass < 65) return 'needs-improvement'
   return 'steady'
 }
 
 const ARCHETYPE_LABELS: Record<string, string> = {
-  grinder:   'The Grinder — does the work but brute-forces through without deep learning',
-  ghoster:   'The Ghoster — was active but has gone silent recently',
-  skimmer:   'The Skimmer — limited engagement, covering very few courses/topics',
-  struggler: 'The Struggler — genuinely low scores, needs fundamental support',
-  steady:    'Steady — consistent performance, no major red flags',
+  grinder:           'The Grinder — does the work but brute-forces through without deep learning',
+  ghoster:           'The Ghoster — was active but has gone silent recently',
+  skimmer:           'The Skimmer — limited engagement, covering very few courses/topics',
+  struggler:         'The Struggler — genuinely low scores, needs fundamental support',
+  'needs-improvement': 'Needs Improvement — below average but showing effort',
+  steady:            'Steady — consistent performance, no major red flags',
 }
 
 // ── Feedback theme extraction ────────────────────────────────────────────────
@@ -253,8 +259,15 @@ function writeAnalysis(name: string, raw: RawData, cohort: CohortStats): string 
     lines.push(`**${name} has limited engagement — only ${totalQs} questions attempted across ${codingCourseNames.length || 'few'} coding course(s).** This puts them in the ${ordinal(activityPercentile)} percentile for activity. The coverage is too thin to build interview-ready skills.`)
   } else if (archetype === 'struggler') {
     lines.push(`**${name} is struggling fundamentally — ${overallFirstPass}% first-attempt pass rate, which is in the ${ordinal(firstPassPercentile)} percentile of the cohort.** This isn't a retry or effort problem — the concepts aren't landing on first exposure. Needs targeted support on foundations.`)
+  } else if (archetype === 'needs-improvement') {
+    lines.push(`**${name} is below the cohort average** with a ${overallFirstPass}% first-attempt pass rate (${ordinal(firstPassPercentile)} percentile). ${bruteForceCount > 0 ? 'There are ' + bruteForceCount + ' questions with brute-force retry patterns.' : 'Effort is visible but concepts aren\'t consistently landing.'} Targeted support on weak areas could help close the gap.`)
   } else {
-    lines.push(`**${name} is performing steadily** with a ${overallFirstPass}% first-attempt pass rate (${ordinal(firstPassPercentile)} percentile). ${bruteForceCount > 0 ? bruteForceCount + ' questions show retry patterns worth monitoring, but overall the learning trajectory is healthy.' : 'No significant brute-force patterns detected.'}`)
+    const bfNote = bruteForceCount > 5
+      ? ` ${bruteForceCount} questions show retry patterns worth monitoring, but they represent a small fraction of ${totalQs} total questions.`
+      : bruteForceCount > 0
+      ? ` Minor retry patterns on ${bruteForceCount} questions — not a concern at this scale.`
+      : ' No significant brute-force patterns detected.'
+    lines.push(`**${name} is performing steadily** with a ${overallFirstPass}% first-attempt pass rate (${ordinal(firstPassPercentile)} percentile).${bfNote}`)
   }
   lines.push('')
 
