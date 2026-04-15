@@ -107,9 +107,9 @@ const STAFF_LINKS: NavItem[] = [
   { href: '/ask-pulse',  label: 'Ask Pulse',   Icon: AskPulseIcon   },
 ]
 
-export default function NavLinks({ role }: { role: 'admin' | 'staff' }) {
+export default function NavLinks({ role }: { role: 'admin' | 'staff' | 'guest' }) {
   const pathname = usePathname()
-  const links    = role === 'admin' ? ADMIN_LINKS : STAFF_LINKS
+  const links    = (role === 'admin' || role === 'guest') ? ADMIN_LINKS : STAFF_LINKS
 
   return (
     <nav className="flex flex-col gap-0.5 px-3">

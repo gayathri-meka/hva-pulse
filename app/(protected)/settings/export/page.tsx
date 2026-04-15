@@ -29,7 +29,7 @@ const EXPORTS = [
 export default async function ExportPage() {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'guest') redirect('/dashboard')
 
   return (
     <div>

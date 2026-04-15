@@ -14,7 +14,7 @@ interface Props {
 export default async function LearningSettingsPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin') redirect('/learning')
+  if (appUser.role !== 'admin' && appUser.role !== 'guest') redirect('/learning')
 
   const { tab = 'metrics' } = await searchParams
   const supabase = await createServerSupabaseClient()

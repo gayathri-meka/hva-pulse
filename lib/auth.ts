@@ -6,7 +6,7 @@ export type AppUser = {
   id: string
   email: string
   name: string | null
-  role: 'admin' | 'staff' | 'learner'
+  role: 'admin' | 'staff' | 'guest' | 'learner'
 }
 
 export const getAppUser = cache(async (): Promise<AppUser | null> => {
@@ -32,4 +32,14 @@ export async function requireStaff(): Promise<AppUser> {
     redirect('/dashboard')
   }
   return appUser
+}
+
+/** Returns true if this role can make changes. Guest is read-only. */
+export function canEdit(role: AppUser['role']): boolean {
+  return role === 'admin' || role === 'staff'
+}
+
+/** Returns true if this role should see PII. Guest sees masked data. */
+export function canSeePII(role: AppUser['role']): boolean {
+  return role !== 'guest'
 }

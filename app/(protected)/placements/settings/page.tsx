@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default async function PlacementSettingsPage() {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin') redirect('/placements/analytics')
+  if (appUser.role !== 'admin' && appUser.role !== 'guest') redirect('/placements/analytics')
 
   const supabase = await createServerSupabaseClient()
 

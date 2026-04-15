@@ -22,7 +22,7 @@ interface Props {
 export default async function AnalyticsPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'staff' && appUser.role !== 'guest') redirect('/dashboard')
 
   const { lf, batch } = await searchParams
 

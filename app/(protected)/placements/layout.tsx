@@ -5,7 +5,7 @@ import PlacementsNav from '@/components/placements/PlacementsNav'
 export default async function PlacementsLayout({ children }: { children: React.ReactNode }) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'staff' && appUser.role !== 'guest') redirect('/dashboard')
 
   return (
     <div>
@@ -14,7 +14,7 @@ export default async function PlacementsLayout({ children }: { children: React.R
         <p className="mt-1 text-sm text-zinc-500">Manage companies, applications, track hiring outcomes, and discover job opportunities</p>
       </div>
       <div className="mb-6">
-        <PlacementsNav isAdmin={appUser.role === 'admin'} />
+        <PlacementsNav isAdmin={appUser.role === 'admin' || appUser.role === 'guest'} />
       </div>
       {children}
     </div>

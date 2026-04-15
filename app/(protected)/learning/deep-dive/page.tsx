@@ -81,7 +81,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
           { key: 'all',           label: 'Dashboard',     href: '/learning?filter=all' },
           { key: 'interventions', label: 'Interventions', href: '/learning?filter=interventions' },
           { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
-          ...(appUser.role === 'admin' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
+          ...(appUser.role === 'admin' || appUser.role === 'guest' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
         ].map(({ key, label, href }) => (
           <Link
             key={key}

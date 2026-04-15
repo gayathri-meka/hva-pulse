@@ -15,7 +15,7 @@ interface Props {
 export default async function MatchingPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'staff' && appUser.role !== 'guest') redirect('/dashboard')
 
   const { role: roleId, status: statusFilter, learner: learnerFilter } = await searchParams
 

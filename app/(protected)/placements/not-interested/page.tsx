@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default async function NotInterestedPage() {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
+  if (appUser.role !== 'admin' && appUser.role !== 'staff' && appUser.role !== 'guest') redirect('/dashboard')
 
   const supabase = await createServerSupabaseClient()
 

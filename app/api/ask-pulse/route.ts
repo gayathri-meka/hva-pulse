@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     .eq('email', user.email!)
     .single()
 
-  if (!appUser || (appUser.role !== 'admin' && appUser.role !== 'staff')) {
+  if (!appUser || (appUser.role !== 'admin' && appUser.role !== 'staff' && appUser.role !== 'guest')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 

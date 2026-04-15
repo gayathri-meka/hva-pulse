@@ -1,15 +1,13 @@
 import { redirect } from 'next/navigation'
 import { getAppUser } from '@/lib/auth'
 import AppShell from '@/components/AppShell'
+import { PermissionsProvider } from '@/components/PermissionsContext'
 
 export default async function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // getAppUser() does auth.getUser() + users-table lookup in one cache-wrapped call.
-  // The middleware already redirects unauthenticated requests before this runs,
-  // so a null here means the user is authenticated but not in the users table.
   const appUser = await getAppUser()
 
   if (!appUser) {
@@ -44,5 +42,9 @@ export default async function ProtectedLayout({
   // Learner has their own route group — send them there
   if (appUser.role === 'learner') redirect('/learner')
 
-  return <AppShell role={appUser.role}>{children}</AppShell>
+  return (
+    <PermissionsProvider role={appUser.role}>
+      <AppShell role={appUser.role}>{children}</AppShell>
+    </PermissionsProvider>
+  )
 }
