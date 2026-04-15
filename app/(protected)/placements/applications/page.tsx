@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import CompanyFilter from '@/components/placements/CompanyFilter'
 import ApplicationsList from '@/components/placements/ApplicationsList'
@@ -38,8 +39,9 @@ export default async function ApplicationsPage({ searchParams }: Props) {
   ])
 
   // Build lookup maps
+  const showPII = canSeePII(appUser.role)
   const userMap = Object.fromEntries(
-    (rawUsers ?? []).map((u) => [u.id, { name: u.name ?? '', email: u.email ?? '' }])
+    (rawUsers ?? []).map((u) => [u.id, { name: u.name ?? '', email: u.email ?? '', id: u.id }])
   )
   const roleMap = Object.fromEntries(
     (roles ?? []).map((r) => [r.id, r])
@@ -93,7 +95,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       not_shortlisted_reason:  a.not_shortlisted_reason ?? null,
       rejection_reasons:       (a.rejection_reasons as string[] | null) ?? [],
       rejection_feedback:      a.rejection_feedback ?? null,
-      learner_name: user?.name || 'Unknown',
+      learner_name: showPII ? (user?.name || 'Unknown') : maskName(user?.name, a.id as string),
       learner_email: user?.email || '',
       company_name: companyMap[role?.company_id ?? ''] ?? 'Unknown',
       role_title: role?.role_title ?? 'Unknown',

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import NotInterestedTable, { type NotInterestedRow } from '@/components/placements/NotInterestedTable'
 
@@ -24,6 +25,7 @@ export default async function NotInterestedPage() {
     supabase.from('role_preferences').select('user_id, role_id, reasons').eq('preference', 'not_interested'),
   ])
 
+  const showPII = canSeePII(appUser.role)
   const companyMap  = Object.fromEntries((companies ?? []).map((c) => [c.id, c.company_name]))
   const roleInfoMap = new Map((roles ?? []).map((r) => [r.id, { role_title: r.role_title, company_name: companyMap[r.company_id] ?? '' }]))
 
@@ -42,7 +44,7 @@ export default async function NotInterestedPage() {
       return {
         user_id:      p.user_id!,
         role_id:      p.role_id,
-        learner_name: learner?.name ?? '',
+        learner_name: showPII ? (learner?.name ?? '') : maskName(learner?.name, p.user_id!),
         batch:        learner?.batch ?? '',
         lf:           learner?.lf   ?? '',
         company_name: roleInfo.company_name,

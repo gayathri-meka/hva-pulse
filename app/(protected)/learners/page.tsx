@@ -223,7 +223,7 @@ export default async function LearnersPage({ searchParams }: Props) {
               learner={snapshotLearner}
               apps={snapshotApps}
               declinedRoles={snapshotDeclined}
-              resume={snapshotResume}
+              resume={showPII ? snapshotResume : null}
             />
           ) : (
             <div className="rounded-xl border border-zinc-200 bg-white px-6 py-16 text-center text-sm text-zinc-400 shadow-sm">

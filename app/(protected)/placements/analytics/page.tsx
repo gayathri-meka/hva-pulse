@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import PlacementFunnel from '@/components/placements/PlacementFunnel'
 import ActionCentre from '@/components/placements/ActionCentre'
@@ -184,8 +185,9 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   const rejectedNoInterview   = rejectedApps.length - rejectedWithInterview
 
   // Build detail rows for the popup table
+  const showPII = canSeePII(appUser.role)
   const tatDetails = tat.map((a) => ({
-    learnerName:  (a.users as unknown as { name: string } | null)?.name ?? '—',
+    learnerName:  showPII ? ((a.users as unknown as { name: string } | null)?.name ?? '—') : maskName((a.users as unknown as { name: string } | null)?.name),
     companyName:  (a.roles as unknown as { role_title: string; companies: { company_name: string } | null } | null)?.companies?.company_name ?? '—',
     roleName:     (a.roles as unknown as { role_title: string } | null)?.role_title ?? '—',
     status:       a.status,

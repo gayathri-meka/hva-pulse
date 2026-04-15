@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import AlumniTable from '@/components/alumni/AlumniTable'
 import AlumniAnalytics from '@/components/alumni/AlumniAnalytics'
@@ -51,16 +52,17 @@ export default async function AlumniPage({
   const employedCount   = alumni.filter((a) => a.employment_status === 'employed').length
   const unemployedCount = alumni.filter((a) => a.employment_status === 'unemployed').length
 
+  const showPII = canSeePII(appUser.role)
   const alumniRows = alumni.map((a) => {
     const job = a.alumni_jobs.find((j) => j.is_current) ?? a.alumni_jobs[0] ?? null
     return {
       id:                a.id,
-      name:              a.name,
-      email:             a.email,
+      name:              showPII ? a.name : maskName(a.name, a.id),
+      email:             showPII ? a.email : maskEmail(a.email),
       cohort_fy:         a.cohort_fy,
       placed_fy:         a.placed_fy,
       employment_status: a.employment_status,
-      contact_number:    a.contact_number,
+      contact_number:    showPII ? a.contact_number : '***',
       company:           job?.company         ?? null,
       role:              job?.role             ?? null,
       salary:            job?.salary           ?? null,

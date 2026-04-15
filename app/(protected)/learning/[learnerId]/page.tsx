@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import MetricsSection, { type MetricRow } from '@/components/learning/MetricsSection'
 import InterventionPanel, { type Intervention, type StaffUser, type ActionItem, type ReviewEntry } from '@/components/learning/InterventionPanel'
 import InterventionHistory, { type ClosedIntervention } from '@/components/learning/InterventionHistory'
@@ -30,9 +31,11 @@ export default async function LearnerLearningPage({ params }: Props) {
 
   if (!learner) redirect('/learning')
 
+  const showPII     = canSeePII(appUser.role)
   const learnerUser = learner.users as unknown as { name: string; email: string } | null
-  const name        = learnerUser?.name ?? learnerId
-  const email       = learnerUser?.email?.trim().toLowerCase() ?? ''
+  const realEmail   = learnerUser?.email?.trim().toLowerCase() ?? ''
+  const name        = showPII ? (learnerUser?.name ?? learnerId) : maskName(learnerUser?.name, learnerId)
+  const email       = showPII ? realEmail : maskEmail(realEmail)
 
   // Parallel fetches: metrics, raw rows, active intervention, closed history, staff users
   const [
@@ -43,11 +46,11 @@ export default async function LearnerLearningPage({ params }: Props) {
     { data: staffRaw },
   ] = await Promise.all([
     supabase.from('metrics').select('*').order('created_at'),
-    email
+    realEmail
       ? supabase
           .from('metric_raw_rows')
           .select('source_id, learner_id, dimensions, value')
-          .eq('learner_id', email)
+          .eq('learner_id', realEmail)
           .limit(10000)
       : Promise.resolve({ data: [] }),
     supabase
