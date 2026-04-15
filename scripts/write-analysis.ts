@@ -1,6 +1,13 @@
 /**
- * Generates analysis_text for each learner based on their stored raw_data.
- * Uses pattern-detection heuristics to surface key findings.
+ * Generates analysis_text for each learner — insight-first, not template-first.
+ *
+ * Structure per learner:
+ *   1. Key Finding — one-sentence summary of what matters most
+ *   2. Evidence — data points supporting the finding
+ *   3. Comparison to Cohort — percentile/rank on key metrics
+ *   4. Specific Gaps — actionable topic list
+ *
+ * Requires: raw_data already populated via run-learner-analysis.ts
  *
  * Usage: npx tsx scripts/write-analysis.ts
  */
@@ -14,6 +21,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type CourseSummary = {
   course_name: string; question_type: string
@@ -44,198 +53,287 @@ type ActivityRow = {
   attempts: string; passed: string; distinct_questions: string
 }
 
-function n(v: string | null | undefined): number {
-  return parseFloat(v ?? '0') || 0
-}
-
-function analyzelearner(email: string, name: string, raw: {
+type RawData = {
   course_summary: CourseSummary[]
   weakest_areas: WeakArea[]
   score_progressions: Progression[]
   feedback_samples: FeedbackSample[]
   activity_timeline: ActivityRow[]
-}): string {
-  const lines: string[] = []
+}
+
+function n(v: string | null | undefined): number {
+  return parseFloat(v ?? '0') || 0
+}
+
+// ── Cohort stats (computed once across all learners) ─────────────────────────
+
+type CohortStats = {
+  firstPassRates: Map<string, number[]> // course+type → array of rates (one per learner)
+  avgFirstScores: Map<string, number[]>
+  overallFirstPassRates: number[]
+  bruteForceCountsPerLearner: number[]
+  totalQuestionsPerLearner: number[]
+}
+
+function buildCohortStats(allLearners: { email: string; raw: RawData }[]): CohortStats {
+  const firstPassRates = new Map<string, number[]>()
+  const avgFirstScores = new Map<string, number[]>()
+  const overallFirstPassRates: number[] = []
+  const bruteForceCountsPerLearner: number[] = []
+  const totalQuestionsPerLearner: number[] = []
+
+  for (const { raw } of allLearners) {
+    const cs = raw.course_summary ?? []
+    if (cs.length === 0) continue
+
+    // Overall first pass rate for this learner
+    const totalFirst = cs.reduce((s, c) => s + n(c.first_attempt_passed), 0)
+    const totalQs    = cs.reduce((s, c) => s + n(c.distinct_questions), 0)
+    if (totalQs > 0) {
+      overallFirstPassRates.push(Math.round((totalFirst / totalQs) * 100))
+      totalQuestionsPerLearner.push(totalQs)
+    }
+
+    // Per course+type
+    for (const c of cs) {
+      const key = c.course_name + '|' + c.question_type
+      const rate = n(c.first_attempt_pass_rate)
+      if (!firstPassRates.has(key)) firstPassRates.set(key, [])
+      firstPassRates.get(key)!.push(rate)
+      if (c.avg_first_score) {
+        if (!avgFirstScores.has(key)) avgFirstScores.set(key, [])
+        avgFirstScores.get(key)!.push(n(c.avg_first_score))
+      }
+    }
+
+    // Brute-force count
+    const bf = countBruteForce(raw.score_progressions ?? [])
+    bruteForceCountsPerLearner.push(bf)
+  }
+
+  return { firstPassRates, avgFirstScores, overallFirstPassRates, bruteForceCountsPerLearner, totalQuestionsPerLearner }
+}
+
+function percentile(value: number, distribution: number[]): number {
+  const sorted = [...distribution].sort((a, b) => a - b)
+  const below = sorted.filter((v) => v < value).length
+  return Math.round((below / sorted.length) * 100)
+}
+
+// ── Pattern detection ────────────────────────────────────────────────────────
+
+function countBruteForce(progressions: Progression[]): number {
+  return progressions.filter((p) => isBruteForce(p)).length
+}
+
+function isBruteForce(p: Progression): boolean {
+  const parts = (p.score_progression ?? '').split(' -> ')
+  if (parts.length < 4) return false
+  const scores = parts.map((s) => {
+    const [num, den] = s.split('/')
+    return den ? parseFloat(num) / parseFloat(den) : 0
+  })
+  const earlyScores = scores.slice(0, -1)
+  const lastScore = scores[scores.length - 1]
+  const avgEarly = earlyScores.reduce((a, b) => a + b, 0) / earlyScores.length
+  return avgEarly < 0.5 && lastScore >= 0.9 && earlyScores.length >= 3
+}
+
+function detectArchetype(
+  overallFirstPass: number,
+  bruteForceCount: number,
+  totalQuestions: number,
+  daysSinceActive: number,
+  codingCourseCount: number,
+): string {
+  if (daysSinceActive > 21) return 'ghoster'
+  if (bruteForceCount > 8) return 'grinder'
+  if (totalQuestions < 100 && codingCourseCount <= 1) return 'skimmer'
+  if (overallFirstPass < 55) return 'struggler'
+  return 'steady'
+}
+
+const ARCHETYPE_LABELS: Record<string, string> = {
+  grinder:   'The Grinder — does the work but brute-forces through without deep learning',
+  ghoster:   'The Ghoster — was active but has gone silent recently',
+  skimmer:   'The Skimmer — limited engagement, covering very few courses/topics',
+  struggler: 'The Struggler — genuinely low scores, needs fundamental support',
+  steady:    'Steady — consistent performance, no major red flags',
+}
+
+// ── Feedback theme extraction ────────────────────────────────────────────────
+
+function extractFeedbackThemes(samples: FeedbackSample[]): { theme: string; count: number; pct: number; example: string }[] {
+  const patterns: [RegExp, string][] = [
+    [/edge case|single.element|empty|boundary/i, 'Edge case handling'],
+    [/negative|zero|0/i, 'Negative/zero handling'],
+    [/logic|incorrect|wrong condition/i, 'Logic errors'],
+    [/constraint|violat|not allowed/i, 'Not following constraints'],
+    [/print|output|format|space/i, 'Output formatting'],
+    [/loop|iteration|while|for/i, 'Loop/iteration issues'],
+    [/undefined|null|NaN|uninitialized/i, 'Undefined/null handling'],
+    [/duplicate|unique/i, 'Duplicate handling'],
+    [/index|range|out of bounds/i, 'Index/range errors'],
+  ]
+
+  const total = samples.length
+  if (total === 0) return []
+
+  const themes: { theme: string; count: number; pct: number; example: string }[] = []
+  for (const [regex, label] of patterns) {
+    const matches = samples.filter((s) => regex.test(s.wrong_feedback ?? ''))
+    if (matches.length > 0) {
+      themes.push({
+        theme: label,
+        count: matches.length,
+        pct: Math.round((matches.length / total) * 100),
+        example: (matches[0].wrong_feedback ?? '').substring(0, 150),
+      })
+    }
+  }
+  return themes.sort((a, b) => b.count - a.count)
+}
+
+// ── Analysis writer ──────────────────────────────────────────────────────────
+
+function writeAnalysis(name: string, raw: RawData, cohort: CohortStats): string {
   const cs = raw.course_summary ?? []
   const wa = raw.weakest_areas ?? []
   const sp = raw.score_progressions ?? []
   const fb = raw.feedback_samples ?? []
   const at = raw.activity_timeline ?? []
 
-  if (cs.length === 0) {
-    return 'No sensai activity data found for this learner.'
+  if (cs.length === 0) return 'No sensai activity data found for this learner.'
+
+  const lines: string[] = []
+
+  // Compute learner-level stats
+  const totalFirst  = cs.reduce((s, c) => s + n(c.first_attempt_passed), 0)
+  const totalQs     = cs.reduce((s, c) => s + n(c.distinct_questions), 0)
+  const totalRetries = cs.reduce((s, c) => s + n(c.retries), 0)
+  const overallFirstPass = totalQs > 0 ? Math.round((totalFirst / totalQs) * 100) : 0
+  const bruteForceCount  = countBruteForce(sp)
+  const codingCourses    = cs.filter((c) =>
+    ['Coding in Python', 'Web Development', 'React', 'Backend'].includes(c.course_name)
+  )
+  const codingCourseNames = [...new Set(codingCourses.map((c) => c.course_name))]
+
+  // Activity
+  const weeks = [...new Set(at.map((a) => a.week))].sort()
+  const lastActiveWeek = weeks.length > 0 ? weeks[weeks.length - 1] : null
+  const daysSinceActive = lastActiveWeek
+    ? Math.floor((Date.now() - new Date(lastActiveWeek).getTime()) / 86_400_000)
+    : 999
+
+  // Archetype
+  const archetype = detectArchetype(overallFirstPass, bruteForceCount, totalQs, daysSinceActive, codingCourseNames.length)
+
+  // Cohort percentiles
+  const firstPassPercentile = percentile(overallFirstPass, cohort.overallFirstPassRates)
+  const bfPercentile = percentile(bruteForceCount, cohort.bruteForceCountsPerLearner)
+  const activityPercentile = percentile(totalQs, cohort.totalQuestionsPerLearner)
+
+  // Feedback themes
+  const themes = extractFeedbackThemes(fb)
+
+  // Weakest areas (< 60% first pass, subjective only)
+  const weakest = wa.filter((w) => n(w.first_pass_rate) < 60).slice(0, 6)
+
+  // Top brute-force examples
+  const bfExamples = sp.filter(isBruteForce).sort((a, b) => n(b.total_attempts) - n(a.total_attempts)).slice(0, 5)
+
+  // ── Key Finding ─────────────────────────────────────────────────────────────
+  lines.push('## Key Finding')
+
+  if (archetype === 'ghoster') {
+    lines.push(`**${name} has been inactive for ${daysSinceActive} days.** Last activity was ${lastActiveWeek}. Before going silent, their first-attempt pass rate was ${overallFirstPass}% (${ordinal(firstPassPercentile)} percentile in the cohort). Immediate follow-up needed.`)
+  } else if (archetype === 'grinder') {
+    lines.push(`**${name} completes work by brute-forcing — retrying until passing without learning from feedback.** ${bruteForceCount} questions show the pattern of repeated low scores followed by a sudden jump to full marks. This is in the ${ordinal(100 - bfPercentile)} percentile for brute-force behavior in the cohort. First-attempt pass rate is ${overallFirstPass}%, which is misleading because it's inflated by easy questions.`)
+  } else if (archetype === 'skimmer') {
+    lines.push(`**${name} has limited engagement — only ${totalQs} questions attempted across ${codingCourseNames.length || 'few'} coding course(s).** This puts them in the ${ordinal(activityPercentile)} percentile for activity. The coverage is too thin to build interview-ready skills.`)
+  } else if (archetype === 'struggler') {
+    lines.push(`**${name} is struggling fundamentally — ${overallFirstPass}% first-attempt pass rate, which is in the ${ordinal(firstPassPercentile)} percentile of the cohort.** This isn't a retry or effort problem — the concepts aren't landing on first exposure. Needs targeted support on foundations.`)
+  } else {
+    lines.push(`**${name} is performing steadily** with a ${overallFirstPass}% first-attempt pass rate (${ordinal(firstPassPercentile)} percentile). ${bruteForceCount > 0 ? bruteForceCount + ' questions show retry patterns worth monitoring, but overall the learning trajectory is healthy.' : 'No significant brute-force patterns detected.'}`)
   }
-
-  // ── Overall stats ───────────────────────────────────────────────────────────
-  const totalAttempts    = cs.reduce((s, c) => s + n(c.total_attempts), 0)
-  const totalQuestions   = cs.reduce((s, c) => s + n(c.distinct_questions), 0)
-  const totalRetries     = cs.reduce((s, c) => s + n(c.retries), 0)
-  const totalFirstPassed = cs.reduce((s, c) => s + n(c.first_attempt_passed), 0)
-  const totalFirstAttempts = cs.reduce((s, c) => s + n(c.total_attempts) - n(c.retries), 0)
-  const overallFirstPassRate = totalFirstAttempts > 0 ? Math.round((totalFirstPassed / totalFirstAttempts) * 100) : 0
-  const retryRatio       = totalQuestions > 0 ? (totalRetries / totalQuestions).toFixed(1) : '0'
-
-  const courses = [...new Set(cs.map((c) => c.course_name))]
-
-  lines.push(`## Overview`)
-  lines.push(`${name} has attempted ${totalQuestions} distinct questions across ${courses.length} courses (${courses.join(', ')}), with ${totalAttempts} total attempts and ${totalRetries} retries (${retryRatio}× retry ratio).`)
-  lines.push(`Overall first-attempt pass rate: **${overallFirstPassRate}%**.`)
   lines.push('')
 
-  // ── Per-course breakdown ────────────────────────────────────────────────────
-  lines.push(`## Per-Course Performance`)
-  const codingCourses = cs.filter((c) => ['Coding in Python', 'Web Development', 'React', 'Backend'].includes(c.course_name))
-  for (const course of [...new Set(codingCourses.map((c) => c.course_name))]) {
-    const subj = codingCourses.find((c) => c.course_name === course && c.question_type === 'subjective')
-    const obj  = codingCourses.find((c) => c.course_name === course && c.question_type === 'objective')
-    if (subj) {
-      const fpr = n(subj.first_attempt_pass_rate)
-      const score = n(subj.avg_first_score)
-      const retries = n(subj.retries)
-      const qs = n(subj.distinct_questions)
-      const flag = fpr < 60 ? ' ⚠️' : fpr < 75 ? ' ⚡' : ''
-      lines.push(`- **${course}** (subjective): ${fpr}% first-attempt pass, ${score}% avg first score, ${retries} retries across ${qs} questions${flag}`)
-    }
-    if (obj) {
-      const fpr = n(obj.first_attempt_pass_rate)
-      lines.push(`- **${course}** (objective): ${fpr}% first-attempt pass`)
+  // ── Evidence ────────────────────────────────────────────────────────────────
+  lines.push('## Evidence')
+
+  // Per-course performance
+  for (const courseName of codingCourseNames) {
+    const subj = codingCourses.find((c) => c.course_name === courseName && c.question_type === 'subjective')
+    if (!subj) continue
+    const fpr = n(subj.first_attempt_pass_rate)
+    const score = n(subj.avg_first_score)
+    const retries = n(subj.retries)
+    const qs = n(subj.distinct_questions)
+
+    // Cohort comparison
+    const key = courseName + '|subjective'
+    const cohortRates = cohort.firstPassRates.get(key) ?? []
+    const coursePercentile = cohortRates.length > 0 ? percentile(fpr, cohortRates) : null
+    const comparison = coursePercentile !== null ? ` (${ordinal(coursePercentile)} percentile in cohort)` : ''
+
+    lines.push(`- **${courseName}**: ${fpr}% first-attempt pass${comparison}, avg first score ${score}%, ${retries} retries across ${qs} questions`)
+  }
+
+  if (daysSinceActive < 999) {
+    lines.push(`- **Activity**: ${weeks.length} active weeks, last active ${daysSinceActive} day${daysSinceActive !== 1 ? 's' : ''} ago, avg ${Math.round(at.reduce((s, a) => s + n(a.attempts), 0) / (weeks.length || 1))} attempts/week`)
+  }
+
+  if (bruteForceCount > 0) {
+    lines.push(`- **Brute-force patterns**: ${bruteForceCount} questions with suspicious retry patterns`)
+    for (const p of bfExamples) {
+      lines.push(`  - ${p.course_name} → ${p.question_title}: \`${p.score_progression}\``)
     }
   }
   lines.push('')
 
-  // ── Weakest areas ───────────────────────────────────────────────────────────
-  const weakest = wa.filter((w) => n(w.first_pass_rate) < 60).slice(0, 8)
-  if (weakest.length > 0) {
-    lines.push(`## Weakest Areas (first-attempt pass rate < 60%)`)
-    for (const w of weakest) {
-      lines.push(`- ${w.course_name} → **${w.milestone_name}**: ${w.first_pass_rate}% first pass (${w.questions} questions, avg score ${w.avg_first_score}%)`)
+  // ── Comparison to Cohort ────────────────────────────────────────────────────
+  lines.push('## Comparison to Cohort')
+  const cohortAvgFirstPass = cohort.overallFirstPassRates.length > 0
+    ? Math.round(cohort.overallFirstPassRates.reduce((a, b) => a + b, 0) / cohort.overallFirstPassRates.length)
+    : 0
+  const diff = overallFirstPass - cohortAvgFirstPass
+
+  lines.push(`- Overall first-attempt pass rate: **${overallFirstPass}%** vs cohort average **${cohortAvgFirstPass}%** (${diff >= 0 ? '+' : ''}${diff}pp)`)
+  lines.push(`- Percentile rank: **${ordinal(firstPassPercentile)}** out of ${cohort.overallFirstPassRates.length} learners`)
+  lines.push(`- Activity level: **${ordinal(activityPercentile)}** percentile (${totalQs} questions attempted)`)
+  if (bruteForceCount > 0) {
+    lines.push(`- Brute-force frequency: **${ordinal(100 - bfPercentile)}** percentile (${bruteForceCount} questions — higher = more brute-forcing)`)
+  }
+  lines.push('')
+
+  // ── Specific Gaps ───────────────────────────────────────────────────────────
+  if (weakest.length > 0 || themes.length > 0) {
+    lines.push('## Specific Gaps')
+
+    if (weakest.length > 0) {
+      lines.push('**Weakest topics** (below 60% first-attempt pass):')
+      for (const w of weakest) {
+        lines.push(`- ${w.course_name} → **${w.milestone_name}**: ${w.first_pass_rate}% first pass (${w.questions} questions)`)
+      }
+    }
+
+    if (themes.length > 0) {
+      lines.push('')
+      lines.push('**Recurring mistake types** (from AI feedback):')
+      for (const t of themes.slice(0, 5)) {
+        lines.push(`- **${t.theme}**: ${t.count} instances (${t.pct}% of failures)`)
+      }
     }
     lines.push('')
-  }
-
-  // ── Brute-force patterns ────────────────────────────────────────────────────
-  const suspicious = sp.filter((p) => {
-    const parts = (p.score_progression ?? '').split(' -> ')
-    if (parts.length < 4) return false
-    // Check if most early attempts are the same low score then sudden jump
-    const scores = parts.map((s) => {
-      const [num, den] = s.split('/')
-      return den ? parseFloat(num) / parseFloat(den) : 0
-    })
-    const earlyScores = scores.slice(0, -1)
-    const lastScore = scores[scores.length - 1]
-    const avgEarly = earlyScores.reduce((a, b) => a + b, 0) / earlyScores.length
-    return avgEarly < 0.5 && lastScore >= 0.9 && earlyScores.length >= 3
-  })
-
-  if (suspicious.length > 0) {
-    lines.push(`## Brute-Force / Suspected Copy Patterns`)
-    lines.push(`${suspicious.length} questions where score was stuck low then suddenly jumped to full marks:`)
-    for (const p of suspicious.slice(0, 8)) {
-      lines.push(`- ${p.course_name} → ${p.question_title}: \`${p.score_progression}\` (${p.total_attempts} attempts)`)
-    }
-    if (suspicious.length > 8) {
-      lines.push(`- ... and ${suspicious.length - 8} more`)
-    }
-    lines.push('')
-  }
-
-  // ── Feedback themes ─────────────────────────────────────────────────────────
-  const feedbackTexts = fb.map((f) => (f.wrong_feedback ?? '').toLowerCase())
-  const themes: Record<string, number> = {}
-  const keywords: [string, string][] = [
-    ['edge case', 'Edge case handling'],
-    ['single.element\|empty', 'Empty/single-element inputs'],
-    ['negative', 'Negative number handling'],
-    ['zero\|0', 'Zero handling'],
-    ['logic', 'Logic errors'],
-    ['condition', 'Incorrect conditions'],
-    ['constraint', 'Not following constraints'],
-    ['print\|output\|format', 'Output formatting'],
-    ['loop', 'Loop issues'],
-    ['undefined\|null\|NaN', 'Undefined/null handling'],
-    ['indent', 'Indentation issues'],
-  ]
-  for (const [pattern, label] of keywords) {
-    const regex = new RegExp(pattern, 'i')
-    const count = feedbackTexts.filter((t) => regex.test(t)).length
-    if (count > 0) themes[label] = count
-  }
-
-  const sortedThemes = Object.entries(themes).sort((a, b) => b[1] - a[1])
-  if (sortedThemes.length > 0) {
-    lines.push(`## Recurring Feedback Themes`)
-    lines.push(`Based on ${fb.length} failed-attempt feedback samples:`)
-    for (const [theme, count] of sortedThemes.slice(0, 6)) {
-      const pct = Math.round((count / fb.length) * 100)
-      lines.push(`- **${theme}**: ${count} mentions (${pct}%)`)
-    }
-    lines.push('')
-  }
-
-  // ── Activity pattern ────────────────────────────────────────────────────────
-  if (at.length > 0) {
-    const weeks = [...new Set(at.map((a) => a.week))].sort()
-    const lastActiveWeek = weeks[weeks.length - 1]
-    const totalWeeks = weeks.length
-
-    // Check for recent inactivity
-    const now = new Date()
-    const lastActive = new Date(lastActiveWeek)
-    const daysSinceActive = Math.floor((now.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24))
-
-    lines.push(`## Activity Pattern`)
-    lines.push(`Active across ${totalWeeks} weeks. Last activity: ${lastActiveWeek} (${daysSinceActive} days ago).`)
-
-    if (daysSinceActive > 14) {
-      lines.push(`⚠️ **Inactive for ${daysSinceActive} days** — may need follow-up.`)
-    }
-
-    // Weekly intensity
-    const weeklyAttempts = new Map<string, number>()
-    for (const a of at) {
-      weeklyAttempts.set(a.week, (weeklyAttempts.get(a.week) ?? 0) + n(a.attempts))
-    }
-    const avgWeekly = Math.round([...weeklyAttempts.values()].reduce((a, b) => a + b, 0) / weeklyAttempts.size)
-    lines.push(`Average ${avgWeekly} attempts per active week.`)
-    lines.push('')
-  }
-
-  // ── Summary ─────────────────────────────────────────────────────────────────
-  lines.push(`## Key Takeaways`)
-  const takeaways: string[] = []
-
-  if (overallFirstPassRate < 60) {
-    takeaways.push(`Low first-attempt pass rate (${overallFirstPassRate}%) suggests fundamental gaps in understanding.`)
-  } else if (overallFirstPassRate < 75) {
-    takeaways.push(`Moderate first-attempt pass rate (${overallFirstPassRate}%) — concepts are partially understood but application is inconsistent.`)
-  }
-
-  if (suspicious.length > 5) {
-    takeaways.push(`${suspicious.length} questions show brute-force patterns (stuck at low scores then sudden jump to full marks) — possible copying or over-reliance on hints.`)
-  } else if (suspicious.length > 0) {
-    takeaways.push(`${suspicious.length} questions with suspicious retry patterns worth investigating.`)
-  }
-
-  if (weakest.length > 0) {
-    const worstMilestones = weakest.slice(0, 3).map((w) => w.milestone_name).join(', ')
-    takeaways.push(`Weakest areas: ${worstMilestones}.`)
-  }
-
-  if (sortedThemes.length > 0) {
-    const topTheme = sortedThemes[0][0]
-    takeaways.push(`Most common feedback issue: ${topTheme}.`)
-  }
-
-  if (takeaways.length === 0) {
-    takeaways.push('Performance appears consistent — no major red flags detected from the data.')
-  }
-
-  for (const t of takeaways) {
-    lines.push(`- ${t}`)
   }
 
   return lines.join('\n')
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -248,17 +346,25 @@ async function main() {
   if (error) throw new Error(error.message)
   if (!learners || learners.length === 0) { console.log('No learners found'); return }
 
-  // Get names from users table
+  // Get names
   const emails = learners.map((l) => l.email)
   const { data: users } = await supabase.from('users').select('email, name').in('email', emails)
   const nameMap = new Map((users ?? []).map((u) => [u.email, u.name ?? u.email]))
 
-  console.log('[write-analysis] Processing ' + learners.length + ' learners...')
+  // Build cohort stats
+  console.log('[write-analysis] Building cohort stats across ' + learners.length + ' learners...')
+  const allRaw = learners.map((l) => ({ email: l.email, raw: l.raw_data as RawData }))
+  const cohort = buildCohortStats(allRaw)
+  console.log('[write-analysis] Cohort avg first-pass rate: ' +
+    Math.round(cohort.overallFirstPassRates.reduce((a, b) => a + b, 0) / cohort.overallFirstPassRates.length) + '%')
+
+  // Write analysis per learner
+  console.log('[write-analysis] Writing analysis for ' + learners.length + ' learners...')
 
   let count = 0
   for (const learner of learners) {
     const name = nameMap.get(learner.email) ?? learner.email
-    const analysis = analyzelearner(learner.email, name, learner.raw_data as any)
+    const analysis = writeAnalysis(name, learner.raw_data as RawData, cohort)
 
     const { error: updateErr } = await supabase
       .from('learner_analysis')
