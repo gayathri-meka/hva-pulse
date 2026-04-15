@@ -145,17 +145,66 @@ function detectArchetype(
   totalQuestions: number,
   daysSinceActive: number,
   codingCourseCount: number,
+  tooCleanScore: number, // 0-1: how "too perfect" the pattern is
 ): string {
   if (daysSinceActive > 21) return 'ghoster'
   // Brute-force rate: bf patterns relative to total questions attempted
-  // > 0.8% of questions show brute-force AND first-pass is below 70% → grinder
   const bfRate = totalQuestions > 0 ? (bruteForceCount / totalQuestions) * 100 : 0
   if (bruteForceCount >= 10 && bfRate > 0.5 && overallFirstPass < 70) return 'grinder'
-  if (bruteForceCount >= 15) return 'grinder' // high absolute count regardless
+  if (bruteForceCount >= 15) return 'grinder'
+  // Too clean: high first-pass + very few retries + high score = suspiciously perfect
+  if (tooCleanScore >= 0.7 && overallFirstPass >= 80) return 'too-clean'
   if (totalQuestions < 100 && codingCourseCount <= 1) return 'skimmer'
   if (overallFirstPass < 55) return 'struggler'
   if (overallFirstPass < 65) return 'needs-improvement'
   return 'steady'
+}
+
+/** Compute how "too clean" a learner's pattern is (0-1).
+ *  High score = suspiciously perfect. Based on:
+ *  - First-attempt pass rate very high (>85%)
+ *  - Very low retry ratio (few retries relative to questions)
+ *  - Almost no partial scores on subjective (always 4/4 or 0/4, rarely 2/4 or 3/4) */
+function computeTooCleanScore(cs: CourseSummary[], sp: Progression[]): number {
+  const codingSubj = cs.filter((c) =>
+    ['Coding in Python', 'Web Development', 'React', 'Backend'].includes(c.course_name)
+    && c.question_type === 'subjective'
+  )
+  if (codingSubj.length === 0) return 0
+
+  const totalQs     = codingSubj.reduce((s, c) => s + n(c.distinct_questions), 0)
+  const totalFirst   = codingSubj.reduce((s, c) => s + n(c.first_attempt_passed), 0)
+  const totalRetries = codingSubj.reduce((s, c) => s + n(c.retries), 0)
+  if (totalQs < 50) return 0 // not enough data
+
+  const firstPassRate = totalQs > 0 ? totalFirst / totalQs : 0
+  const retryRatio    = totalQs > 0 ? totalRetries / totalQs : 0
+
+  // Check for bimodal scores: mostly full marks or zero, few partials
+  // Look at progressions — if first attempt is almost always 4/4, that's suspicious
+  let perfectFirst = 0
+  let totalSubjProgressions = 0
+  for (const p of sp) {
+    const parts = (p.score_progression ?? '').split(' -> ')
+    if (parts.length === 0) continue
+    const first = parts[0]
+    const [num, den] = first.split('/')
+    if (!den) continue
+    totalSubjProgressions++
+    if (parseFloat(num) / parseFloat(den) >= 0.95) perfectFirst++
+  }
+  const perfectFirstRate = totalSubjProgressions > 0 ? perfectFirst / totalSubjProgressions : 0
+
+  // Composite score: weight each signal
+  let score = 0
+  if (firstPassRate >= 0.85) score += 0.35
+  else if (firstPassRate >= 0.80) score += 0.2
+  if (retryRatio < 0.15) score += 0.25
+  else if (retryRatio < 0.25) score += 0.1
+  if (perfectFirstRate >= 0.7) score += 0.4
+  else if (perfectFirstRate >= 0.5) score += 0.2
+
+  return Math.min(score, 1)
 }
 
 const ARCHETYPE_LABELS: Record<string, string> = {
@@ -164,6 +213,7 @@ const ARCHETYPE_LABELS: Record<string, string> = {
   skimmer:           'The Skimmer — limited engagement, covering very few courses/topics',
   struggler:         'The Struggler — genuinely low scores, needs fundamental support',
   'needs-improvement': 'Needs Improvement — below average but showing effort',
+  'too-clean':       'Too Clean — suspiciously perfect scores, possible external help',
   steady:            'Steady — consistent performance, no major red flags',
 }
 
@@ -232,7 +282,8 @@ function writeAnalysis(name: string, raw: RawData, cohort: CohortStats): string 
     : 999
 
   // Archetype
-  const archetype = detectArchetype(overallFirstPass, bruteForceCount, totalQs, daysSinceActive, codingCourseNames.length)
+  const tooCleanScore = computeTooCleanScore(cs, sp)
+  const archetype = detectArchetype(overallFirstPass, bruteForceCount, totalQs, daysSinceActive, codingCourseNames.length, tooCleanScore)
 
   // Cohort percentiles
   const firstPassPercentile = percentile(overallFirstPass, cohort.overallFirstPassRates)
@@ -259,6 +310,9 @@ function writeAnalysis(name: string, raw: RawData, cohort: CohortStats): string 
     lines.push(`**${name} has limited engagement — only ${totalQs} questions attempted across ${codingCourseNames.length || 'few'} coding course(s).** This puts them in the ${ordinal(activityPercentile)} percentile for activity. The coverage is too thin to build interview-ready skills.`)
   } else if (archetype === 'struggler') {
     lines.push(`**${name} is struggling fundamentally — ${overallFirstPass}% first-attempt pass rate, which is in the ${ordinal(firstPassPercentile)} percentile of the cohort.** This isn't a retry or effort problem — the concepts aren't landing on first exposure. Needs targeted support on foundations.`)
+  } else if (archetype === 'too-clean') {
+    const retryRatio = totalQs > 0 ? (totalRetries / totalQs).toFixed(2) : '0'
+    lines.push(`**${name}'s performance looks suspiciously clean.** ${overallFirstPass}% first-attempt pass rate (${ordinal(firstPassPercentile)} percentile) with a retry ratio of only ${retryRatio}× — very few retries for this volume of work. Most questions are passed on the first attempt with full marks. This pattern is consistent with looking up answers before submitting or getting external help. If interview performance doesn't match these scores, the gap confirms the concern.`)
   } else if (archetype === 'needs-improvement') {
     lines.push(`**${name} is below the cohort average** with a ${overallFirstPass}% first-attempt pass rate (${ordinal(firstPassPercentile)} percentile). ${bruteForceCount > 0 ? 'There are ' + bruteForceCount + ' questions with brute-force retry patterns.' : 'Effort is visible but concepts aren\'t consistently landing.'} Targeted support on weak areas could help close the gap.`)
   } else {
@@ -297,7 +351,7 @@ function writeAnalysis(name: string, raw: RawData, cohort: CohortStats): string 
   }
 
   if (bruteForceCount > 0) {
-    lines.push(`- **Brute-force patterns**: ${bruteForceCount} questions with suspicious retry patterns`)
+    lines.push(`- **Feedback incorporation issues**: ${bruteForceCount} questions where the learner was stuck at the same score for multiple attempts before a sudden breakthrough — suggests difficulty incorporating AI feedback. View the conversations for these questions to understand what specifically was blocking them.`)
     for (const p of bfExamples) {
       lines.push(`  - ${p.course_name} → ${p.question_title}: \`${p.score_progression}\``)
     }
