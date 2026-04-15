@@ -35,6 +35,7 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
         {[
           { key: 'all',           label: 'Dashboard',     href: '/learning?filter=all' },
           { key: 'interventions', label: 'Interventions', href: '/learning?filter=interventions' },
+          { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
           { key: 'settings',      label: 'Settings',      href: '/learning/settings' },
         ].map(({ key, label, href }) => (
           <Link

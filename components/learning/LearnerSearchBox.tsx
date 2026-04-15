@@ -8,9 +8,10 @@ type LearnerOption = { learner_id: string; name: string; email: string }
 interface Props {
   learners:   LearnerOption[]
   selectedId: string | null
+  baseUrl?:   string
 }
 
-export default function LearnerSearchBox({ learners, selectedId }: Props) {
+export default function LearnerSearchBox({ learners, selectedId, baseUrl }: Props) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [query, setQuery]   = useState('')
@@ -35,19 +36,27 @@ export default function LearnerSearchBox({ learners, selectedId }: Props) {
   }, [])
 
   function select(learner: LearnerOption) {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('filter', 'interventions')
-    params.set('learner', learner.learner_id)
-    router.push(`/learning?${params.toString()}`)
+    if (baseUrl) {
+      router.push(baseUrl + '?learner=' + learner.learner_id)
+    } else {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('filter', 'interventions')
+      params.set('learner', learner.learner_id)
+      router.push('/learning?' + params.toString())
+    }
     setOpen(false)
     setQuery('')
   }
 
   function clear() {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('filter', 'interventions')
-    params.delete('learner')
-    router.push(`/learning?${params.toString()}`)
+    if (baseUrl) {
+      router.push(baseUrl)
+    } else {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('filter', 'interventions')
+      params.delete('learner')
+      router.push('/learning?' + params.toString())
+    }
     setQuery('')
   }
 

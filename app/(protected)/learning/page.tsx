@@ -339,6 +339,7 @@ export default async function LearningPage({ searchParams }: Props) {
         {[
           { key: 'all',           label: 'Dashboard',     href: `/learning?filter=all${lf ? `&lf=${lf}` : ''}` },
           { key: 'interventions', label: 'Interventions', href: `/learning?filter=interventions${lf ? `&lf=${lf}` : ''}` },
+          { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
           ...(appUser.role === 'admin' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
         ].map(({ key, label, href }) => (
           <Link
