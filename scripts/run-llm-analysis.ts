@@ -12,12 +12,12 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 config({ path: '.env' })
 
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import { runBigQuery } from '../lib/bigquery'
 
-const supabase   = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-const anthropic  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 const BQ_BILLING = 'hyperverge-chabtbot'
 const BQ_DATA    = 'sensai-441917'
 
@@ -218,17 +218,14 @@ async function main() {
         continue
       }
 
-      // 4. Call Claude
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+      // 4. Call OpenAI
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }],
       })
 
-      const analysisText = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n')
+      const analysisText = response.choices[0]?.message?.content ?? ''
 
       // 5. Store
       const { error } = await supabase
