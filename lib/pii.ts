@@ -7,23 +7,23 @@
  */
 
 /** Replace a learner's name with an anonymized label. */
-export function maskName(name: string | null, learnerId?: string): string {
+export function maskName(name: string | null | undefined, learnerId?: string): string {
   if (!name) return '—'
   return learnerId ? `Learner ${learnerId}` : '***'
 }
 
 /** Hide an email address entirely. */
-export function maskEmail(_email: string | null): string {
+export function maskEmail(_email: string | null | undefined): string {
   return '***@***.com'
 }
 
 /** Hide a phone number. */
-export function maskPhone(_phone: string | null): string {
+export function maskPhone(_phone: string | null | undefined): string {
   return '***'
 }
 
 /** Hide mentor/tech mentor names. */
-export function maskMentor(_name: string | null): string {
+export function maskMentor(_name: string | null | undefined): string {
   return '***'
 }
 
@@ -64,4 +64,14 @@ export function maskLearnerPII<T extends Record<string, unknown>>(
   }
 
   return masked as T
+}
+
+/** Mask an array of learner-shaped objects. */
+export function maskAllPII<T extends Record<string, unknown>>(
+  rows: T[],
+  shouldMask: boolean,
+  idField = 'learner_id',
+): T[] {
+  if (!shouldMask) return rows
+  return rows.map((row) => maskLearnerPII(row, row[idField] as string | undefined))
 }

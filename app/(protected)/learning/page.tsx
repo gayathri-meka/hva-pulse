@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import LearningDashboard, {
   type LearnerRow,
   type MetricCol,
@@ -31,6 +32,7 @@ export default async function LearningPage({ searchParams }: Props) {
   if (!appUser) redirect('/login')
 
   const { filter = 'all', lf, sub_cohort, learner: selectedLearnerId, view: interventionView = 'table' } = await searchParams
+  const showPII = canSeePII(appUser.role)
   const subCohorts = sub_cohort ? sub_cohort.split(',').filter(Boolean) : []
   const supabase = await createServerSupabaseClient()
   // Learners (active cohort, with email via users join)
@@ -117,7 +119,7 @@ export default async function LearningPage({ searchParams }: Props) {
     learnerRows = learners.map((l) => {
       const user  = l.users as unknown as { name: string; email: string } | null
       const email = user?.email?.trim().toLowerCase() ?? ''
-      const name  = user?.name ?? l.learner_id
+      const name  = showPII ? (user?.name ?? l.learner_id) : maskName(user?.name, l.learner_id)
 
       // For each metric source, isolate this learner's rows
       const rowsBySource = new Map<string, RawRow[]>()
@@ -145,7 +147,7 @@ export default async function LearningPage({ searchParams }: Props) {
       const user = l.users as unknown as { name: string; email: string } | null
       return {
         learner_id:   l.learner_id,
-        name:         user?.name ?? l.learner_id,
+        name:         showPII ? (user?.name ?? l.learner_id) : maskName(user?.name, l.learner_id),
         lf_name:      l.lf_name ?? null,
         batch_name:   l.batch_name ?? null,
         status:       (l as unknown as { status: string }).status ?? null,
@@ -204,7 +206,7 @@ export default async function LearningPage({ searchParams }: Props) {
 
     cohortLearners = (allCohort ?? []).map((l) => {
       const u = l.users as unknown as { name: string; email: string } | null
-      return { learner_id: l.learner_id, name: u?.name ?? l.learner_id, email: u?.email ?? '' }
+      return { learner_id: l.learner_id, name: showPII ? (u?.name ?? l.learner_id) : maskName(u?.name, l.learner_id), email: showPII ? (u?.email ?? '') : maskEmail(u?.email) }
     })
     staffUsers = (staff ?? []) as StaffUser[]
 
@@ -271,8 +273,8 @@ export default async function LearningPage({ searchParams }: Props) {
         const slEmail = u?.email?.trim().toLowerCase() ?? ''
         selectedLearnerData = {
           learner_id: sl.learner_id,
-          name:       u?.name ?? sl.learner_id,
-          email:      slEmail,
+          name:       showPII ? (u?.name ?? sl.learner_id) : maskName(u?.name, sl.learner_id),
+          email:      showPII ? slEmail : maskEmail(slEmail),
           batch_name: sl.batch_name ?? null,
           lf_name:    sl.lf_name ?? null,
           status:     (sl as unknown as { status: string }).status ?? null,

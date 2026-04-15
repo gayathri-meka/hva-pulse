@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail, maskMentor } from '@/lib/pii'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import MatchingControls from '@/components/placements/MatchingControls'
 import MatchingStatusFilter from '@/components/placements/MatchingStatusFilter'
@@ -165,10 +166,11 @@ export default async function MatchingPage({ searchParams }: Props) {
     new_lf:             string | null
     new_batch:          string | null
   }
+  const showPII = canSeePII(appUser.role)
   const allLearners = ((rawLearners ?? []) as RawLearner[]).map((l) => ({
     learner_id:         l.learner_id,
     user_id:            l.user_id,
-    name:               l.users?.name ?? '',
+    name:               showPII ? (l.users?.name ?? '') : maskName(l.users?.name, l.learner_id),
     batch:              l.batch_name ?? '',
     lf:                 l.lf_name ?? '',
     sub_cohort:         (l as unknown as { sub_cohort: string | null }).sub_cohort ?? null,

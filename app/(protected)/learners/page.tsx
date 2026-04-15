@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail, maskPhone, maskMentor } from '@/lib/pii'
 import LearnersTable from '@/components/learners/LearnersTable'
 import SnapshotControls from '@/components/learners/SnapshotControls'
 import LearnerSnapshot, {
@@ -60,8 +61,17 @@ export default async function LearnersPage({ searchParams }: Props) {
     users: { name: string; email: string } | null
   }
 
+  const showPII = canSeePII(appUser.role)
   const learners = ((rawLearners ?? []) as RawLearner[])
-    .map((l) => ({ ...l, users: undefined, name: l.users?.name ?? '', email: l.users?.email ?? '' }))
+    .map((l) => ({
+      ...l,
+      users: undefined,
+      name:                    showPII ? (l.users?.name ?? '')  : maskName(l.users?.name, l.learner_id),
+      email:                   showPII ? (l.users?.email ?? '') : maskEmail(l.users?.email),
+      phone_number:            showPII ? l.phone_number         : maskPhone(l.phone_number),
+      tech_mentor_name:        showPII ? l.tech_mentor_name     : maskMentor(l.tech_mentor_name),
+      core_skills_mentor_name: showPII ? l.core_skills_mentor_name : maskMentor(l.core_skills_mentor_name),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Filter options (for All Learners tab) ─────────────────────────────────

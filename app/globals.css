@@ -18,3 +18,53 @@ body {
     text-wrap: balance;
   }
 }
+
+/* ── Guest read-only mode ────────────────────────────────────────────────────
+   When body has .guest-readonly, all action buttons, selects inside forms,
+   and textareas are disabled. Search inputs and filter dropdowns still work
+   because they're inside table headers / toolbar areas. */
+body.guest-readonly button:not([data-guest-allow]),
+body.guest-readonly .fixed button {
+  pointer-events: none !important;
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+/* Status change dropdowns in matching/applications tables */
+body.guest-readonly select:not([data-guest-allow]) {
+  pointer-events: none !important;
+  opacity: 0.6 !important;
+}
+/* Keep search inputs, filter dropdowns, and column toggles functional */
+body.guest-readonly th button,
+body.guest-readonly th select,
+body.guest-readonly th input,
+body.guest-readonly [data-guest-allow],
+body.guest-readonly input[type="text"],
+body.guest-readonly input[type="search"],
+body.guest-readonly input[type="checkbox"],
+body.guest-readonly nav button,
+body.guest-readonly nav a {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+}
+/* Tab links should still work */
+body.guest-readonly a {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+/* Guest badge in sidebar */
+body.guest-readonly::after {
+  content: 'VIEW ONLY';
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: #EF9F27;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  z-index: 9999;
+}

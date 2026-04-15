@@ -1,10 +1,10 @@
 'use client'
 
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect } from 'react'
 
 interface Permissions {
-  canEdit: boolean    // false for guests
-  canSeePII: boolean  // false for guests
+  canEdit: boolean
+  canSeePII: boolean
   role: 'admin' | 'staff' | 'guest' | 'learner'
 }
 
@@ -26,6 +26,15 @@ export function PermissionsProvider({
     canSeePII: role !== 'guest',
     role,
   }
+
+  // Add a CSS class to body for global read-only styling
+  useEffect(() => {
+    if (role === 'guest') {
+      document.body.classList.add('guest-readonly')
+    }
+    return () => { document.body.classList.remove('guest-readonly') }
+  }, [role])
+
   return (
     <PermissionsContext.Provider value={value}>
       {children}

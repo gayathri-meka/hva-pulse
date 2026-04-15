@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getAppUser } from '@/lib/auth'
+import { getAppUser, canSeePII } from '@/lib/auth'
+import { maskName, maskEmail } from '@/lib/pii'
 import LearnerSearchBox from '@/components/learning/LearnerSearchBox'
 import LearnerAnalysisView from '@/components/learning/LearnerAnalysisView'
 
@@ -17,6 +18,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
 
   const { learner: selectedLearnerId } = await searchParams
   const supabase = await createServerSupabaseClient()
+  const showPII = canSeePII(appUser.role)
 
   // Fetch all learners for the search box
   const { data: allLearners } = await supabase
@@ -27,7 +29,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
 
   const learnerOptions = (allLearners ?? []).map((l) => {
     const u = l.users as unknown as { name: string; email: string } | null
-    return { learner_id: l.learner_id, name: u?.name ?? l.learner_id, email: u?.email ?? '' }
+    return { learner_id: l.learner_id, name: showPII ? (u?.name ?? l.learner_id) : maskName(u?.name, l.learner_id), email: showPII ? (u?.email ?? '') : maskEmail(u?.email) }
   })
 
   // Fetch selected learner's analysis
@@ -59,8 +61,8 @@ export default async function DeepDivePage({ searchParams }: Props) {
     if (learnerRow) {
       const u = learnerRow.users as unknown as { name: string; email: string } | null
       learnerInfo = {
-        name:       u?.name ?? selectedLearnerId,
-        email:      u?.email ?? '',
+        name:       showPII ? (u?.name ?? selectedLearnerId) : maskName(u?.name, selectedLearnerId),
+        email:      showPII ? (u?.email ?? '') : maskEmail(u?.email),
         batch_name: learnerRow.batch_name ?? null,
         lf_name:    learnerRow.lf_name ?? null,
         status:     (learnerRow as unknown as { status: string }).status ?? null,
