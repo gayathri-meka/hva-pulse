@@ -24,13 +24,20 @@ body {
    and textareas are disabled. Search inputs and filter dropdowns still work
    because they're inside table headers / toolbar areas. */
 body.guest-readonly button:not([data-guest-allow]),
-body.guest-readonly .fixed button {
+body.guest-readonly .fixed button,
+.guest-readonly button:not([data-guest-allow]) {
   pointer-events: none !important;
   opacity: 0.45 !important;
   cursor: not-allowed !important;
 }
 /* Status change dropdowns in matching/applications tables */
-body.guest-readonly select:not([data-guest-allow]) {
+body.guest-readonly select:not([data-guest-allow]),
+.guest-readonly select:not([data-guest-allow]) {
+  pointer-events: none !important;
+  opacity: 0.6 !important;
+}
+.guest-readonly input:not([data-guest-allow]),
+.guest-readonly textarea:not([data-guest-allow]) {
   pointer-events: none !important;
   opacity: 0.6 !important;
 }

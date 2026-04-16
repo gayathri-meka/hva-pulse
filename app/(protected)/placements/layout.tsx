@@ -14,7 +14,7 @@ export default async function PlacementsLayout({ children }: { children: React.R
         <p className="mt-1 text-sm text-zinc-500">Manage companies, applications, track hiring outcomes, and discover job opportunities</p>
       </div>
       <div className="mb-6">
-        <PlacementsNav isAdmin={appUser.role === 'admin' || appUser.role === 'guest'} />
+        <PlacementsNav isAdmin={appUser.role !== 'learner'} />
       </div>
       {children}
     </div>

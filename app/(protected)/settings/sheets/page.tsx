@@ -43,7 +43,7 @@ const SHEETS = [
 export default async function SheetsPage() {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'guest') redirect('/dashboard')
+  if (appUser.role === 'learner') redirect('/dashboard')
 
   const supabase = await createServerSupabaseClient()
   const { data: logs } = await supabase.from('sync_logs').select('*')

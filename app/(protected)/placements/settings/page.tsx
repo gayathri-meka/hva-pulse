@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default async function PlacementSettingsPage() {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'guest') redirect('/placements/analytics')
+  if (appUser.role === 'learner') redirect('/placements/analytics')
 
   const supabase = await createServerSupabaseClient()
 
@@ -33,11 +33,13 @@ export default async function PlacementSettingsPage() {
   }
 
   return (
+    <div className={appUser.role !== 'admin' ? 'guest-readonly' : ''}>
     <PlacementSettingsPanel
       nsReasons={(nsRow?.value as string[]) ?? defaults.nsReasons}
       rejectionReasons={(rejRow?.value as string[]) ?? defaults.rejectionReasons}
       thresholds={(threshRow?.value as typeof defaults.thresholds) ?? defaults.thresholds}
       tatCutoffDate={(tatRow?.value as string) ?? defaults.tatCutoffDate}
     />
+    </div>
   )
 }

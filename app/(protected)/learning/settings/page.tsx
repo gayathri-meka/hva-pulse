@@ -14,7 +14,7 @@ interface Props {
 export default async function LearningSettingsPage({ searchParams }: Props) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
-  if (appUser.role !== 'admin' && appUser.role !== 'guest') redirect('/learning')
+  if (appUser.role === 'learner') redirect('/learning')
 
   const { tab = 'metrics' } = await searchParams
   const supabase = await createServerSupabaseClient()
@@ -72,12 +72,14 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
         </nav>
       </div>
 
-      {tab === 'sources' && (
-        <DataSourcesPanel sources={sources ?? []} />
-      )}
-      {tab === 'metrics' && (
-        <MetricsPanel metrics={metrics ?? []} sources={sources ?? []} />
-      )}
+      <div className={appUser.role !== 'admin' ? 'guest-readonly' : ''}>
+        {tab === 'sources' && (
+          <DataSourcesPanel sources={sources ?? []} />
+        )}
+        {tab === 'metrics' && (
+          <MetricsPanel metrics={metrics ?? []} sources={sources ?? []} />
+        )}
+      </div>
     </div>
   )
 }
