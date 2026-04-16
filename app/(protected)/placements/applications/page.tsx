@@ -96,7 +96,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       rejection_reasons:       (a.rejection_reasons as string[] | null) ?? [],
       rejection_feedback:      a.rejection_feedback ?? null,
       learner_name: showPII ? (user?.name || 'Unknown') : maskName(user?.name, a.id as string),
-      learner_email: user?.email || '',
+      learner_email: showPII ? (user?.email || '') : maskEmail(user?.email),
       company_name: companyMap[role?.company_id ?? ''] ?? 'Unknown',
       role_title: role?.role_title ?? 'Unknown',
       location: role?.location ?? '',
