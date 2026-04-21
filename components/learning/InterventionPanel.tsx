@@ -1146,19 +1146,27 @@ function Step4Card({
                 </div>
               </div>
             ) : (
-              <button
-                onClick={() => { setShowAddUpdate(true); setUpdateNote(''); setExtendInUpdate(false); setUpdateNewDate(''); setError('') }}
-                className={ghostBtn}
-              >
-                + Add update
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowAddUpdate(true); setUpdateNote(''); setExtendInUpdate(false); setUpdateNewDate(''); setError('') }}
+                  className={ghostBtn}
+                >
+                  + Add update
+                </button>
+                <button
+                  onClick={() => { setShowClose(true); setError('') }}
+                  className={`${ghostBtn} border-red-200 text-red-600 hover:bg-red-50`}
+                >
+                  Close intervention
+                </button>
+              </div>
             )
           )}
         </div>
 
-        {/* ── Close intervention ── */}
-        {!showAddUpdate && !editingDate && (
-          showClose ? (
+        {/* ── Close intervention form ── */}
+        {!showAddUpdate && !editingDate && showClose && (
+          <div>
             <div className="space-y-2 border-t border-zinc-100 pt-3">
               <label className={labelCls}>Outcome</label>
               <div className="relative">
@@ -1191,16 +1199,7 @@ function Step4Card({
                 <button onClick={() => { setShowClose(false); setError('') }} className={ghostBtn}>Cancel</button>
               </div>
             </div>
-          ) : (
-            <div className="border-t border-zinc-100 pt-3">
-              <button
-                onClick={() => { setShowClose(true); setError('') }}
-                className="text-xs text-red-500 hover:text-red-700"
-              >
-                Close intervention
-              </button>
-            </div>
-          )
+          </div>
         )}
       </div>
     </div>
