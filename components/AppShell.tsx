@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
+import NotificationBell, { type Notification } from './notifications/NotificationBell'
 
 export default function AppShell({
   role,
+  notifications,
   children,
 }: {
-  role: 'admin' | 'staff' | 'guest'
-  children: React.ReactNode
+  role:          'admin' | 'staff' | 'guest'
+  notifications: Notification[]
+  children:      React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
@@ -39,11 +42,12 @@ export default function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile topbar */}
-        <header className="flex h-14 flex-shrink-0 items-center border-b border-zinc-200 bg-white px-4 lg:hidden">
+        {/* Topbar — hamburger on mobile, bell on all sizes */}
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 lg:px-8">
+          {/* Hamburger (mobile only) */}
           <button
             onClick={() => setOpen(true)}
-            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100"
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 lg:hidden"
             aria-label="Open menu"
           >
             <svg
@@ -61,7 +65,12 @@ export default function AppShell({
               />
             </svg>
           </button>
-          <span className="ml-3 text-base font-semibold">HVA Pulse</span>
+          <span className="text-base font-semibold lg:hidden">HVA Pulse</span>
+
+          {/* Bell — always top-right */}
+          <div className="ml-auto">
+            <NotificationBell notifications={notifications} />
+          </div>
         </header>
 
         {/* Page content — only this scrolls */}

@@ -4,9 +4,10 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser, canSeePII } from '@/lib/auth'
 import { maskName, maskEmail } from '@/lib/pii'
 import MetricsSection, { type MetricRow } from '@/components/learning/MetricsSection'
-import InterventionPanel, { type Intervention, type StaffUser, type ActionItem, type ReviewEntry } from '@/components/learning/InterventionPanel'
+import InterventionPanel, { type Intervention, type StaffUser, type ActionItem, type UpdateLogEntry } from '@/components/learning/InterventionPanel'
 import InterventionHistory, { type ClosedIntervention } from '@/components/learning/InterventionHistory'
 import { type RawRow, type MetricDef, topoSortMetrics, computeAllForLearner } from '@/lib/learning/compute'
+import { readSettings } from '@/lib/settings-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,13 +38,14 @@ export default async function LearnerLearningPage({ params }: Props) {
   const name        = showPII ? (learnerUser?.name ?? learnerId) : maskName(learnerUser?.name, learnerId)
   const email       = showPII ? realEmail : maskEmail(realEmail)
 
-  // Parallel fetches: metrics, raw rows, active intervention, closed history, staff users
+  // Parallel fetches: metrics, raw rows, active intervention, closed history, staff users, settings
   const [
     { data: metricsRaw },
     { data: rawRowsData },
     { data: interventionRaw },
     { data: closedRaw },
     { data: staffRaw },
+    settingsMap,
   ] = await Promise.all([
     supabase.from('metrics').select('*').order('created_at'),
     realEmail
@@ -55,26 +57,42 @@ export default async function LearnerLearningPage({ params }: Props) {
       : Promise.resolve({ data: [] }),
     supabase
       .from('interventions')
-      .select('id, learner_id, status, root_cause_category, root_cause_notes, step1_completed_at, action_items, step2_completed_at, resurface_date, last_reviewed_at, reviews')
+      .select('id, learner_id, status, flagged_items, what_wrong_notes, root_cause_categories, root_cause_notes, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
       .eq('learner_id', learnerId)
       .neq('status', 'closed')
       .maybeSingle(),
     supabase
       .from('interventions')
-      .select('id, status, root_cause_category, root_cause_notes, action_items, reviews, outcome, outcome_note, closed_at, created_at, closed_by_user:users!interventions_closer_fkey(name)')
+      .select('id, status, root_cause_categories, root_cause_notes, action_items, update_log, outcome, outcome_note, closed_at, created_at, closed_by_user:users!interventions_closer_fkey(name)')
       .eq('learner_id', learnerId)
       .eq('status', 'closed')
       .order('closed_at', { ascending: false }),
     supabase.from('users').select('id, name, role').in('role', ['admin', 'staff']).order('name'),
+    readSettings(['root_cause_categories', 'intervention_checklist_items']),
   ])
+
+  const categories: string[] = (settingsMap['root_cause_categories'] as string[] | null) ?? [
+    'Life circumstance',
+    'Content difficulty',
+    'Motivation / confidence',
+    'External commitments',
+    'Other',
+  ]
+  const checklistItems: string[] = (settingsMap['intervention_checklist_items'] as string[] | null) ?? [
+    'Attendance',
+    'Assignment completion',
+    'Quiz / assessment scores',
+    'Coding task progress',
+    'Engagement / participation',
+  ]
 
   const interventionHistory: ClosedIntervention[] = (closedRaw ?? []).map((iv) => ({
     id:                  iv.id,
     status:              'closed',
-    root_cause_category: iv.root_cause_category ?? null,
+    root_cause_categories: ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
     root_cause_notes:    iv.root_cause_notes ?? null,
     action_items:        (iv.action_items ?? []) as ActionItem[],
-    reviews:             (iv.reviews ?? []) as ReviewEntry[],
+    update_log:          ((iv as unknown as { update_log?: unknown[] }).update_log ?? []) as UpdateLogEntry[],
     outcome:             (iv.outcome ?? null) as ClosedIntervention['outcome'],
     outcome_note:        iv.outcome_note ?? null,
     closed_at:           iv.closed_at ?? null,
@@ -108,17 +126,20 @@ export default async function LearnerLearningPage({ params }: Props) {
 
   const intervention: Intervention | null = interventionRaw
     ? {
-        id:                  interventionRaw.id,
-        learner_id:          interventionRaw.learner_id,
-        status:              interventionRaw.status as Intervention['status'],
-        root_cause_category: interventionRaw.root_cause_category ?? null,
-        root_cause_notes:    interventionRaw.root_cause_notes ?? null,
-        step1_completed_at:  interventionRaw.step1_completed_at ?? null,
-        action_items:        (interventionRaw.action_items ?? []) as Intervention['action_items'],
-        step2_completed_at:  interventionRaw.step2_completed_at ?? null,
-        resurface_date:      interventionRaw.resurface_date ?? null,
-        last_reviewed_at:    interventionRaw.last_reviewed_at ?? null,
-        reviews:             (interventionRaw.reviews ?? []) as Intervention['reviews'],
+        id:                   interventionRaw.id,
+        learner_id:           interventionRaw.learner_id,
+        status:               interventionRaw.status as Intervention['status'],
+        flagged_items:        ((interventionRaw as unknown as { flagged_items?: string[] }).flagged_items ?? []),
+        what_wrong_notes:     (interventionRaw as unknown as { what_wrong_notes?: string | null }).what_wrong_notes ?? null,
+        root_cause_categories: ((interventionRaw as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
+        root_cause_notes:     interventionRaw.root_cause_notes ?? null,
+        step1_completed_at:   interventionRaw.step1_completed_at ?? null,
+        step2_completed_at:   interventionRaw.step2_completed_at ?? null,
+        step3_completed_at:   (interventionRaw as unknown as { step3_completed_at?: string | null }).step3_completed_at ?? null,
+        action_items:         (interventionRaw.action_items ?? []) as Intervention['action_items'],
+        decision_date:        (interventionRaw as unknown as { decision_date: string | null }).decision_date ?? null,
+        last_reviewed_at:     interventionRaw.last_reviewed_at ?? null,
+        update_log:           ((interventionRaw as unknown as { update_log?: unknown[] }).update_log ?? []) as Intervention['update_log'],
       }
     : null
 
@@ -182,7 +203,7 @@ export default async function LearnerLearningPage({ params }: Props) {
       )}
 
       {/* Intervention */}
-      <InterventionPanel learnerId={learnerId} intervention={intervention} staffUsers={staffUsers} />
+      <InterventionPanel learnerId={learnerId} intervention={intervention} staffUsers={staffUsers} categories={categories} checklistItems={checklistItems} />
 
       {/* Past interventions history */}
       {interventionHistory.length > 0 && (

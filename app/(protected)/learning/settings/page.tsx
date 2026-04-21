@@ -4,8 +4,26 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 import DataSourcesPanel from '@/components/learning/DataSourcesPanel'
 import MetricsPanel from '@/components/learning/MetricsPanel'
+import LearningConfigurationsPanel from '@/components/learning/LearningConfigurationsPanel'
+import { readSettings } from '@/lib/settings-server'
 
 export const dynamic = 'force-dynamic'
+
+const DEFAULT_CATEGORIES = [
+  'Life circumstance',
+  'Content difficulty',
+  'Motivation / confidence',
+  'External commitments',
+  'Other',
+]
+
+const DEFAULT_CHECKLIST_ITEMS = [
+  'Attendance',
+  'Assignment completion',
+  'Quiz / assessment scores',
+  'Coding task progress',
+  'Engagement / participation',
+]
 
 interface Props {
   searchParams: Promise<{ tab?: string }>
@@ -19,10 +37,14 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
   const { tab = 'metrics' } = await searchParams
   const supabase = await createServerSupabaseClient()
 
-  const [{ data: sources }, { data: metrics }] = await Promise.all([
+  const [{ data: sources }, { data: metrics }, settingsMap] = await Promise.all([
     supabase.from('metric_sources').select('*, metric_source_columns(*)').order('created_at'),
     supabase.from('metrics').select('*').order('created_at'),
+    readSettings(['root_cause_categories', 'intervention_checklist_items']),
   ])
+
+  const categories: string[]     = (settingsMap['root_cause_categories'] as string[] | null) ?? DEFAULT_CATEGORIES
+  const checklistItems: string[] = (settingsMap['intervention_checklist_items'] as string[] | null) ?? DEFAULT_CHECKLIST_ITEMS
 
   return (
     <div>
@@ -55,18 +77,19 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
       <div className="mb-6 border-b border-zinc-200">
         <nav className="flex gap-6">
           {[
-            { key: 'metrics', label: 'Metrics' },
-            { key: 'sources', label: 'Data Sources' },
+            { key: 'metrics',        label: 'Metrics' },
+            { key: 'sources',        label: 'Data Sources' },
+            { key: 'configurations', label: 'Configurations' },
           ].map(({ key, label }) => (
             <Link
               key={key}
               href={`/learning/settings?tab=${key}`}
               className={`relative pb-3 text-sm font-medium transition-colors ${
-                tab === key ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
+                (tab === key || (key === 'configurations' && tab === 'categories')) ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
               {label}
-              {tab === key && <span className="absolute bottom-0 left-0 h-0.5 w-full bg-[#5BAE5B]" />}
+              {(tab === key || (key === 'configurations' && tab === 'categories')) && <span className="absolute bottom-0 left-0 h-0.5 w-full bg-[#5BAE5B]" />}
             </Link>
           ))}
         </nav>
@@ -78,6 +101,9 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
         )}
         {tab === 'metrics' && (
           <MetricsPanel metrics={metrics ?? []} sources={sources ?? []} />
+        )}
+        {(tab === 'configurations' || tab === 'categories') && (
+          <LearningConfigurationsPanel categories={categories} checklistItems={checklistItems} />
         )}
       </div>
     </div>

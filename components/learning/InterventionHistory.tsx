@@ -1,17 +1,17 @@
-import type { ActionItem, ReviewEntry } from './InterventionPanel'
+import type { ActionItem, UpdateLogEntry } from './InterventionPanel'
 
 export type ClosedIntervention = {
-  id:                  string
-  status:              'closed'
-  root_cause_category: string | null
-  root_cause_notes:    string | null
-  action_items:        ActionItem[]
-  reviews:             ReviewEntry[]
-  outcome:             'resolved' | 'dropped' | 'other' | null
-  outcome_note:        string | null
-  closed_at:           string | null
-  closed_by_name:      string | null
-  opened_at:           string | null
+  id:                    string
+  status:                'closed'
+  root_cause_categories: string[]
+  root_cause_notes:      string | null
+  action_items:          ActionItem[]
+  update_log:            UpdateLogEntry[]
+  outcome:               'resolved' | 'dropped' | 'other' | null
+  outcome_note:          string | null
+  closed_at:             string | null
+  closed_by_name:        string | null
+  opened_at:             string | null
 }
 
 interface Props {
@@ -55,10 +55,14 @@ export default function InterventionHistory({ history }: Props) {
                       Closed {fmtDate(iv.closed_at)}{iv.closed_by_name ? ` · ${iv.closed_by_name}` : ''}
                     </span>
                   </div>
-                  {iv.root_cause_category && (
-                    <p className="text-sm font-medium text-zinc-700">
-                      Root cause: <span className="text-zinc-600 font-normal">{iv.root_cause_category}</span>
-                    </p>
+                  {iv.root_cause_categories?.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {iv.root_cause_categories.map((cat) => (
+                        <span key={cat} className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
                   )}
                   {iv.root_cause_notes && (
                     <p className="text-xs text-zinc-500">{iv.root_cause_notes}</p>
@@ -71,7 +75,7 @@ export default function InterventionHistory({ history }: Props) {
                 </div>
                 <div className="shrink-0 text-right text-xs text-zinc-400">
                   {total > 0 && <div>{doneCount}/{total} actions done</div>}
-                  {iv.reviews && iv.reviews.length > 0 && <div>{iv.reviews.length} review{iv.reviews.length !== 1 ? 's' : ''}</div>}
+                  {iv.update_log && iv.update_log.length > 0 && <div>{iv.update_log.length} update{iv.update_log.length !== 1 ? 's' : ''}</div>}
                 </div>
               </div>
 
@@ -90,13 +94,16 @@ export default function InterventionHistory({ history }: Props) {
                 </ul>
               )}
 
-              {/* Reviews */}
-              {iv.reviews && iv.reviews.length > 0 && (
-                <ul className="mt-3 space-y-1.5 border-t border-zinc-100 pt-3">
-                  {iv.reviews.map((r, i) => (
-                    <li key={i} className="text-xs text-zinc-600">
-                      <span className="text-zinc-400">{fmtDate(r.at)}{r.by_name ? ` · ${r.by_name}` : ''}: </span>
-                      {r.note}
+              {/* Update log */}
+              {iv.update_log && iv.update_log.length > 0 && (
+                <ul className="mt-3 space-y-2 border-t border-zinc-100 pt-3">
+                  {iv.update_log.map((r, i) => (
+                    <li key={i} className="text-xs">
+                      <span className="text-zinc-400">{fmtDate(r.at)}{r.by_name ? ` · ${r.by_name}` : ''}</span>
+                      <p className="mt-0.5 text-zinc-600">{r.note}</p>
+                      {r.decision_date_pushed_to && (
+                        <p className="mt-0.5 text-zinc-400">Decision date pushed to {fmtDate(r.decision_date_pushed_to)}</p>
+                      )}
                     </li>
                   ))}
                 </ul>

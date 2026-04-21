@@ -7,7 +7,7 @@ import LearningDashboard, {
   type LearnerRow,
   type MetricCol,
 } from '@/components/learning/LearningDashboard'
-import InterventionPanel, { type Intervention, type StaffUser, type ActionItem, type ReviewEntry } from '@/components/learning/InterventionPanel'
+import InterventionPanel, { type Intervention, type StaffUser, type ActionItem, type UpdateLogEntry } from '@/components/learning/InterventionPanel'
 import LearnerSearchBox from '@/components/learning/LearnerSearchBox'
 import MetricsSection, { type MetricRow } from '@/components/learning/MetricsSection'
 import InterventionsTable, { type InterventionRow } from '@/components/learning/InterventionsTable'
@@ -18,6 +18,7 @@ import {
   topoSortMetrics,
   computeAllForLearner,
 } from '@/lib/learning/compute'
+import { readSettings } from '@/lib/settings-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,11 +58,11 @@ export default async function LearningPage({ searchParams }: Props) {
     learnersQuery,
     supabase.from('metrics').select('*').order('created_at'),
     supabase.from('learners').select('sub_cohort').eq('is_current_cohort', true),
-    supabase.from('interventions').select('id, learner_id, status, resurface_date').neq('status', 'closed'),
+    supabase.from('interventions').select('id, learner_id, status, decision_date').neq('status', 'closed'),
   ])
 
   const interventionMap = new Map(
-    (interventionsRaw ?? []).map((iv) => [iv.learner_id, iv as { id: string; learner_id: string; status: string; resurface_date: string | null }])
+    (interventionsRaw ?? []).map((iv) => [iv.learner_id, iv as { id: string; learner_id: string; status: string; decision_date: string | null }])
   )
 
   const subCohortOptions = Array.from(
@@ -165,8 +166,8 @@ export default async function LearningPage({ searchParams }: Props) {
   learnerRows.sort((a, b) => {
     const score = (iv: LearnerRow['intervention']) => {
       if (!iv) return 3
-      if (iv.status === 'monitoring' && iv.resurface_date && iv.resurface_date <= today) return 0
-      if (iv.status === 'monitoring') return 1
+      if (iv.status === 'follow_up' && iv.decision_date && iv.decision_date <= today) return 0
+      if (iv.status === 'follow_up') return 1
       return 2
     }
     return score(a.intervention) - score(b.intervention)
@@ -193,15 +194,30 @@ export default async function LearningPage({ searchParams }: Props) {
   let selectedMetricRows: MetricRow[] = []
   let selectedHistory: ClosedIntervention[] = []
   let interventionRows: InterventionRow[] = []
+  let interventionCategories: string[] = [
+    'Life circumstance',
+    'Content difficulty',
+    'Motivation / confidence',
+    'External commitments',
+    'Other',
+  ]
+  let interventionChecklistItems: string[] = [
+    'Attendance',
+    'Assignment completion',
+    'Quiz / assessment scores',
+    'Coding task progress',
+    'Engagement / participation',
+  ]
 
   if (filter === 'interventions') {
-    const [{ data: allCohort }, { data: staff }] = await Promise.all([
+    const [{ data: allCohort }, { data: staff }, settingsMap] = await Promise.all([
       supabase
         .from('learners')
         .select('learner_id, users!learners_user_id_fkey(name, email)')
         .eq('is_current_cohort', true)
         .order('lf_name'),
       supabase.from('users').select('id, name, role').in('role', ['admin', 'staff']).order('name'),
+      readSettings(['root_cause_categories', 'intervention_checklist_items']),
     ])
 
     cohortLearners = (allCohort ?? []).map((l) => {
@@ -209,26 +225,29 @@ export default async function LearningPage({ searchParams }: Props) {
       return { learner_id: l.learner_id, name: showPII ? (u?.name ?? l.learner_id) : maskName(u?.name, l.learner_id), email: showPII ? (u?.email ?? '') : maskEmail(u?.email) }
     })
     staffUsers = (staff ?? []) as StaffUser[]
+    if (settingsMap['root_cause_categories'])       interventionCategories     = settingsMap['root_cause_categories'] as string[]
+    if (settingsMap['intervention_checklist_items']) interventionChecklistItems = settingsMap['intervention_checklist_items'] as string[]
 
     if (interventionView === 'table') {
       const { data: ivRows } = await supabase
         .from('interventions')
-        .select('id, learner_id, status, root_cause_category, action_items, resurface_date')
+        .select('id, learner_id, status, root_cause_categories, action_items, decision_date')
         .neq('status', 'closed')
-        .order('resurface_date', { ascending: true, nullsFirst: false })
+        .order('decision_date', { ascending: true, nullsFirst: false })
 
       const learnerNameById = new Map(cohortLearners.map((l) => [l.learner_id, l.name]))
       interventionRows = (ivRows ?? []).map((iv) => {
-        const items = (iv.action_items ?? []) as ActionItem[]
+        const items       = (iv.action_items ?? []) as ActionItem[]
+        const rootCats    = ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? [])
         return {
           id:                 iv.id,
           learner_id:         iv.learner_id,
           learner_name:       learnerNameById.get(iv.learner_id) ?? iv.learner_id,
           status:             iv.status as InterventionRow['status'],
-          root_cause_filled:  !!iv.root_cause_category,
+          root_cause_filled:  rootCats.length > 0,
           total_action_items: items.length,
           done_action_items:  items.filter((it) => !!it.completed_at).length,
-          resurface_date:     iv.resurface_date ?? null,
+          decision_date:      (iv as unknown as { decision_date: string | null }).decision_date ?? null,
         }
       })
     }
@@ -242,13 +261,13 @@ export default async function LearningPage({ searchParams }: Props) {
           .single(),
         supabase
           .from('interventions')
-          .select('id, learner_id, status, root_cause_category, root_cause_notes, step1_completed_at, action_items, step2_completed_at, resurface_date, last_reviewed_at, reviews')
+          .select('id, learner_id, status, flagged_items, what_wrong_notes, root_cause_categories, root_cause_notes, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
           .eq('learner_id', selectedLearnerId)
           .neq('status', 'closed')
           .maybeSingle(),
         supabase
           .from('interventions')
-          .select('id, status, root_cause_category, root_cause_notes, action_items, reviews, outcome, outcome_note, closed_at, created_at, closed_by_user:users!interventions_closer_fkey(name)')
+          .select('id, status, root_cause_categories, root_cause_notes, action_items, update_log, outcome, outcome_note, closed_at, created_at, closed_by_user:users!interventions_closer_fkey(name)')
           .eq('learner_id', selectedLearnerId)
           .eq('status', 'closed')
           .order('closed_at', { ascending: false }),
@@ -257,10 +276,10 @@ export default async function LearningPage({ searchParams }: Props) {
       selectedHistory = (closedRaw ?? []).map((iv) => ({
         id:                  iv.id,
         status:              'closed',
-        root_cause_category: iv.root_cause_category ?? null,
+        root_cause_categories: ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
         root_cause_notes:    iv.root_cause_notes ?? null,
         action_items:        (iv.action_items ?? []) as ActionItem[],
-        reviews:             (iv.reviews ?? []) as ReviewEntry[],
+        update_log:          (iv.update_log ?? []) as UpdateLogEntry[],
         outcome:             (iv.outcome ?? null) as ClosedIntervention['outcome'],
         outcome_note:        iv.outcome_note ?? null,
         closed_at:           iv.closed_at ?? null,
@@ -282,48 +301,25 @@ export default async function LearningPage({ searchParams }: Props) {
           new_batch:  (sl as unknown as { new_batch: string | null }).new_batch ?? null,
         }
 
-        // Fetch + compute metrics for this learner
-        if (slEmail && metricDefs.length > 0) {
-          const { data: rawRowsData } = await supabase
-            .from('metric_raw_rows')
-            .select('source_id, learner_id, dimensions, value')
-            .eq('learner_id', slEmail)
-            .limit(10000)
-
-          const rawRows: RawRow[] = (rawRowsData ?? []).map((r) => ({
-            source_id:  r.source_id,
-            learner_id: r.learner_id,
-            dimensions: (r.dimensions ?? {}) as Record<string, string | null>,
-            value:      r.value,
-          }))
-          const bySource = new Map<string, RawRow[]>()
-          for (const row of rawRows) {
-            if (!bySource.has(row.source_id)) bySource.set(row.source_id, [])
-            bySource.get(row.source_id)!.push(row)
-          }
-          const ordered = topoSortMetrics(metricDefs)
-          const computed = computeAllForLearner(ordered, bySource)
-          selectedMetricRows = metricDefs.map((m) => ({
-            id:       m.id,
-            name:     m.name,
-            computed: computed[m.id],
-          }))
-        }
+        // Metrics are shown in Deep Dive, not here
       }
 
       if (iv) {
         selectedIntervention = {
-          id:                  iv.id,
-          learner_id:          iv.learner_id,
-          status:              iv.status as Intervention['status'],
-          root_cause_category: iv.root_cause_category ?? null,
-          root_cause_notes:    iv.root_cause_notes ?? null,
-          step1_completed_at:  iv.step1_completed_at ?? null,
-          action_items:        (iv.action_items ?? []) as Intervention['action_items'],
-          step2_completed_at:  iv.step2_completed_at ?? null,
-          resurface_date:      iv.resurface_date ?? null,
-          last_reviewed_at:    iv.last_reviewed_at ?? null,
-          reviews:             (iv.reviews ?? []) as Intervention['reviews'],
+          id:                    iv.id,
+          learner_id:            iv.learner_id,
+          status:                iv.status as Intervention['status'],
+          flagged_items:         ((iv as unknown as { flagged_items?: string[] }).flagged_items ?? []),
+          what_wrong_notes:      (iv as unknown as { what_wrong_notes?: string | null }).what_wrong_notes ?? null,
+          root_cause_categories: ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
+          root_cause_notes:      iv.root_cause_notes ?? null,
+          step1_completed_at:    iv.step1_completed_at ?? null,
+          step2_completed_at:    iv.step2_completed_at ?? null,
+          step3_completed_at:    (iv as unknown as { step3_completed_at?: string | null }).step3_completed_at ?? null,
+          action_items:          (iv.action_items ?? []) as Intervention['action_items'],
+          decision_date:         (iv as unknown as { decision_date: string | null }).decision_date ?? null,
+          last_reviewed_at:      iv.last_reviewed_at ?? null,
+          update_log:            ((iv as unknown as { update_log?: unknown[] }).update_log ?? []) as Intervention['update_log'],
         }
       }
     }
@@ -392,14 +388,12 @@ export default async function LearningPage({ searchParams }: Props) {
                 <div className="space-y-6">
                   <LearnerInfoCard learner={selectedLearnerData} />
 
-                  {selectedMetricRows.length > 0 && (
-                    <MetricsSection metrics={selectedMetricRows} />
-                  )}
-
                   <InterventionPanel
                     learnerId={selectedLearnerData.learner_id}
                     intervention={selectedIntervention}
                     staffUsers={staffUsers}
+                    categories={interventionCategories}
+                    checklistItems={interventionChecklistItems}
                   />
 
                   {selectedHistory.length > 0 && (
@@ -415,7 +409,7 @@ export default async function LearningPage({ searchParams }: Props) {
           )}
 
           {interventionView === 'table' && (
-            <InterventionsTable rows={interventionRows} />
+            <InterventionsTable rows={interventionRows} learners={cohortLearners} />
           )}
         </div>
       )}
@@ -451,7 +445,7 @@ function LearnerInfoCard({ learner }: {
             {initials}
           </div>
           <div>
-            <h2 className="text-base font-bold text-zinc-900">{learner.name}</h2>
+            <Link href={`/learning/deep-dive?learner=${learner.learner_id}`} className="text-base font-bold text-zinc-900 hover:underline">{learner.name}</Link>
             <p className="text-sm text-zinc-500">{learner.email}</p>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
               <span className="font-mono">{learner.learner_id}</span>

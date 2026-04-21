@@ -55,7 +55,7 @@ export type LearnerRow = {
   new_batch:    string | null
   new_mentor:   string | null
   metrics:      Record<string, ComputedMetric>
-  intervention: { id: string; status: string; resurface_date: string | null } | null
+  intervention: { id: string; status: string; decision_date: string | null } | null
 }
 
 export type MetricCol = {
@@ -187,9 +187,9 @@ function InterventionCell({ row }: { row: LearnerRow }) {
   }
 
   const needsReview =
-    intervention.status === 'monitoring' &&
-    intervention.resurface_date !== null &&
-    intervention.resurface_date <= today
+    intervention.status === 'follow_up' &&
+    intervention.decision_date !== null &&
+    intervention.decision_date <= today
 
   const label =
     needsReview                               ? 'Needs review'
@@ -292,10 +292,10 @@ const fixedColumns = [
 function interventionLabel(iv: LearnerRow['intervention']): string {
   if (!iv) return 'No intervention'
   const today = new Date().toISOString().slice(0, 10)
-  if (iv.status === 'monitoring' && iv.resurface_date && iv.resurface_date <= today) return 'Needs review'
+  if (iv.status === 'follow_up' && iv.decision_date && iv.decision_date <= today) return 'Needs review'
   if (iv.status === 'open')        return 'Open'
   if (iv.status === 'in_progress') return 'In progress'
-  if (iv.status === 'monitoring')  return 'Monitoring'
+  if (iv.status === 'follow_up')   return 'Follow-up'
   return 'No intervention'
 }
 

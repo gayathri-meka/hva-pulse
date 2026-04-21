@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   useReactTable,
@@ -16,6 +17,7 @@ import {
   type FilterFn,
   type Column,
 } from '@tanstack/react-table'
+import { startIntervention } from '@/app/(protected)/learning/actions'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -23,15 +25,21 @@ export type InterventionRow = {
   id:                  string
   learner_id:          string
   learner_name:        string
-  status:              'open' | 'in_progress' | 'monitoring'
+  status:              'open' | 'in_progress' | 'follow_up'
   root_cause_filled:   boolean
   total_action_items:  number
   done_action_items:   number
-  resurface_date:      string | null
+  decision_date:       string | null
+}
+
+export type LearnerOption = {
+  learner_id: string
+  name:       string
 }
 
 interface Props {
-  rows: InterventionRow[]
+  rows:     InterventionRow[]
+  learners: LearnerOption[]
 }
 
 // ── Filter ─────────────────────────────────────────────────────────────────────
@@ -112,14 +120,129 @@ function FilterDropdown({ column }: { column: Column<InterventionRow, unknown> }
   )
 }
 
+// ── New Intervention Modal ─────────────────────────────────────────────────────
+
+function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]; onClose: () => void }) {
+  const router                    = useRouter()
+  const [query, setQuery]         = useState('')
+  const [selected, setSelected]   = useState<LearnerOption | null>(null)
+  const [dropOpen, setDropOpen]   = useState(false)
+  const [isPending, startTrans]   = useTransition()
+  const [error, setError]         = useState('')
+  const inputRef                  = useRef<HTMLInputElement>(null)
+  const dropRef                   = useRef<HTMLDivElement>(null)
+
+  const filtered = query.trim()
+    ? learners.filter((l) => l.name.toLowerCase().includes(query.toLowerCase()))
+    : learners
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  function pick(l: LearnerOption) {
+    setSelected(l)
+    setQuery(l.name)
+    setDropOpen(false)
+  }
+
+  function handleCreate() {
+    if (!selected) return
+    setError('')
+    startTrans(async () => {
+      try {
+        await startIntervention(selected.learner_id)
+        router.refresh()
+        onClose()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-bold text-zinc-900">New intervention</h2>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="mb-4 text-sm text-zinc-500">Search for a learner to start an intervention.</p>
+
+        <div ref={dropRef} className="relative">
+          <input
+            ref={inputRef}
+            type="text"
+            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            placeholder="Search learner name…"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSelected(null); setDropOpen(true) }}
+            onFocus={() => setDropOpen(true)}
+          />
+          {dropOpen && filtered.length > 0 && (
+            <div className="absolute left-0 top-full z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
+              {filtered.map((l) => (
+                <button
+                  key={l.learner_id}
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                  onMouseDown={(e) => { e.preventDefault(); pick(l) }}
+                >
+                  {l.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {dropOpen && query.trim() && filtered.length === 0 && (
+            <div className="absolute left-0 top-full z-10 mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-lg">
+              <p className="text-sm text-zinc-400">No learners found.</p>
+            </div>
+          )}
+        </div>
+
+        {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:border-zinc-300 hover:text-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!selected || isPending}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40"
+          >
+            {isPending ? 'Creating…' : 'Create intervention'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function statusLabel(row: InterventionRow): string {
   const today = new Date().toISOString().slice(0, 10)
-  if (row.status === 'monitoring' && row.resurface_date && row.resurface_date <= today) return 'Needs review'
+  if (row.status === 'follow_up' && row.decision_date && row.decision_date <= today) return 'Needs review'
   if (row.status === 'open')        return 'Open'
   if (row.status === 'in_progress') return 'In progress'
-  if (row.status === 'monitoring')  return 'Monitoring'
+  if (row.status === 'follow_up')   return 'Follow-up'
   return 'Open'
 }
 
@@ -202,12 +325,12 @@ const columns = [
       )
     },
   }),
-  col.accessor('resurface_date', {
-    id:     'resurface_date',
-    header: 'Resurface date',
+  col.accessor('decision_date', {
+    id:     'decision_date',
+    header: 'Decision date',
     sortingFn: (a, b) => {
-      const av = a.original.resurface_date ?? ''
-      const bv = b.original.resurface_date ?? ''
+      const av = a.original.decision_date ?? ''
+      const bv = b.original.decision_date ?? ''
       return av.localeCompare(bv)
     },
     cell: (info) => {
@@ -226,9 +349,10 @@ const columns = [
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function InterventionsTable({ rows }: Props) {
+export default function InterventionsTable({ rows, learners }: Props) {
   const [sorting,       setSorting]       = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [showModal,     setShowModal]     = useState(false)
 
   const table = useReactTable({
     data:    rows,
@@ -244,14 +368,6 @@ export default function InterventionsTable({ rows }: Props) {
     getRowId: (row) => row.id,
   })
 
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-xl border border-zinc-200 px-8 py-12 text-center">
-        <p className="text-sm text-zinc-400">No active interventions yet.</p>
-      </div>
-    )
-  }
-
   const filteredCount = table.getFilteredRowModel().rows.length
   const rowCountText  =
     filteredCount === rows.length
@@ -260,47 +376,63 @@ export default function InterventionsTable({ rows }: Props) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-end">
+      <div className="mb-3 flex items-center justify-between">
         <span className="text-sm text-zinc-500">{rowCountText}</span>
+        <button
+          onClick={() => setShowModal(true)}
+          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700"
+        >
+          + New intervention
+        </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                {table.getFlatHeaders().map((header) => (
-                  <th
-                    key={header.id}
-                    className="select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
-                  >
-                    <div
-                      className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
-                      onClick={header.column.getToggleSortingHandler()}
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-zinc-200 px-8 py-12 text-center">
+          <p className="text-sm text-zinc-400">No active interventions yet.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
+                  {table.getFlatHeaders().map((header) => (
+                    <th
+                      key={header.id}
+                      className="select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                     >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === 'asc'  && <span className="text-zinc-400">↑</span>}
-                      {header.column.getIsSorted() === 'desc' && <span className="text-zinc-400">↓</span>}
-                    </div>
-                    {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-zinc-50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+                      <div
+                        className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getIsSorted() === 'asc'  && <span className="text-zinc-400">↑</span>}
+                        {header.column.getIsSorted() === 'desc' && <span className="text-zinc-400">↓</span>}
+                      </div>
+                      {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {table.getRowModel().rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-zinc-50">
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-3">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {showModal && (
+        <NewInterventionModal learners={learners} onClose={() => setShowModal(false)} />
+      )}
     </div>
   )
 }

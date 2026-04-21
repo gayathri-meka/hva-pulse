@@ -17,15 +17,13 @@ function adminClient() {
   )
 }
 
-export async function savePlacementSetting(key: string, value: unknown) {
+export async function saveLearningSettings(key: string, value: unknown) {
   await requireAdmin()
   const supabase = adminClient()
   const { error } = await supabase
     .from('settings')
     .upsert({ key, value, updated_at: new Date().toISOString() })
   if (error) throw new Error(error.message)
-  revalidatePath('/placements/settings')
-  revalidatePath('/placements/analytics')
-  revalidatePath('/placements/matching')
-  revalidatePath('/placements/applications')
+  revalidatePath('/learning/settings')
+  revalidatePath('/learning')
 }

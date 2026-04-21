@@ -317,9 +317,17 @@ export async function startIntervention(learnerId: string) {
     .maybeSingle()
   if (existing) throw new Error('Learner already has an active intervention')
 
+  const now           = new Date()
+  const decisionDate  = new Date(now)
+  decisionDate.setDate(decisionDate.getDate() + 14)
+
   const { data, error } = await supabase
     .from('interventions')
-    .insert({ learner_id: learnerId, opened_by: user.id })
+    .insert({
+      learner_id:    learnerId,
+      opened_by:     user.id,
+      decision_date: decisionDate.toISOString().slice(0, 10),
+    })
     .select('id')
     .single()
   if (error) throw new Error(error.message)
@@ -328,17 +336,19 @@ export async function startIntervention(learnerId: string) {
   return data.id
 }
 
+// Step 1: "What's wrong?" — checklist items + free text
 export async function saveInterventionStep1(
   id: string,
-  data: { root_cause_category: string; root_cause_notes: string },
+  data: { flagged_items: string[]; what_wrong_notes: string },
 ) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
     .from('interventions')
     .update({
-      ...data,
-      status:            'in_progress',
+      flagged_items:      data.flagged_items,
+      what_wrong_notes:   data.what_wrong_notes || null,
+      status:             'in_progress',
       step1_completed_at: new Date().toISOString(),
       updated_at:         new Date().toISOString(),
     })
@@ -347,23 +357,41 @@ export async function saveInterventionStep1(
   revalidatePath('/learning')
 }
 
+// Step 2: "Why?" — root cause categories (multi-select) + notes
 export async function saveInterventionStep2(
+  id: string,
+  data: { root_cause_categories: string[]; root_cause_notes: string },
+) {
+  await requireStaff()
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('interventions')
+    .update({
+      root_cause_categories: data.root_cause_categories,
+      root_cause_notes:      data.root_cause_notes || null,
+      step2_completed_at:    new Date().toISOString(),
+      updated_at:            new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+}
+
+// Step 3: "What next?" — action items (initial save, transitions to follow_up)
+export async function saveInterventionStep3(
   id: string,
   actionItems: { description: string; owner: string; due_date: string | null }[],
 ) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const now      = new Date()
-  const resurface = new Date(now)
-  resurface.setDate(resurface.getDate() + 7)
 
   const { error } = await supabase
     .from('interventions')
     .update({
       action_items:       actionItems,
-      status:             'monitoring',
-      step2_completed_at: now.toISOString(),
-      resurface_date:     resurface.toISOString().slice(0, 10),
+      status:             'follow_up',
+      step3_completed_at: now.toISOString(),
       updated_at:         now.toISOString(),
     })
     .eq('id', id)
@@ -394,12 +422,11 @@ export async function clearInterventionStep1(id: string) {
     .eq('id', id)
     .single()
   if (!existing) throw new Error('Intervention not found')
-  // If step 2 isn't done, status reverts to 'open'; otherwise leave status alone.
   const updates: Record<string, unknown> = {
-    root_cause_category: null,
-    root_cause_notes:    null,
-    step1_completed_at:  null,
-    updated_at:          new Date().toISOString(),
+    flagged_items:      [],
+    what_wrong_notes:   null,
+    step1_completed_at: null,
+    updated_at:         new Date().toISOString(),
   }
   if (!existing.step2_completed_at) updates.status = 'open'
 
@@ -423,50 +450,50 @@ export async function deleteIntervention(id: string) {
   if (existing?.learner_id) revalidatePath(`/learning/${existing.learner_id}`)
 }
 
-/** Update resurface date directly (no review side-effects). */
-export async function updateResurfaceDate(id: string, newDate: string) {
+/** Update decision date directly (no update-log side-effects). */
+export async function updateDecisionDate(id: string, newDate: string) {
   await requireStaff()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error('Invalid date')
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
     .from('interventions')
     .update({
-      resurface_date: newDate,
-      updated_at:     new Date().toISOString(),
+      decision_date: newDate,
+      updated_at:    new Date().toISOString(),
     })
     .eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
 }
 
-/** Save a review entry. Optionally extend the resurface date. */
-export async function saveReview(id: string, note: string, newDate: string | null) {
+/** Append an update-log entry. Optionally push the decision date. */
+export async function saveUpdate(id: string, note: string, newDecisionDate: string | null) {
   if (!note.trim()) throw new Error('Note is required')
-  if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error('Invalid date')
+  if (newDecisionDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDecisionDate)) throw new Error('Invalid date')
   const user = await requireStaff()
   const supabase = await createServerSupabaseClient()
 
   const { data: existing } = await supabase
     .from('interventions')
-    .select('reviews, learner_id')
+    .select('update_log, learner_id')
     .eq('id', id)
     .single()
   if (!existing) throw new Error('Intervention not found')
 
-  const newReview = {
-    at:                 new Date().toISOString(),
-    by:                 user.id,
-    by_name:            user.name ?? null,
-    note:               note.trim(),
-    new_resurface_date: newDate,
+  const newEntry = {
+    at:                      new Date().toISOString(),
+    by:                      user.id,
+    by_name:                 user.name ?? null,
+    note:                    note.trim(),
+    decision_date_pushed_to: newDecisionDate ?? null,
   }
 
   const updates: Record<string, unknown> = {
-    reviews:          [...((existing.reviews ?? []) as unknown[]), newReview],
+    update_log:       [...((existing.update_log ?? []) as unknown[]), newEntry],
     last_reviewed_at: new Date().toISOString(),
     updated_at:       new Date().toISOString(),
   }
-  if (newDate) updates.resurface_date = newDate
+  if (newDecisionDate) updates.decision_date = newDecisionDate
 
   const { error } = await supabase.from('interventions').update(updates).eq('id', id)
   if (error) throw new Error(error.message)
