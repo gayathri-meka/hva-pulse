@@ -16,15 +16,6 @@ interface Props {
   computedAt: string
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  Ongoing:         'bg-emerald-100 text-emerald-700',
-  'On Hold':       'bg-orange-100 text-orange-700',
-  Dropout:         'bg-red-100 text-red-700',
-  Discontinued:    'bg-zinc-200 text-zinc-600',
-  'Placed - Self': 'bg-blue-100 text-blue-700',
-  'Placed - HVA':  'bg-violet-100 text-violet-700',
-}
-
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
@@ -44,7 +35,6 @@ export default function LearnerAnalysisView({ learner, analysisText, rawData, co
       }
     })
   }
-  const initials = learner.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
   const rd = rawData as {
     course_summary?: Record<string, string>[]
     weakest_areas?: Record<string, string>[]
@@ -55,36 +45,10 @@ export default function LearnerAnalysisView({ learner, analysisText, rawData, co
 
   return (
     <div className="space-y-6">
-      {/* Learner info card */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-500">
-              {initials}
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-zinc-900">{learner.name}</h2>
-              <p className="text-sm text-zinc-500">{learner.email}</p>
-              <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-400">
-                {learner.batch_name && <span>{learner.batch_name}</span>}
-                {learner.lf_name && <span>LF: {learner.lf_name}</span>}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            {learner.status && (
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[learner.status] ?? 'bg-zinc-100 text-zinc-600'}`}>
-                {learner.status}
-              </span>
-            )}
-            <span className="text-[10px] text-zinc-400">Analysis from {fmtDate(computedAt)}</span>
-          </div>
-        </div>
-      </div>
-
       {/* Analysis text — rendered as markdown-ish sections */}
       {analysisText && (
         <div className="rounded-xl border border-zinc-200 bg-white p-6">
+          <p className="mb-3 text-[10px] text-zinc-400">Analysis from {fmtDate(computedAt)}</p>
           <AnalysisMarkdown text={analysisText} />
         </div>
       )}
