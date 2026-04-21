@@ -201,7 +201,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
                 )}
                 {activeInterventionId && (
                   <Link
-                    href={`/learning/${selectedLearnerId}`}
+                    href={`/learning?filter=interventions&view=learner&learner=${selectedLearnerId}`}
                     className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
                   >
                     View intervention
