@@ -36,7 +36,17 @@ export default async function DeepDivePage({ searchParams }: Props) {
 
   // Fetch selected learner's analysis + metrics
   let analysis: { raw_data: unknown; analysis_text: string | null; computed_at: string } | null = null
-  let learnerInfo: { name: string; email: string; batch_name: string | null; lf_name: string | null; status: string | null } | null = null
+  let learnerInfo: {
+    name:       string
+    email:      string
+    batch_name: string | null
+    lf_name:    string | null
+    new_batch:  string | null
+    new_lf:     string | null
+    track:      string | null
+    status:     string | null
+  } | null = null
+  let activeInterventionId: string | null = null
   let metricRows: MetricRow[] = []
 
   // Always fetch metric definitions (needed to compute values)
@@ -44,7 +54,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
   const metricDefs: MetricDef[] = metricsRaw ?? []
 
   if (selectedLearnerId) {
-    const [{ data: analysisRow }, { data: learnerRow }] = await Promise.all([
+    const [{ data: analysisRow }, { data: learnerRow }, { data: activeIv }] = await Promise.all([
       supabase
         .from('learner_analysis')
         .select('raw_data, analysis_text, computed_at')
@@ -52,10 +62,17 @@ export default async function DeepDivePage({ searchParams }: Props) {
         .maybeSingle(),
       supabase
         .from('learners')
-        .select('learner_id, lf_name, batch_name, status, users!learners_user_id_fkey(name, email)')
+        .select('learner_id, lf_name, batch_name, new_lf, new_batch, track, status, users!learners_user_id_fkey(name, email)')
         .eq('learner_id', selectedLearnerId)
         .single(),
+      supabase
+        .from('interventions')
+        .select('id')
+        .eq('learner_id', selectedLearnerId)
+        .neq('status', 'closed')
+        .maybeSingle(),
     ])
+    activeInterventionId = activeIv?.id ?? null
 
     if (analysisRow) {
       analysis = {
@@ -68,12 +85,16 @@ export default async function DeepDivePage({ searchParams }: Props) {
     if (learnerRow) {
       const u = learnerRow.users as unknown as { name: string; email: string } | null
       const email = u?.email?.trim().toLowerCase() ?? ''
+      const lr    = learnerRow as unknown as { new_batch: string | null; new_lf: string | null; track: string | null; status: string | null }
       learnerInfo = {
         name:       showPII ? (u?.name ?? selectedLearnerId) : maskName(u?.name, selectedLearnerId),
         email:      showPII ? email : maskEmail(email),
         batch_name: learnerRow.batch_name ?? null,
         lf_name:    learnerRow.lf_name ?? null,
-        status:     (learnerRow as unknown as { status: string }).status ?? null,
+        new_batch:  lr.new_batch ?? null,
+        new_lf:     lr.new_lf ?? null,
+        track:      lr.track ?? null,
+        status:     lr.status ?? null,
       }
 
       // Compute metric values for this learner
@@ -142,31 +163,58 @@ export default async function DeepDivePage({ searchParams }: Props) {
       </div>
 
       {/* Learner banner */}
-      {selectedLearnerId && learnerInfo && (
-        <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-500">
-                {learnerInfo.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-zinc-900">{learnerInfo.name}</h2>
-                <p className="text-sm text-zinc-500">{learnerInfo.email}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
-                  <span className="font-mono">{selectedLearnerId}</span>
-                  {learnerInfo.batch_name && <span>{learnerInfo.batch_name}</span>}
-                  {learnerInfo.lf_name    && <span>LF: {learnerInfo.lf_name}</span>}
+      {selectedLearnerId && learnerInfo && (() => {
+        const STATUS_BADGE: Record<string, string> = {
+          Ongoing:         'bg-emerald-100 text-emerald-700',
+          'On Hold':       'bg-orange-100 text-orange-700',
+          Dropout:         'bg-red-100 text-red-700',
+          Discontinued:    'bg-zinc-200 text-zinc-600',
+          'Placed - Self': 'bg-blue-100 text-blue-700',
+          'Placed - HVA':  'bg-violet-100 text-violet-700',
+        }
+        const initials = learnerInfo.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+        return (
+          <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-500">
+                  {initials}
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-zinc-900">{learnerInfo.name}</h1>
+                  <p className="text-sm text-zinc-500">{learnerInfo.email}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
+                    <span className="font-mono">{selectedLearnerId}</span>
+                    {learnerInfo.batch_name && <span>{learnerInfo.batch_name}</span>}
+                    {learnerInfo.lf_name    && <span>LF: {learnerInfo.lf_name}</span>}
+                    {learnerInfo.new_batch  && <span>New Batch: {learnerInfo.new_batch}</span>}
+                    {learnerInfo.new_lf     && <span>New LF: {learnerInfo.new_lf}</span>}
+                    {learnerInfo.track      && <span>{learnerInfo.track}</span>}
+                  </div>
                 </div>
               </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                {learnerInfo.status && (
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[learnerInfo.status] ?? 'bg-zinc-100 text-zinc-600'}`}>
+                    {learnerInfo.status}
+                  </span>
+                )}
+                {activeInterventionId && (
+                  <Link
+                    href={`/learning/${selectedLearnerId}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    View intervention
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </Link>
+                )}
+              </div>
             </div>
-            {learnerInfo.status && (
-              <span className="shrink-0 inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
-                {learnerInfo.status}
-              </span>
-            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Metrics */}
       {selectedLearnerId && metricRows.length > 0 && (
