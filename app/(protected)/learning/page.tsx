@@ -315,7 +315,7 @@ export default async function LearningPage({ searchParams }: Props) {
           .single(),
         supabase
           .from('interventions')
-          .select('id, learner_id, status, flagged_items, what_wrong_notes, root_cause_categories, root_cause_notes, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
+          .select('id, learner_id, status, flagged_items, what_wrong_notes, what_wrong_comments, root_cause_categories, root_cause_notes, why_comments, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
           .eq('learner_id', selectedLearnerId)
           .neq('status', 'closed')
           .maybeSingle(),
@@ -389,8 +389,10 @@ export default async function LearningPage({ searchParams }: Props) {
           status:                iv.status as Intervention['status'],
           flagged_items:         ((iv as unknown as { flagged_items?: string[] }).flagged_items ?? []),
           what_wrong_notes:      (iv as unknown as { what_wrong_notes?: string | null }).what_wrong_notes ?? null,
+          what_wrong_comments:   ((iv as unknown as { what_wrong_comments?: unknown[] }).what_wrong_comments ?? []) as Intervention['what_wrong_comments'],
           root_cause_categories: ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
           root_cause_notes:      iv.root_cause_notes ?? null,
+          why_comments:          ((iv as unknown as { why_comments?: unknown[] }).why_comments ?? []) as Intervention['why_comments'],
           step1_completed_at:    iv.step1_completed_at ?? null,
           step2_completed_at:    iv.step2_completed_at ?? null,
           step3_completed_at:    (iv as unknown as { step3_completed_at?: string | null }).step3_completed_at ?? null,
@@ -477,6 +479,8 @@ export default async function LearningPage({ searchParams }: Props) {
                     staffUsers={staffUsers}
                     categories={interventionCategories}
                     checklistItems={interventionChecklistItems}
+                    currentUserId={appUser.id}
+                    currentUserName={appUser.name ?? null}
                   />
 
                   {selectedHistory.length > 0 && (

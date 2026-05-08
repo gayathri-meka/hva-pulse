@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import JSZip from 'jszip'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 function toCsv(rows: Record<string, unknown>[]): string {
@@ -121,6 +122,84 @@ async function exportRoles(supabase: Awaited<ReturnType<typeof createServerSupab
   })
 }
 
+async function exportInterventions(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
+  const [
+    { data: ivs,      error: ivsErr   },
+    { data: learners, error: lrnErr   },
+    { data: users,    error: usersErr },
+  ] = await Promise.all([
+    supabase.from('interventions').select('*').order('created_at', { ascending: false }),
+    supabase.from('learners').select('learner_id, user_id, lf_name, batch_name'),
+    supabase.from('users').select('id, name, email'),
+  ])
+  if (ivsErr)   throw ivsErr
+  if (lrnErr)   throw lrnErr
+  if (usersErr) throw usersErr
+
+  const userMap    = Object.fromEntries((users    ?? []).map((u) => [u.id, u]))
+  const learnerMap = Object.fromEntries((learners ?? []).map((l) => [l.learner_id, l]))
+
+  type ActionItemLike = { description?: string; owner?: string; due_date?: string | null; completed_at?: string | null; completion_notes?: string | null; comments?: unknown[] }
+
+  return (ivs ?? []).map((iv) => {
+    const learner = learnerMap[iv.learner_id ?? '']
+    const user    = learner ? userMap[learner.user_id ?? ''] : null
+
+    const items = (iv.action_items ?? []) as ActionItemLike[]
+    const totalItems     = items.length
+    const completedItems = items.filter((it) => !!it.completed_at).length
+    const itemSummary    = items.map((it) =>
+      `${it.description ?? ''} [${it.owner ?? '-'}, due ${it.due_date ?? '-'}, ${it.completed_at ? 'done' : 'pending'}]`
+    ).join('; ')
+
+    const itemCommentsCount = items.reduce((acc, it) => acc + ((it.comments ?? []) as unknown[]).length, 0)
+    const whatWrongCommentsCount = ((iv.what_wrong_comments ?? []) as unknown[]).length
+    const whyCommentsCount       = ((iv.why_comments        ?? []) as unknown[]).length
+
+    return {
+      id:                       iv.id,
+      learner_id:               iv.learner_id ?? '',
+      learner_name:             user?.name  ?? '',
+      learner_email:            user?.email ?? '',
+      lf_name:                  learner?.lf_name ?? '',
+      batch_name:               learner?.batch_name ?? '',
+      status:                   iv.status ?? '',
+      outcome:                  iv.outcome ?? '',
+      outcome_note:             iv.outcome_note ?? '',
+      flagged_items:            ((iv.flagged_items ?? []) as string[]).join('; '),
+      what_wrong_notes:         iv.what_wrong_notes ?? '',
+      root_cause_categories:    ((iv.root_cause_categories ?? []) as string[]).join('; '),
+      root_cause_notes:         iv.root_cause_notes ?? '',
+      total_action_items:       totalItems,
+      completed_action_items:   completedItems,
+      action_items_summary:     itemSummary,
+      action_item_comments:     itemCommentsCount,
+      what_wrong_comments:      whatWrongCommentsCount,
+      why_comments:             whyCommentsCount,
+      created_at:               iv.created_at ?? '',
+      step1_completed_at:       iv.step1_completed_at ?? '',
+      step2_completed_at:       iv.step2_completed_at ?? '',
+      step3_completed_at:       iv.step3_completed_at ?? '',
+      decision_date:            iv.decision_date ?? '',
+      last_reviewed_at:         iv.last_reviewed_at ?? '',
+      closed_at:                iv.closed_at ?? '',
+    }
+  })
+}
+
+async function exportPlacementZip(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>): Promise<Buffer> {
+  const [apps, companies, roles] = await Promise.all([
+    exportApplications(supabase),
+    exportCompanies(supabase),
+    exportRoles(supabase),
+  ])
+  const zip = new JSZip()
+  zip.file('applications.csv', toCsv(apps))
+  zip.file('companies.csv',    toCsv(companies))
+  zip.file('roles.csv',        toCsv(roles))
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
@@ -134,6 +213,17 @@ export async function GET(req: NextRequest) {
     const table = req.nextUrl.searchParams.get('table')
     const date  = new Date().toISOString().slice(0, 10)
 
+    // Bundled placement download (zip of applications/companies/roles)
+    if (table === 'placement') {
+      const buf = await exportPlacementZip(supabase)
+      return new NextResponse(buf, {
+        headers: {
+          'Content-Type':        'application/zip',
+          'Content-Disposition': `attachment; filename="placement-data-${date}.zip"`,
+        },
+      })
+    }
+
     let rows: Record<string, unknown>[]
     let filename: string
 
@@ -141,6 +231,10 @@ export async function GET(req: NextRequest) {
       case 'alumni':
         rows     = await exportAlumni(supabase)
         filename = `alumni-${date}.csv`
+        break
+      case 'interventions':
+        rows     = await exportInterventions(supabase)
+        filename = `interventions-${date}.csv`
         break
       case 'applications':
         rows     = await exportApplications(supabase)
@@ -155,7 +249,7 @@ export async function GET(req: NextRequest) {
         filename = `roles-${date}.csv`
         break
       default:
-        return NextResponse.json({ error: 'Unknown table. Use: alumni, applications, companies, roles' }, { status: 400 })
+        return NextResponse.json({ error: 'Unknown table. Use: alumni, interventions, placement, applications, companies, roles' }, { status: 400 })
     }
 
     const csv = toCsv(rows)

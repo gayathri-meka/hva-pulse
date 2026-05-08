@@ -408,6 +408,219 @@ export async function saveActionItems(
   revalidatePath('/learning')
 }
 
+// ── Action item comments ──────────────────────────────────────────────────────
+
+type StoredComment = {
+  id:        string
+  by:        string
+  by_name:   string | null
+  at:        string
+  text:      string
+  edited_at: string | null
+}
+
+type StoredActionItem = {
+  description:      string
+  owner:            string
+  due_date:         string | null
+  completed_at:     string | null
+  completion_notes: string | null
+  comments?:        StoredComment[]
+}
+
+async function loadInterventionItems(id: string): Promise<StoredActionItem[]> {
+  const supabase = await createServerSupabaseClient()
+  const { data, error } = await supabase
+    .from('interventions')
+    .select('action_items')
+    .eq('id', id)
+    .single()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Intervention not found')
+  return ((data.action_items ?? []) as StoredActionItem[])
+}
+
+async function writeInterventionItems(id: string, items: StoredActionItem[]) {
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('interventions')
+    .update({ action_items: items, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function addActionItemComment(
+  interventionId: string,
+  itemIdx:        number,
+  comment:        StoredComment,
+) {
+  if (!comment.text?.trim()) throw new Error('Comment cannot be empty')
+  const user = await requireStaff()
+  const items = await loadInterventionItems(interventionId)
+  if (itemIdx < 0 || itemIdx >= items.length) throw new Error('Action item not found')
+
+  // Stamp with the authenticated user — never trust the client's "by" field.
+  const safe: StoredComment = {
+    id:        comment.id,
+    by:        user.id,
+    by_name:   user.name ?? null,
+    at:        new Date().toISOString(),
+    text:      comment.text.trim(),
+    edited_at: null,
+  }
+
+  const updated = items.map((item, i) =>
+    i === itemIdx
+      ? { ...item, comments: [...(item.comments ?? []), safe] }
+      : item
+  )
+  await writeInterventionItems(interventionId, updated)
+  revalidatePath('/learning')
+}
+
+export async function editActionItemComment(
+  interventionId: string,
+  itemIdx:        number,
+  commentId:      string,
+  newText:        string,
+) {
+  if (!newText.trim()) throw new Error('Comment cannot be empty')
+  const user = await requireStaff()
+  const items = await loadInterventionItems(interventionId)
+  if (itemIdx < 0 || itemIdx >= items.length) throw new Error('Action item not found')
+
+  const target = items[itemIdx]
+  const comments = target.comments ?? []
+  const found = comments.find((c) => c.id === commentId)
+  if (!found) throw new Error('Comment not found')
+  if (found.by !== user.id) throw new Error('You can only edit your own comments')
+
+  const nextComments = comments.map((c) =>
+    c.id === commentId
+      ? { ...c, text: newText.trim(), edited_at: new Date().toISOString() }
+      : c
+  )
+  const updated = items.map((item, i) =>
+    i === itemIdx ? { ...item, comments: nextComments } : item
+  )
+  await writeInterventionItems(interventionId, updated)
+  revalidatePath('/learning')
+}
+
+export async function deleteActionItemComment(
+  interventionId: string,
+  itemIdx:        number,
+  commentId:      string,
+) {
+  const user = await requireStaff()
+  const items = await loadInterventionItems(interventionId)
+  if (itemIdx < 0 || itemIdx >= items.length) throw new Error('Action item not found')
+
+  const target = items[itemIdx]
+  const comments = target.comments ?? []
+  const found = comments.find((c) => c.id === commentId)
+  if (!found) throw new Error('Comment not found')
+  if (found.by !== user.id) throw new Error('You can only delete your own comments')
+
+  const nextComments = comments.filter((c) => c.id !== commentId)
+  const updated = items.map((item, i) =>
+    i === itemIdx ? { ...item, comments: nextComments } : item
+  )
+  await writeInterventionItems(interventionId, updated)
+  revalidatePath('/learning')
+}
+
+// ── Step 1 / Step 2 comment threads ──────────────────────────────────────────
+
+export type StepKey = 'what_wrong' | 'why'
+
+const STEP_COLUMN: Record<StepKey, 'what_wrong_comments' | 'why_comments'> = {
+  what_wrong: 'what_wrong_comments',
+  why:        'why_comments',
+}
+
+async function loadStepComments(interventionId: string, step: StepKey): Promise<StoredComment[]> {
+  const supabase = await createServerSupabaseClient()
+  const column = STEP_COLUMN[step]
+  const { data, error } = await supabase
+    .from('interventions')
+    .select(column)
+    .eq('id', interventionId)
+    .single()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Intervention not found')
+  return ((data as Record<string, unknown>)[column] ?? []) as StoredComment[]
+}
+
+async function writeStepComments(interventionId: string, step: StepKey, comments: StoredComment[]) {
+  const supabase = await createServerSupabaseClient()
+  const column = STEP_COLUMN[step]
+  const { error } = await supabase
+    .from('interventions')
+    .update({ [column]: comments, updated_at: new Date().toISOString() })
+    .eq('id', interventionId)
+  if (error) throw new Error(error.message)
+}
+
+export async function addStepComment(
+  interventionId: string,
+  step:           StepKey,
+  comment:        StoredComment,
+) {
+  if (!comment.text?.trim()) throw new Error('Comment cannot be empty')
+  const user = await requireStaff()
+  const existing = await loadStepComments(interventionId, step)
+
+  const safe: StoredComment = {
+    id:        comment.id,
+    by:        user.id,
+    by_name:   user.name ?? null,
+    at:        new Date().toISOString(),
+    text:      comment.text.trim(),
+    edited_at: null,
+  }
+  await writeStepComments(interventionId, step, [...existing, safe])
+  revalidatePath('/learning')
+}
+
+export async function editStepComment(
+  interventionId: string,
+  step:           StepKey,
+  commentId:      string,
+  newText:        string,
+) {
+  if (!newText.trim()) throw new Error('Comment cannot be empty')
+  const user = await requireStaff()
+  const existing = await loadStepComments(interventionId, step)
+  const found = existing.find((c) => c.id === commentId)
+  if (!found) throw new Error('Comment not found')
+  if (found.by !== user.id) throw new Error('You can only edit your own comments')
+
+  const next = existing.map((c) =>
+    c.id === commentId
+      ? { ...c, text: newText.trim(), edited_at: new Date().toISOString() }
+      : c
+  )
+  await writeStepComments(interventionId, step, next)
+  revalidatePath('/learning')
+}
+
+export async function deleteStepComment(
+  interventionId: string,
+  step:           StepKey,
+  commentId:      string,
+) {
+  const user = await requireStaff()
+  const existing = await loadStepComments(interventionId, step)
+  const found = existing.find((c) => c.id === commentId)
+  if (!found) throw new Error('Comment not found')
+  if (found.by !== user.id) throw new Error('You can only delete your own comments')
+
+  const next = existing.filter((c) => c.id !== commentId)
+  await writeStepComments(interventionId, step, next)
+  revalidatePath('/learning')
+}
+
 export async function clearInterventionStep1(id: string) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()

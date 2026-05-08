@@ -13,9 +13,26 @@ import {
   saveUpdate,
   closeIntervention,
   deleteIntervention,
+  addActionItemComment,
+  editActionItemComment,
+  deleteActionItemComment,
+  addStepComment,
+  editStepComment,
+  deleteStepComment,
 } from '@/app/(protected)/learning/actions'
 
+type StepKey = 'what_wrong' | 'why'
+
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+export type ActionItemComment = {
+  id:        string
+  by:        string
+  by_name:   string | null
+  at:        string
+  text:      string
+  edited_at: string | null
+}
 
 export type ActionItem = {
   description:      string
@@ -23,6 +40,7 @@ export type ActionItem = {
   due_date:         string | null
   completed_at:     string | null
   completion_notes: string | null
+  comments?:        ActionItemComment[]
 }
 
 export type UpdateLogEntry = {
@@ -39,8 +57,10 @@ export type Intervention = {
   status:                'open' | 'in_progress' | 'follow_up'
   flagged_items:         string[]
   what_wrong_notes:      string | null
+  what_wrong_comments:   ActionItemComment[]
   root_cause_categories: string[]
   root_cause_notes:      string | null
+  why_comments:          ActionItemComment[]
   step1_completed_at:    string | null
   step2_completed_at:    string | null
   step3_completed_at:    string | null
@@ -53,11 +73,13 @@ export type Intervention = {
 export type StaffUser = { id: string; name: string; role: string }
 
 interface Props {
-  learnerId:      string
-  intervention:   Intervention | null
-  staffUsers:     StaffUser[]
-  categories:     string[]
-  checklistItems: string[]
+  learnerId:       string
+  intervention:    Intervention | null
+  staffUsers:      StaffUser[]
+  categories:      string[]
+  checklistItems:  string[]
+  currentUserId:   string
+  currentUserName: string | null
 }
 
 // ── Shared style helpers ───────────────────────────────────────────────────────
@@ -125,7 +147,7 @@ function ConfirmDialog({ title, message, confirmLabel, isPending, error, onConfi
 
 // ── Panel ──────────────────────────────────────────────────────────────────────
 
-export default function InterventionPanel({ learnerId, intervention, staffUsers, categories, checklistItems }: Props) {
+export default function InterventionPanel({ learnerId, intervention, staffUsers, categories, checklistItems, currentUserId, currentUserName }: Props) {
   const router = useRouter()
   const [isDeleting, startDelete] = useTransition()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -154,9 +176,9 @@ export default function InterventionPanel({ learnerId, intervention, staffUsers,
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Intervention</p>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Step1Card learnerId={learnerId} intervention={intervention} checklistItems={checklistItems} />
-        <Step2Card intervention={intervention} locked={!step1Done} categories={categories} />
-        <Step3Card intervention={intervention} locked={!step2Done} staffUsers={staffUsers} />
+        <Step1Card learnerId={learnerId} intervention={intervention} checklistItems={checklistItems} currentUserId={currentUserId} currentUserName={currentUserName} />
+        <Step2Card intervention={intervention} locked={!step1Done} categories={categories} currentUserId={currentUserId} currentUserName={currentUserName} />
+        <Step3Card intervention={intervention} locked={!step2Done} staffUsers={staffUsers} currentUserId={currentUserId} currentUserName={currentUserName} />
         <Step4Card intervention={intervention} locked={!step3Done} />
       </div>
 
@@ -195,10 +217,14 @@ function Step1Card({
   learnerId,
   intervention,
   checklistItems,
+  currentUserId,
+  currentUserName,
 }: {
-  learnerId:      string
-  intervention:   Intervention | null
-  checklistItems: string[]
+  learnerId:       string
+  intervention:    Intervention | null
+  checklistItems:  string[]
+  currentUserId:   string
+  currentUserName: string | null
 }) {
   const router = useRouter()
   const [isPending, startTrans] = useTransition()
@@ -208,6 +234,8 @@ function Step1Card({
   const [notes,   setNotes]   = useState(intervention?.what_wrong_notes ?? '')
   const [error,   setError]   = useState('')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [comments,     setComments]     = useState<ActionItemComment[]>(intervention?.what_wrong_comments ?? [])
 
   function toggleItem(item: string) {
     setFlagged((prev) =>
@@ -243,9 +271,14 @@ function Step1Card({
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <StepBadge n={1} done={complete} active={!complete} />
-        <span className="text-sm font-semibold text-zinc-900">What&apos;s wrong?</span>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <StepBadge n={1} done={complete} active={!complete} />
+          <span className="text-sm font-semibold text-zinc-900">What&apos;s wrong?</span>
+        </div>
+        {intervention && (
+          <CommentToggleButton count={comments.length} onClick={() => setCommentsOpen((v) => !v)} />
+        )}
       </div>
 
       {!intervention && (
@@ -332,6 +365,18 @@ function Step1Card({
         </div>
       )}
 
+      {intervention && commentsOpen && (
+        <CommentsThread
+          comments={comments}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          onAdd={(c) => addStepComment(intervention.id, 'what_wrong', c)}
+          onEdit={(cid, text) => editStepComment(intervention.id, 'what_wrong', cid, text)}
+          onDelete={(cid) => deleteStepComment(intervention.id, 'what_wrong', cid)}
+          onCommentsChange={setComments}
+        />
+      )}
+
       {showClearConfirm && intervention && (
         <ConfirmDialog
           title="Delete 'What's wrong?' data?"
@@ -364,10 +409,14 @@ function Step2Card({
   intervention,
   locked,
   categories,
+  currentUserId,
+  currentUserName,
 }: {
-  intervention: Intervention | null
-  locked:       boolean
-  categories:   string[]
+  intervention:    Intervention | null
+  locked:          boolean
+  categories:      string[]
+  currentUserId:   string
+  currentUserName: string | null
 }) {
   const router = useRouter()
   const [isPending, startTrans] = useTransition()
@@ -376,6 +425,8 @@ function Step2Card({
   const [selected,   setSelected]   = useState<string[]>(intervention?.root_cause_categories ?? [])
   const [notes,      setNotes]      = useState(intervention?.root_cause_notes ?? '')
   const [error,      setError]      = useState('')
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [comments,     setComments]     = useState<ActionItemComment[]>(intervention?.why_comments ?? [])
 
   function toggleCategory(cat: string) {
     setSelected((prev) =>
@@ -413,9 +464,14 @@ function Step2Card({
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <StepBadge n={2} done={complete} active={!complete} />
-        <span className="text-sm font-semibold text-zinc-900">Why?</span>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <StepBadge n={2} done={complete} active={!complete} />
+          <span className="text-sm font-semibold text-zinc-900">Why?</span>
+        </div>
+        {intervention && (
+          <CommentToggleButton count={comments.length} onClick={() => setCommentsOpen((v) => !v)} />
+        )}
       </div>
 
       {intervention && editing && (
@@ -484,6 +540,18 @@ function Step2Card({
           {error && <p className="mt-1 text-xs text-[#E24B4A]">{error}</p>}
         </div>
       )}
+
+      {intervention && commentsOpen && (
+        <CommentsThread
+          comments={comments}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          onAdd={(c) => addStepComment(intervention.id, 'why', c)}
+          onEdit={(cid, text) => editStepComment(intervention.id, 'why', cid, text)}
+          onDelete={(cid) => deleteStepComment(intervention.id, 'why', cid)}
+          onCommentsChange={setComments}
+        />
+      )}
     </div>
   )
 }
@@ -494,10 +562,14 @@ function Step3Card({
   intervention,
   locked,
   staffUsers,
+  currentUserId,
+  currentUserName,
 }: {
-  intervention: Intervention | null
-  locked:       boolean
-  staffUsers:   StaffUser[]
+  intervention:    Intervention | null
+  locked:          boolean
+  staffUsers:      StaffUser[]
+  currentUserId:   string
+  currentUserName: string | null
 }) {
   const router = useRouter()
   const [isPending, startTrans] = useTransition()
@@ -535,6 +607,7 @@ function Step3Card({
   const [completionNotes, setCompletionNotes] = useState('')
   const [editingNotesIdx, setEditingNotesIdx] = useState<number | null>(null)
   const [notesDraft,      setNotesDraft]      = useState('')
+  const [openThreads,     setOpenThreads]     = useState<Set<number>>(new Set())
 
   useEffect(() => {
     if (!locked && !complete && !intervention?.action_items?.length) {
@@ -842,7 +915,12 @@ function Step3Card({
                       <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Completion notes</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                              Completion notes
+                              {item.completed_at && (
+                                <span className="ml-2 font-normal normal-case tracking-normal text-emerald-600/70">· {fmtDate(item.completed_at)}</span>
+                              )}
+                            </p>
                             <p className="mt-0.5 whitespace-pre-wrap text-sm text-zinc-700">{item.completion_notes}</p>
                           </div>
                           <button
@@ -864,6 +942,17 @@ function Step3Card({
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
+                  <CommentToggleButton
+                    count={(item.comments ?? []).length}
+                    onClick={() => {
+                      setOpenThreads((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(i)) next.delete(i)
+                        else              next.add(i)
+                        return next
+                      })
+                    }}
+                  />
                   <button onClick={() => startEdit(i)} className="text-xs text-zinc-400 hover:text-zinc-600">
                     Edit
                   </button>
@@ -896,6 +985,22 @@ function Step3Card({
                     <button onClick={() => setCompletingIdx(null)} className={ghostBtn}>Cancel</button>
                   </div>
                 </div>
+              )}
+
+              {openThreads.has(i) && (
+                <CommentsThread
+                  comments={item.comments ?? []}
+                  currentUserId={currentUserId}
+                  currentUserName={currentUserName}
+                  onAdd={(c) => addActionItemComment(intervention!.id, i, c)}
+                  onEdit={(cid, text) => editActionItemComment(intervention!.id, i, cid, text)}
+                  onDelete={(cid) => deleteActionItemComment(intervention!.id, i, cid)}
+                  onCommentsChange={(next) => {
+                    setItems((prev) => prev.map((it, idx) =>
+                      idx === i ? { ...it, comments: next } : it
+                    ))
+                  }}
+                />
               )}
             </div>
           )
@@ -974,6 +1079,176 @@ function Step3Card({
           onCancel={() => { setDeletingIdx(null); setDeleteError('') }}
         />
       )}
+    </div>
+  )
+}
+
+// ── Action item comments thread ───────────────────────────────────────────────
+
+function fmtCommentTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function CommentToggleButton({ count, onClick }: { count: number; onClick: () => void }) {
+  const title = count > 0 ? `${count} comment${count !== 1 ? 's' : ''}` : 'Add comment'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`flex items-center gap-0.5 text-xs ${count > 0 ? 'text-zinc-600 hover:text-zinc-900' : 'text-zinc-400 hover:text-zinc-600'}`}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+        <path fillRule="evenodd" d="M18 5.25a2.25 2.25 0 0 0-2.012-2.238 41.587 41.587 0 0 0-11.976 0A2.25 2.25 0 0 0 2 5.25v6.5A2.25 2.25 0 0 0 4.012 14a40.93 40.93 0 0 0 1.738.144V17a.75.75 0 0 0 1.218.586l3.323-2.654c.305-.244.682-.376 1.07-.382a41.27 41.27 0 0 0 4.627-.297A2.25 2.25 0 0 0 18 11.75v-6.5Z" clipRule="evenodd" />
+      </svg>
+      {count > 0
+        ? <span className="font-medium tabular-nums">{count}</span>
+        : <span className="font-semibold">+</span>}
+    </button>
+  )
+}
+
+function CommentsThread({
+  comments,
+  currentUserId,
+  currentUserName,
+  onAdd,
+  onEdit,
+  onDelete,
+  onCommentsChange,
+}: {
+  comments:         ActionItemComment[]
+  currentUserId:    string
+  currentUserName:  string | null
+  onAdd:            (comment: ActionItemComment) => Promise<void>
+  onEdit:           (commentId: string, newText: string) => Promise<void>
+  onDelete:         (commentId: string) => Promise<void>
+  onCommentsChange: (next: ActionItemComment[]) => void
+}) {
+  const router                  = useRouter()
+  const [isPending, startTrans] = useTransition()
+  const [draft, setDraft]               = useState('')
+  const [editingId, setEditingId]       = useState<string | null>(null)
+  const [editDraft, setEditDraft]       = useState('')
+
+  function handleAdd() {
+    const text = draft.trim()
+    if (!text) return
+    const newComment: ActionItemComment = {
+      id:        crypto.randomUUID(),
+      by:        currentUserId,
+      by_name:   currentUserName,
+      at:        new Date().toISOString(),
+      text,
+      edited_at: null,
+    }
+    startTrans(async () => {
+      try {
+        await onAdd(newComment)
+        onCommentsChange([...comments, newComment])
+        setDraft('')
+        router.refresh()
+      } catch {}
+    })
+  }
+
+  function startEditing(c: ActionItemComment) {
+    setEditingId(c.id)
+    setEditDraft(c.text)
+  }
+
+  function handleEdit(commentId: string) {
+    const text = editDraft.trim()
+    if (!text) return
+    startTrans(async () => {
+      try {
+        await onEdit(commentId, text)
+        const now = new Date().toISOString()
+        onCommentsChange(comments.map((c) =>
+          c.id === commentId ? { ...c, text, edited_at: now } : c
+        ))
+        setEditingId(null)
+        setEditDraft('')
+        router.refresh()
+      } catch {}
+    })
+  }
+
+  function handleDelete(commentId: string) {
+    if (!window.confirm('Delete this comment?')) return
+    startTrans(async () => {
+      try {
+        await onDelete(commentId)
+        onCommentsChange(comments.filter((c) => c.id !== commentId))
+        router.refresh()
+      } catch {}
+    })
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-zinc-200 bg-white p-2.5">
+      {comments.length > 0 && (
+        <div className="mb-2 space-y-1.5">
+          {comments.map((c) => {
+            const isMine = c.by === currentUserId
+            const isEditing = editingId === c.id
+            return (
+              <div key={c.id} className="rounded-md bg-zinc-50 px-3 py-2">
+                {isEditing ? (
+                  <>
+                    <textarea
+                      autoFocus
+                      rows={2}
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      className="w-full resize-y rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    />
+                    <div className="mt-1.5 flex gap-2">
+                      <button onClick={() => handleEdit(c.id)} disabled={isPending || !editDraft.trim()} className={primaryBtn}>
+                        {isPending ? '…' : 'Save'}
+                      </button>
+                      <button onClick={() => { setEditingId(null); setEditDraft('') }} className={ghostBtn}>
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="text-xs">
+                        <span className="font-medium text-zinc-800">{c.by_name ?? 'Unknown'}</span>
+                        <span className="text-zinc-400">{' · '}{fmtCommentTime(c.at)}</span>
+                        {c.edited_at && <span className="text-zinc-400">{' · edited'}</span>}
+                      </div>
+                      {isMine && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button onClick={() => startEditing(c)} className="text-xs text-zinc-400 hover:text-zinc-600">Edit</button>
+                          <button onClick={() => handleDelete(c.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-zinc-700">{c.text}</p>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <textarea
+        autoFocus={comments.length === 0}
+        rows={2}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder={comments.length > 0 ? 'Reply…' : 'Add a comment…'}
+        className="w-full resize-y rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+      />
+      <div className="mt-1.5">
+        <button onClick={handleAdd} disabled={isPending || !draft.trim()} className={primaryBtn}>
+          {isPending ? '…' : 'Post'}
+        </button>
+      </div>
     </div>
   )
 }

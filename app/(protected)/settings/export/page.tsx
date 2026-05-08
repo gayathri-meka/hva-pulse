@@ -8,21 +8,19 @@ const EXPORTS = [
     table:       'alumni',
     name:        'Alumni',
     description: 'All alumni records with their current job (company, role, salary, placement month).',
+    cta:         'Download CSV',
   },
   {
-    table:       'applications',
-    name:        'Applications',
-    description: 'Full placement pipeline — all applications with learner, company, role, status, feedback and timestamps.',
+    table:       'interventions',
+    name:        'Intervention data',
+    description: 'All interventions with learner, status, root cause, action items summary and key timestamps.',
+    cta:         'Download CSV',
   },
   {
-    table:       'companies',
-    name:        'Companies',
-    description: 'All companies in the placement pipeline.',
-  },
-  {
-    table:       'roles',
-    name:        'Roles',
-    description: 'All roles with location, salary range, status and job description.',
+    table:       'placement',
+    name:        'Placement data',
+    description: 'Bundle of three CSVs (applications, companies, roles) packaged as a single ZIP.',
+    cta:         'Download ZIP',
   },
 ]
 
@@ -36,12 +34,12 @@ export default async function ExportPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-zinc-900">Export</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Download a CSV snapshot of your data. Files are named with today&apos;s date.
+          Download a snapshot of your data. Files are named with today&apos;s date.
         </p>
       </div>
 
       <div className="grid gap-4">
-        {EXPORTS.map(({ table, name, description }) => (
+        {EXPORTS.map(({ table, name, description, cta }) => (
           <div key={table} className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -58,7 +56,7 @@ export default async function ExportPage() {
                 download
                 className="shrink-0 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
               >
-                Download CSV
+                {cta}
               </a>
             </div>
           </div>
