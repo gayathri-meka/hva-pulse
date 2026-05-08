@@ -192,7 +192,11 @@ export default async function MatchingPage({ searchParams }: Props) {
 
   // ── Apply learner filter (server-side; batch/LF handled by column filters) ─
   const filtered = allLearners
-    .filter((l) => !learnerFilter || l.learner_id === learnerFilter)
+    .filter((l) => {
+      if (!learnerFilter) return true
+      const ids = learnerFilter.split(',').filter(Boolean)
+      return ids.length === 0 || ids.includes(l.learner_id)
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Sub-cohort options ───────────────────────────────────────────────────

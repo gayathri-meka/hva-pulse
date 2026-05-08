@@ -2,6 +2,7 @@
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Combobox from '@/components/ui/Combobox'
+import MultiSelectChips from '@/components/ui/MultiSelectChips'
 
 export interface RoleOption {
   id:           string
@@ -20,8 +21,8 @@ export default function MatchingControls({ roles, learners }: Props) {
   const router       = useRouter()
   const pathname     = usePathname()
 
-  const selectedRole    = searchParams.get('role')    ?? ''
-  const selectedLearner = searchParams.get('learner') ?? ''
+  const selectedRole     = searchParams.get('role')    ?? ''
+  const selectedLearners = (searchParams.get('learner') ?? '').split(',').filter(Boolean)
 
   function navigate(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString())
@@ -46,12 +47,12 @@ export default function MatchingControls({ roles, learners }: Props) {
         onChange={(id) => navigate('role', id)}
         className="min-w-[260px] font-medium"
       />
-      <Combobox
+      <MultiSelectChips
         options={learnerOptions}
-        value={selectedLearner}
+        selectedIds={selectedLearners}
+        onChange={(ids) => navigate('learner', ids.join(','))}
         placeholder="All learners"
-        onChange={(id) => navigate('learner', id)}
-        className="min-w-[180px]"
+        className="min-w-[220px]"
       />
     </div>
   )

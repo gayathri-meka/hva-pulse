@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition } from 'react'
+import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -16,8 +16,10 @@ import {
   type ColumnFiltersState,
   type FilterFn,
   type Column,
+  type VisibilityState,
 } from '@tanstack/react-table'
 import { startIntervention } from '@/app/(protected)/learning/actions'
+import MultiSelectChips from '@/components/ui/MultiSelectChips'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -25,6 +27,12 @@ export type InterventionRow = {
   id:                  string
   learner_id:          string
   learner_name:        string
+  lf_name:             string | null
+  batch_name:          string | null
+  program_status:      string | null
+  new_lf:              string | null
+  new_batch:           string | null
+  sub_cohort:          string | null
   status:              'open' | 'in_progress' | 'follow_up'
   root_cause_filled:   boolean
   total_action_items:  number
@@ -38,15 +46,49 @@ export type LearnerOption = {
 }
 
 interface Props {
-  rows:     InterventionRow[]
-  learners: LearnerOption[]
+  rows:             InterventionRow[]
+  learners:         LearnerOption[]
+  subCohortOptions: string[]
 }
 
-// ── Filter ─────────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const VISIBILITY_KEY = 'interventions-table-col-visibility'
+
+const LEARNER_INFO_COLS = [
+  { id: 'lf_name',        label: 'LF'             },
+  { id: 'batch_name',     label: 'Batch'          },
+  { id: 'program_status', label: 'Program Status' },
+  { id: 'new_lf',         label: 'New LF'         },
+  { id: 'new_batch',      label: 'New Batch'      },
+]
+
+const INTERVENTION_COLS = [
+  { id: 'learner_name',  label: 'Learner'       },
+  { id: 'status',        label: 'Status'        },
+  { id: 'root_cause',    label: 'Root cause'    },
+  { id: 'action_plan',   label: 'Action plan'   },
+  { id: 'decision_date', label: 'Decision date' },
+]
+
+const PROGRAM_STATUS_BADGE: Record<string, string> = {
+  Ongoing:          'bg-emerald-100 text-emerald-700',
+  'On Hold':        'bg-orange-100 text-orange-700',
+  Dropout:          'bg-red-100 text-red-700',
+  Discontinued:     'bg-zinc-200 text-zinc-600',
+  'Placed - Self':  'bg-blue-100 text-blue-700',
+  'Placed - HVA':   'bg-violet-100 text-violet-700',
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────────
 
 const multiSelectFilter: FilterFn<InterventionRow> = (row, colId, filterValues: string[]) =>
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
+
+const learnerSearchFilter: FilterFn<InterventionRow> = (row, _, filterValue: string[]) =>
+  !filterValue?.length || filterValue.includes(row.original.learner_id)
+learnerSearchFilter.autoRemove = (val: string[]) => !val?.length
 
 function FilterDropdown({ column }: { column: Column<InterventionRow, unknown> }) {
   const [open, setOpen]  = useState(false)
@@ -269,6 +311,8 @@ const columns = [
   col.accessor('learner_name', {
     id:       'learner_name',
     header:   'Learner',
+    enableHiding: false,
+    filterFn: learnerSearchFilter,
     cell:     (info) => (
       <Link
         href={`/learning?filter=interventions&view=learner&learner=${info.row.original.learner_id}`}
@@ -277,6 +321,44 @@ const columns = [
         {info.getValue()}
       </Link>
     ),
+  }),
+  col.accessor('lf_name', {
+    id:       'lf_name',
+    header:   'LF',
+    filterFn: multiSelectFilter,
+    cell:     (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('batch_name', {
+    id:       'batch_name',
+    header:   'Batch',
+    filterFn: multiSelectFilter,
+    cell:     (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('program_status', {
+    id:       'program_status',
+    header:   'Program Status',
+    filterFn: multiSelectFilter,
+    cell: (info) => {
+      const val = info.getValue()
+      if (!val) return <span className="text-zinc-300">—</span>
+      return (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PROGRAM_STATUS_BADGE[val] ?? 'bg-zinc-100 text-zinc-600'}`}>
+          {val}
+        </span>
+      )
+    },
+  }),
+  col.accessor('new_lf', {
+    id:       'new_lf',
+    header:   'New LF',
+    filterFn: multiSelectFilter,
+    cell:     (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+  }),
+  col.accessor('new_batch', {
+    id:       'new_batch',
+    header:   'New Batch',
+    filterFn: multiSelectFilter,
+    cell:     (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
   }),
   col.accessor((row) => statusLabel(row), {
     id:       'status',
@@ -349,17 +431,55 @@ const columns = [
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function InterventionsTable({ rows, learners }: Props) {
-  const [sorting,       setSorting]       = useState<SortingState>([])
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [showModal,     setShowModal]     = useState(false)
+export default function InterventionsTable({ rows, learners, subCohortOptions }: Props) {
+  const [sorting,          setSorting]          = useState<SortingState>([])
+  const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    new_lf:    false,
+    new_batch: false,
+  })
+  const [showModal,        setShowModal]        = useState(false)
+  const [showColMenu,      setShowColMenu]      = useState(false)
+  const [activeSubCohorts, setActiveSubCohorts] = useState<Set<string>>(new Set())
+  const [learnerFilter,    setLearnerFilter]    = useState<string[]>([])
+  const colMenuRef = useRef<HTMLDivElement>(null)
+
+  // Hydrate column visibility from localStorage
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(VISIBILITY_KEY)
+      if (v) setColumnVisibility(JSON.parse(v))
+    } catch {}
+  }, [])
+
+  // Click-outside for column menu
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setShowColMenu(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  // Filter rows by sub-cohort (client-side, before passing to table)
+  const filteredRows = useMemo(() => {
+    if (activeSubCohorts.size === 0) return rows
+    return rows.filter((r) => r.sub_cohort && activeSubCohorts.has(r.sub_cohort))
+  }, [rows, activeSubCohorts])
 
   const table = useReactTable({
-    data:    rows,
+    data:    filteredRows,
     columns,
-    state:   { sorting, columnFilters },
+    state:   { sorting, columnFilters, columnVisibility },
     onSortingChange:       setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: (updater) => {
+      setColumnVisibility((old: VisibilityState) => {
+        const next = typeof updater === 'function' ? updater(old) : updater
+        try { localStorage.setItem(VISIBILITY_KEY, JSON.stringify(next)) } catch {}
+        return next
+      })
+    },
     getCoreRowModel:        getCoreRowModel(),
     getSortedRowModel:      getSortedRowModel(),
     getFilteredRowModel:    getFilteredRowModel(),
@@ -367,6 +487,20 @@ export default function InterventionsTable({ rows, learners }: Props) {
     getFacetedUniqueValues: getFacetedUniqueValues(),
     getRowId: (row) => row.id,
   })
+
+  function toggleSubCohort(sc: string) {
+    setActiveSubCohorts((prev) => {
+      const next = new Set(prev)
+      if (next.has(sc)) next.delete(sc)
+      else next.add(sc)
+      return next
+    })
+  }
+
+  function handleLearnerFilter(ids: string[]) {
+    setLearnerFilter(ids)
+    table.getColumn('learner_name')?.setFilterValue(ids.length ? ids : undefined)
+  }
 
   const filteredCount = table.getFilteredRowModel().rows.length
   const rowCountText  =
@@ -376,14 +510,96 @@ export default function InterventionsTable({ rows, learners }: Props) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm text-zinc-500">{rowCountText}</span>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700"
-        >
-          + New intervention
-        </button>
+      {/* Toolbar */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        {/* Left: sub-cohort pills + learner chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          {subCohortOptions.map((sc) => (
+            <button
+              key={sc}
+              onClick={() => toggleSubCohort(sc)}
+              className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                activeSubCohorts.has(sc)
+                  ? 'border-zinc-800 bg-zinc-800 text-white'
+                  : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+              }`}
+            >
+              {sc}
+            </button>
+          ))}
+
+          <MultiSelectChips
+            options={learners.map((l) => ({ id: l.learner_id, label: l.name }))}
+            selectedIds={learnerFilter}
+            onChange={handleLearnerFilter}
+            placeholder="Search learners…"
+            className="min-w-[240px]"
+          />
+        </div>
+
+        {/* Right: row count + columns + new intervention */}
+        <div className="flex items-center gap-3" ref={colMenuRef}>
+          <span className="text-sm text-zinc-500">{rowCountText}</span>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowColMenu((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+                <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+                <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" />
+              </svg>
+              Columns
+            </button>
+
+            {showColMenu && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
+                <p className="mb-1 px-2.5 pt-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">Learner info</p>
+                {LEARNER_INFO_COLS.map(({ id, label }) => {
+                  const column = table.getColumn(id)
+                  if (!column) return null
+                  return (
+                    <label key={id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-zinc-50">
+                      <input
+                        type="checkbox"
+                        checked={column.getIsVisible()}
+                        onChange={column.getToggleVisibilityHandler()}
+                        className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900"
+                      />
+                      <span className="text-xs text-zinc-700">{label}</span>
+                    </label>
+                  )
+                })}
+                <hr className="my-1.5 border-zinc-100" />
+                <p className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">Intervention</p>
+                {INTERVENTION_COLS.map(({ id, label }) => {
+                  const column = table.getColumn(id)
+                  if (!column) return null
+                  return (
+                    <label key={id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-zinc-50">
+                      <input
+                        type="checkbox"
+                        checked={column.getIsVisible()}
+                        onChange={column.getToggleVisibilityHandler()}
+                        disabled={!column.getCanHide()}
+                        className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900 disabled:opacity-50"
+                      />
+                      <span className="text-xs text-zinc-700">{label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700"
+          >
+            + New intervention
+          </button>
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -392,14 +608,14 @@ export default function InterventionsTable({ rows, learners }: Props) {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
                   {table.getFlatHeaders().map((header) => (
                     <th
                       key={header.id}
-                      className="select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
+                      className="sticky top-0 z-10 bg-zinc-50 select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                     >
                       <div
                         className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
@@ -409,7 +625,7 @@ export default function InterventionsTable({ rows, learners }: Props) {
                         {header.column.getIsSorted() === 'asc'  && <span className="text-zinc-400">↑</span>}
                         {header.column.getIsSorted() === 'desc' && <span className="text-zinc-400">↓</span>}
                       </div>
-                      {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+                      {header.column.getCanFilter() && header.column.id !== 'learner_name' && <FilterDropdown column={header.column} />}
                     </th>
                   ))}
                 </tr>

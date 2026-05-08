@@ -77,7 +77,11 @@ export default async function ApplicationsPage({ searchParams }: Props) {
       !statusFilter ||
       (statusFilter === 'in_process' ? inProcessStatuses.includes(a.status) : a.status === statusFilter)
     )
-    .filter((a) => !learnerFilter || a.user_id === learnerFilter)
+    .filter((a) => {
+      if (!learnerFilter) return true
+      const ids = learnerFilter.split(',').filter(Boolean)
+      return ids.length === 0 || (a.user_id != null && ids.includes(a.user_id))
+    })
 
   const applications: ApplicationWithLearner[] = filteredApplications.map((a) => {
     const role = roleMap[a.role_id]

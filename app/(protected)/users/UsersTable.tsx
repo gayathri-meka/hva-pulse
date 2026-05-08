@@ -299,7 +299,7 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
           {saveError ?? deleteError}
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
         <table
           className="border-collapse text-sm"
           style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
@@ -310,7 +310,7 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
                 <th
                   key={header.id}
                   style={{ width: header.getSize() }}
-                  className="relative select-none px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
+                  className="sticky top-0 z-10 bg-zinc-50 relative select-none px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                 >
                   <div
                     className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}

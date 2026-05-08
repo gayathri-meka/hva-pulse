@@ -271,7 +271,7 @@ export default function OpportunitiesClient({ opportunities }: Props) {
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
           <table
             className="border-collapse text-sm"
             style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
@@ -282,7 +282,7 @@ export default function OpportunitiesClient({ opportunities }: Props) {
                   <th
                     key={header.id}
                     style={{ width: header.getSize() }}
-                    className="relative select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400"
+                    className="sticky top-0 z-10 bg-zinc-50 relative select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400"
                   >
                     <div
                       className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}

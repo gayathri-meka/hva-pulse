@@ -2,6 +2,7 @@
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Combobox from '@/components/ui/Combobox'
+import MultiSelectChips from '@/components/ui/MultiSelectChips'
 import type { Company } from '@/types'
 
 interface RoleOption {
@@ -27,9 +28,9 @@ export default function CompanyFilter({ companies, roles, learners }: Props) {
   const router       = useRouter()
   const pathname     = usePathname()
 
-  const selectedCompany = searchParams.get('company') ?? ''
-  const selectedRole    = searchParams.get('role')    ?? ''
-  const selectedLearner = searchParams.get('learner') ?? ''
+  const selectedCompany  = searchParams.get('company') ?? ''
+  const selectedRole     = searchParams.get('role')    ?? ''
+  const selectedLearners = (searchParams.get('learner') ?? '').split(',').filter(Boolean)
 
   // Roles shown in the role combobox — filtered by selected company
   const filteredRoles = selectedCompany
@@ -74,13 +75,13 @@ export default function CompanyFilter({ companies, roles, learners }: Props) {
         />
       )}
 
-      {/* Learner combobox */}
-      <Combobox
+      {/* Learner multi-select */}
+      <MultiSelectChips
         options={learnerOptions}
-        value={selectedLearner}
+        selectedIds={selectedLearners}
+        onChange={(ids) => navigate({ learner: ids.join(',') })}
         placeholder="All learners"
-        onChange={(id) => navigate({ learner: id })}
-        className="min-w-[180px]"
+        className="min-w-[220px]"
       />
     </div>
   )

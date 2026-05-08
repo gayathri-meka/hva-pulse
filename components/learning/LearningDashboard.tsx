@@ -37,6 +37,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import MultiSelectChips from '@/components/ui/MultiSelectChips'
 
 // ── Shared types ───────────────────────────────────────────────────────────────
 
@@ -85,9 +86,9 @@ const multiSelectFilter: FilterFn<LearnerRow> = (row, colId, filterValues: strin
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
 
-const nameSearchFilter: FilterFn<LearnerRow> = (row, _, filterValue: string) =>
-  !filterValue || row.original.name.toLowerCase().includes(filterValue.toLowerCase())
-nameSearchFilter.autoRemove = (val: string) => !val
+const nameSearchFilter: FilterFn<LearnerRow> = (row, _, filterValue: string[]) =>
+  !filterValue?.length || filterValue.includes(row.original.learner_id)
+nameSearchFilter.autoRemove = (val: string[]) => !val?.length
 
 function FilterDropdown({ column }: { column: Column<LearnerRow, unknown> }) {
   const [open, setOpen]  = useState(false)
@@ -356,7 +357,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnSizing,     setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnOrder,      setColumnOrder]      = useState<ColumnOrderState>([])
-  const [nameSearch,       setNameSearch]       = useState('')
+  const [nameSearch,       setNameSearch]       = useState<string[]>([])
   const [showColMenu,      setShowColMenu]      = useState(false)
   const [popover,          setPopover]          = useState<PopoverState | null>(null)
   const colMenuRef                              = useRef<HTMLDivElement>(null)
@@ -391,9 +392,9 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
     router.push(`/learning?${params.toString()}`)
   }
 
-  function handleNameSearch(val: string) {
-    setNameSearch(val)
-    table.getColumn('name')?.setFilterValue(val)
+  function handleNameSearch(ids: string[]) {
+    setNameSearch(ids)
+    table.getColumn('name')?.setFilterValue(ids.length ? ids : undefined)
   }
 
   // Dynamic metric columns
@@ -424,7 +425,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
     [metrics]
   )
 
-  const allColumns = useMemo(() => [...fixedColumns, ...metricColumns, interventionColumn], [metricColumns])
+  const allColumns = useMemo(() => [...fixedColumns, interventionColumn, ...metricColumns], [metricColumns])
 
   // Reconcile stored column order with actual columns — append any new columns
   // that weren't in the saved order, remove any that no longer exist
@@ -527,32 +528,14 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
             </button>
           ))}
 
-          {/* Search bar */}
-          <div className="relative min-w-[180px]">
-            <svg
-              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
-            >
-              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
-            </svg>
-            <input
-              type="text"
-              value={nameSearch}
-              onChange={(e) => handleNameSearch(e.target.value)}
-              placeholder="Search learners…"
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 pl-8 pr-3 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
-            />
-            {nameSearch && (
-              <button
-                onClick={() => handleNameSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                </svg>
-              </button>
-            )}
-          </div>
+          {/* Learner multi-select */}
+          <MultiSelectChips
+            options={learners.map((l) => ({ id: l.learner_id, label: l.name }))}
+            selectedIds={nameSearch}
+            onChange={handleNameSearch}
+            placeholder="Search learners…"
+            className="min-w-[240px]"
+          />
         </div>
 
         {/* Right: row count + columns button */}
@@ -634,20 +617,23 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={table.getFlatHeaders().map((h) => h.id)} strategy={horizontalListSortingStrategy}>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
           <table className="border-collapse text-sm" style={{ width: '100%' }}>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                {table.getFlatHeaders().map((header) => (
-                  <SortableHeader key={header.id} header={header} />
+                {table.getFlatHeaders().map((header, idx) => (
+                  <SortableHeader key={header.id} header={header} isFirst={idx === 0} />
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="group hover:bg-zinc-50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3">
+                  {row.getVisibleCells().map((cell, idx) => (
+                    <td
+                      key={cell.id}
+                      className={idx === 0 ? 'sticky left-0 z-10 bg-white px-4 py-3 group-hover:bg-zinc-50' : 'px-4 py-3'}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -780,7 +766,7 @@ function Sparkline({ series }: { series: SeriesPoint[] }) {
 
 // ── Sortable header (drag-to-reorder) ──────────────────────────────────────────
 
-function SortableHeader({ header }: { header: Header<LearnerRow, unknown> }) {
+function SortableHeader({ header, isFirst }: { header: Header<LearnerRow, unknown>; isFirst?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: header.id,
   })
@@ -794,7 +780,7 @@ function SortableHeader({ header }: { header: Header<LearnerRow, unknown> }) {
     <th
       ref={setNodeRef}
       style={style}
-      className="relative select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
+      className={`sticky top-0 ${isFirst ? 'left-0 z-20' : 'z-10'} bg-zinc-50 relative select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400`}
     >
       <div
         {...attributes}

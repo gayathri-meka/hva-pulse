@@ -310,7 +310,7 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+      <div className="overflow-auto rounded-xl border border-zinc-200 bg-white" style={{ maxHeight: 'calc(100vh - 200px)' }}>
         <table className="w-full text-sm" style={{ tableLayout: 'fixed', width: table.getTotalSize() }}>
           <thead>
             {table.getHeaderGroups().map((hg) => (
@@ -318,8 +318,8 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
                 {hg.headers.map((header) => (
                   <th
                     key={header.id}
-                    style={{ width: header.getSize(), position: 'relative' }}
-                    className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400"
+                    style={{ width: header.getSize(), position: 'sticky', top: 0, zIndex: 10 }}
+                    className="bg-white px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400"
                   >
                     {header.isPlaceholder ? null : (
                       <>

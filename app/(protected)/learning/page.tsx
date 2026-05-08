@@ -180,7 +180,11 @@ export default async function LearningPage({ searchParams }: Props) {
   }))
 
   // ── Interventions tab data ─────────────────────────────────────────────────
-  type CohortLearner = { learner_id: string; name: string; email: string }
+  type CohortLearner = {
+    learner_id: string; name: string; email: string
+    lf_name: string | null; batch_name: string | null; program_status: string | null
+    new_lf: string | null; new_batch: string | null; sub_cohort: string | null
+  }
   type SelectedLearnerData = {
     learner_id: string; name: string; email: string
     batch_name: string | null; lf_name: string | null; status: string | null
@@ -213,7 +217,7 @@ export default async function LearningPage({ searchParams }: Props) {
     const [{ data: allCohort }, { data: staff }, settingsMap] = await Promise.all([
       supabase
         .from('learners')
-        .select('learner_id, users!learners_user_id_fkey(name, email)')
+        .select('learner_id, lf_name, batch_name, status, new_lf, new_batch, sub_cohort, users!learners_user_id_fkey(name, email)')
         .eq('is_current_cohort', true)
         .order('lf_name'),
       supabase.from('users').select('id, name, role').in('role', ['admin', 'staff']).order('name'),
@@ -222,7 +226,21 @@ export default async function LearningPage({ searchParams }: Props) {
 
     cohortLearners = (allCohort ?? []).map((l) => {
       const u = l.users as unknown as { name: string; email: string } | null
-      return { learner_id: l.learner_id, name: showPII ? (u?.name ?? l.learner_id) : maskName(u?.name, l.learner_id), email: showPII ? (u?.email ?? '') : maskEmail(u?.email) }
+      const meta = l as unknown as {
+        lf_name: string | null; batch_name: string | null; status: string | null
+        new_lf: string | null; new_batch: string | null; sub_cohort: string | null
+      }
+      return {
+        learner_id:     l.learner_id,
+        name:           showPII ? (u?.name ?? l.learner_id) : maskName(u?.name, l.learner_id),
+        email:          showPII ? (u?.email ?? '') : maskEmail(u?.email),
+        lf_name:        meta.lf_name,
+        batch_name:     meta.batch_name,
+        program_status: meta.status,
+        new_lf:         meta.new_lf,
+        new_batch:      meta.new_batch,
+        sub_cohort:     meta.sub_cohort,
+      }
     })
     staffUsers = (staff ?? []) as StaffUser[]
     if (settingsMap['root_cause_categories'])       interventionCategories     = settingsMap['root_cause_categories'] as string[]
@@ -235,14 +253,21 @@ export default async function LearningPage({ searchParams }: Props) {
         .neq('status', 'closed')
         .order('decision_date', { ascending: true, nullsFirst: false })
 
-      const learnerNameById = new Map(cohortLearners.map((l) => [l.learner_id, l.name]))
+      const learnerById = new Map(cohortLearners.map((l) => [l.learner_id, l]))
       interventionRows = (ivRows ?? []).map((iv) => {
-        const items       = (iv.action_items ?? []) as ActionItem[]
-        const rootCats    = ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? [])
+        const items    = (iv.action_items ?? []) as ActionItem[]
+        const rootCats = ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? [])
+        const meta     = learnerById.get(iv.learner_id)
         return {
           id:                 iv.id,
           learner_id:         iv.learner_id,
-          learner_name:       learnerNameById.get(iv.learner_id) ?? iv.learner_id,
+          learner_name:       meta?.name ?? iv.learner_id,
+          lf_name:            meta?.lf_name ?? null,
+          batch_name:         meta?.batch_name ?? null,
+          program_status:     meta?.program_status ?? null,
+          new_lf:             meta?.new_lf ?? null,
+          new_batch:          meta?.new_batch ?? null,
+          sub_cohort:         meta?.sub_cohort ?? null,
           status:             iv.status as InterventionRow['status'],
           root_cause_filled:  rootCats.length > 0,
           total_action_items: items.length,
@@ -409,7 +434,7 @@ export default async function LearningPage({ searchParams }: Props) {
           )}
 
           {interventionView === 'table' && (
-            <InterventionsTable rows={interventionRows} learners={cohortLearners} />
+            <InterventionsTable rows={interventionRows} learners={cohortLearners} subCohortOptions={subCohortOptions} />
           )}
         </div>
       )}
