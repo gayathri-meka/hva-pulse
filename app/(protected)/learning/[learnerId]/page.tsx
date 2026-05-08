@@ -57,7 +57,7 @@ export default async function LearnerLearningPage({ params }: Props) {
       : Promise.resolve({ data: [] }),
     supabase
       .from('interventions')
-      .select('id, learner_id, status, flagged_items, what_wrong_notes, root_cause_categories, root_cause_notes, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
+      .select('id, learner_id, status, flagged_items, what_wrong_notes, what_wrong_comments, root_cause_categories, root_cause_notes, why_comments, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
       .eq('learner_id', learnerId)
       .neq('status', 'closed')
       .maybeSingle(),
@@ -131,8 +131,10 @@ export default async function LearnerLearningPage({ params }: Props) {
         status:               interventionRaw.status as Intervention['status'],
         flagged_items:        ((interventionRaw as unknown as { flagged_items?: string[] }).flagged_items ?? []),
         what_wrong_notes:     (interventionRaw as unknown as { what_wrong_notes?: string | null }).what_wrong_notes ?? null,
+        what_wrong_comments:  ((interventionRaw as unknown as { what_wrong_comments?: unknown[] }).what_wrong_comments ?? []) as Intervention['what_wrong_comments'],
         root_cause_categories: ((interventionRaw as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
         root_cause_notes:     interventionRaw.root_cause_notes ?? null,
+        why_comments:         ((interventionRaw as unknown as { why_comments?: unknown[] }).why_comments ?? []) as Intervention['why_comments'],
         step1_completed_at:   interventionRaw.step1_completed_at ?? null,
         step2_completed_at:   interventionRaw.step2_completed_at ?? null,
         step3_completed_at:   (interventionRaw as unknown as { step3_completed_at?: string | null }).step3_completed_at ?? null,
@@ -203,7 +205,7 @@ export default async function LearnerLearningPage({ params }: Props) {
       )}
 
       {/* Intervention */}
-      <InterventionPanel learnerId={learnerId} intervention={intervention} staffUsers={staffUsers} categories={categories} checklistItems={checklistItems} />
+      <InterventionPanel learnerId={learnerId} intervention={intervention} staffUsers={staffUsers} categories={categories} checklistItems={checklistItems} currentUserId={appUser.id} currentUserName={appUser.name ?? null} />
 
       {/* Past interventions history */}
       {interventionHistory.length > 0 && (
