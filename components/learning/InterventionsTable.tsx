@@ -435,8 +435,10 @@ export default function InterventionsTable({ rows, learners, subCohortOptions }:
   const [sorting,          setSorting]          = useState<SortingState>([])
   const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    new_lf:    false,
-    new_batch: false,
+    lf_name:    false,
+    batch_name: false,
+    new_lf:     false,
+    new_batch:  false,
   })
   const [showModal,        setShowModal]        = useState(false)
   const [showColMenu,      setShowColMenu]      = useState(false)

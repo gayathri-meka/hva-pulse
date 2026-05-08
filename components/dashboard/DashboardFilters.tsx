@@ -46,7 +46,7 @@ export default function DashboardFilters({ lfs, batches, subCohorts }: Props) {
   }
 
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {subCohorts.length > 0 && subCohorts.map((sc) => (
         <button
           key={sc}

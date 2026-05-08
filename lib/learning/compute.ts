@@ -63,11 +63,36 @@ export function aggregate(rows: RawRow[], agg: string): number | null {
   return null
 }
 
+// Parse common period string formats to a timestamp for sorting.
+// Returns null if the string isn't a recognized date.
+function parsePeriodDate(s: string): number | null {
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)              // YYYY-MM-DD
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3])
+  m = /^(\d{2})[-/](\d{2})[-/](\d{4})$/.exec(s)            // DD-MM-YYYY or DD/MM/YYYY
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1])
+  return null
+}
+
 export function sortPeriods(periods: string[], sortOrder: string | null): string[] {
   const s = [...periods]
-  if (sortOrder === 'numerical')          s.sort((a, b) => parseFloat(a) - parseFloat(b))
-  else if (sortOrder === 'chronological') s.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-  else                                    s.sort()
+  if (sortOrder === 'numerical') {
+    s.sort((a, b) => parseFloat(a) - parseFloat(b))
+    return s
+  }
+  if (sortOrder === 'chronological' || sortOrder === null) {
+    // Try date-aware sort first; if every period parses as a date, use chronological order.
+    // Otherwise fall back to lex sort (preserves quarter labels like Q1/Q2 etc.).
+    const parsed = s.map((p) => ({ p, t: parsePeriodDate(p) }))
+    if (parsed.every((x) => x.t !== null)) {
+      s.sort((a, b) => parsePeriodDate(a)! - parsePeriodDate(b)!)
+      return s
+    }
+    if (sortOrder === 'chronological') {
+      s.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+      return s
+    }
+  }
+  s.sort()
   return s
 }
 

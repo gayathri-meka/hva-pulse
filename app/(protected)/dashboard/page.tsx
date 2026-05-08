@@ -138,14 +138,12 @@ export default async function DashboardPage({ searchParams }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-zinc-900">Hi, {firstName}!</h1>
-        <p className="mt-1 text-sm text-zinc-500">Programme overview</p>
+        <Suspense>
+          <DashboardFilters lfs={lfs} batches={batches} subCohorts={subCohortOptions} />
+        </Suspense>
       </div>
-
-      <Suspense>
-        <DashboardFilters lfs={lfs} batches={batches} subCohorts={subCohortOptions} />
-      </Suspense>
 
       {/* ── Learner Journey Funnel ─────────────────────────────────────── */}
       <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">

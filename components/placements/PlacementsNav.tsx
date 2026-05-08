@@ -13,7 +13,7 @@ const TABS = [
   { href: '/placements/companies',     label: 'Companies',      isOutreach: false, adminOnly: false },
   { href: '/placements/applications',  label: 'Applications',   isOutreach: false, adminOnly: false },
   { href: '/placements/not-interested', label: 'Not Interested', isOutreach: false, adminOnly: false },
-  { href: '/placements/matching',      label: 'Matching',       isOutreach: false, adminOnly: false },
+  { href: '/placements/matching',      label: 'Learners',       isOutreach: false, adminOnly: false },
   { href: '/placements/personas',      label: 'Job Outreach',   isOutreach: true,  adminOnly: false },
   { href: '/placements/settings',      label: 'Settings',       isOutreach: false, adminOnly: true  },
 ]

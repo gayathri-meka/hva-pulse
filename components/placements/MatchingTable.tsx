@@ -252,12 +252,13 @@ function loadSizing(): ColumnSizingState {
 }
 
 // ── Table component ───────────────────────────────────────────────────────────
-export default function MatchingTable({ rows, roleSelected = true, subCohortOptions = [], nsReasons, rejectionReasons }: {
+export default function MatchingTable({ rows, roleSelected = true, subCohortOptions = [], nsReasons, rejectionReasons, controls }: {
   rows: MatchingRow[]
   roleSelected?: boolean
   subCohortOptions?: string[]
   nsReasons?: string[]
   rejectionReasons?: string[]
+  controls?: React.ReactNode
 }) {
   const NS_REASONS = nsReasons ?? DEFAULT_NS_REASONS
   const REJECTION_REASONS = rejectionReasons ?? DEFAULT_REJECTION_REASONS
@@ -657,7 +658,11 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-end gap-3" ref={colMenuRef}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3" ref={colMenuRef}>
+        <div className="flex flex-wrap items-center gap-3">
+          {controls}
+        </div>
+        <div className="flex items-center gap-3">
         <span className="text-sm text-zinc-500">{rowCountText}</span>
         <div className="relative">
           <button
@@ -690,6 +695,7 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
               })}
             </div>
           )}
+        </div>
         </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">

@@ -307,13 +307,6 @@ export default async function MatchingPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
 
-      <Suspense>
-        <MatchingControls
-          roles={roleOptions}
-          learners={allLearners.map((l) => ({ id: l.learner_id, name: l.name }))}
-        />
-      </Suspense>
-
       {roleId && (
         <Suspense>
           <MatchingStatusFilter statusCounts={statusCounts} total={rows.length} />
@@ -327,6 +320,14 @@ export default async function MatchingPage({ searchParams }: Props) {
         subCohortOptions={subCohortOptions}
         nsReasons={(nsRow?.value as string[]) ?? undefined}
         rejectionReasons={(rejRow?.value as string[]) ?? undefined}
+        controls={
+          <Suspense>
+            <MatchingControls
+              roles={roleOptions}
+              learners={allLearners.map((l) => ({ id: l.learner_id, name: l.name }))}
+            />
+          </Suspense>
+        }
       />
 
     </div>

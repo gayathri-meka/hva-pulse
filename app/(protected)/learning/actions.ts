@@ -317,16 +317,11 @@ export async function startIntervention(learnerId: string) {
     .maybeSingle()
   if (existing) throw new Error('Learner already has an active intervention')
 
-  const now           = new Date()
-  const decisionDate  = new Date(now)
-  decisionDate.setDate(decisionDate.getDate() + 14)
-
   const { data, error } = await supabase
     .from('interventions')
     .insert({
-      learner_id:    learnerId,
-      opened_by:     user.id,
-      decision_date: decisionDate.toISOString().slice(0, 10),
+      learner_id: learnerId,
+      opened_by:  user.id,
     })
     .select('id')
     .single()

@@ -150,16 +150,8 @@ export default function InterventionPanel({ learnerId, intervention, staffUsers,
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Intervention</p>
-        {intervention && (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="text-xs text-red-400 hover:text-red-600"
-          >
-            Delete intervention
-          </button>
-        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Step1Card learnerId={learnerId} intervention={intervention} checklistItems={checklistItems} />
@@ -167,6 +159,20 @@ export default function InterventionPanel({ learnerId, intervention, staffUsers,
         <Step3Card intervention={intervention} locked={!step2Done} staffUsers={staffUsers} />
         <Step4Card intervention={intervention} locked={!step3Done} />
       </div>
+
+      {intervention && (
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-50"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+            </svg>
+            Delete intervention
+          </button>
+        </div>
+      )}
 
       {showDeleteConfirm && (
         <ConfirmDialog
@@ -955,6 +961,7 @@ function Step4Card({
     ? Math.ceil((new Date(decisionDate).getTime() - new Date(today).getTime()) / 86_400_000)
     : null
   const isOverdue    = daysUntil !== null && daysUntil < 0
+  const needsDecisionDate = decisionDate === null
 
   const daysChipCls = daysUntil === null        ? 'bg-zinc-100 text-zinc-500'
     : daysUntil < 0                             ? 'bg-red-100 text-red-700'
@@ -1023,7 +1030,7 @@ function Step4Card({
   }
 
   return (
-    <div className={`rounded-xl border bg-white p-4 ${isOverdue ? 'border-amber-300' : 'border-zinc-200'}`}>
+    <div className={`rounded-xl border bg-white p-4 ${isOverdue || needsDecisionDate ? 'border-amber-300' : 'border-zinc-200'}`}>
       <div className="mb-4 flex items-center gap-2">
         <StepBadge n={4} done={false} active />
         <span className="text-sm font-semibold text-zinc-900">Follow-up</span>
@@ -1032,10 +1039,12 @@ function Step4Card({
       <div className="space-y-4">
 
         {/* ── Section 1: Decision date ── */}
-        <div className="rounded-lg bg-zinc-50 px-3 py-2.5">
+        <div className={`rounded-lg px-3 py-2.5 ${needsDecisionDate ? 'border border-amber-300 bg-amber-50' : 'bg-zinc-50'}`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500">Decision date</span>
-            {!editingDate && !showAddUpdate && !showClose && (
+            <span className={`text-xs font-medium ${needsDecisionDate ? 'text-amber-700' : 'text-zinc-500'}`}>
+              {needsDecisionDate ? 'Decision date needed' : 'Decision date'}
+            </span>
+            {!editingDate && !showAddUpdate && !showClose && !needsDecisionDate && (
               <button
                 onClick={() => { setEditingDate(true); setEditDate(decisionDate ?? ''); setError('') }}
                 className="text-xs text-zinc-400 hover:text-zinc-600"
@@ -1053,10 +1062,22 @@ function Step4Card({
                 <button onClick={() => { setEditingDate(false); setError('') }} className={ghostBtn}>Cancel</button>
               </div>
             </div>
+          ) : needsDecisionDate ? (
+            <div className="mt-1.5 space-y-2">
+              <p className="text-xs text-amber-700">
+                Set a date to review whether the intervention is working.
+              </p>
+              <button
+                onClick={() => { setEditingDate(true); setEditDate(today); setError('') }}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+              >
+                Set decision date
+              </button>
+            </div>
           ) : (
             <div className="mt-1.5 flex items-center gap-2">
               <span className="text-sm font-medium text-zinc-800">
-                {decisionDate ? fmtDate(decisionDate) : '—'}
+                {fmtDate(decisionDate!)}
               </span>
               {daysText && (
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${daysChipCls}`}>

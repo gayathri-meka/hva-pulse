@@ -48,7 +48,7 @@ const DIMENSIONS = [
     borderCls:   'border-blue-100',
     bgCls:       'bg-blue-50',
     href:        '/placements/matching',
-    linkLabel:   'Matching',
+    linkLabel:   'Learners',
   },
   {
     key:         'conversion',

@@ -326,7 +326,31 @@ export default async function LearningPage({ searchParams }: Props) {
           new_batch:  (sl as unknown as { new_batch: string | null }).new_batch ?? null,
         }
 
-        // Metrics are shown in Deep Dive, not here
+        // Compute metric values for this learner (same pattern as deep-dive page)
+        if (slEmail && metricDefs.length > 0) {
+          const sourceIds = [...new Set(metricDefs.map((m) => m.source_id).filter((s): s is string => !!s))]
+          const { data: rawRowsData } = sourceIds.length > 0
+            ? await supabase
+                .from('metric_raw_rows')
+                .select('source_id, learner_id, dimensions, value')
+                .eq('learner_id', slEmail)
+                .limit(10000)
+            : { data: [] }
+
+          const rawRows: RawRow[] = (rawRowsData ?? []).map((r) => ({
+            source_id:  r.source_id,
+            learner_id: r.learner_id,
+            dimensions: (r.dimensions ?? {}) as Record<string, string | null>,
+            value:      r.value,
+          }))
+          const bySource = new Map<string, RawRow[]>()
+          for (const row of rawRows) {
+            if (!bySource.has(row.source_id)) bySource.set(row.source_id, [])
+            bySource.get(row.source_id)!.push(row)
+          }
+          const computed = computeAllForLearner(topoSortMetrics(metricDefs), bySource)
+          selectedMetricRows = metricDefs.map((m) => ({ id: m.id, name: m.name, computed: computed[m.id] }))
+        }
       }
 
       if (iv) {
@@ -412,6 +436,10 @@ export default async function LearningPage({ searchParams }: Props) {
               {selectedLearnerData && (
                 <div className="space-y-6">
                   <LearnerInfoCard learner={selectedLearnerData} />
+
+                  {selectedMetricRows.length > 0 && (
+                    <MetricsSection metrics={selectedMetricRows} />
+                  )}
 
                   <InterventionPanel
                     learnerId={selectedLearnerData.learner_id}

@@ -354,7 +354,10 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
   const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([
     { id: 'status', value: ['Ongoing'] },
   ])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    lf_name:    false,
+    batch_name: false,
+  })
   const [columnSizing,     setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnOrder,      setColumnOrder]      = useState<ColumnOrderState>([])
   const [nameSearch,       setNameSearch]       = useState<string[]>([])
@@ -658,7 +661,13 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
 
       {/* Sparkline popover — flips above if not enough room below */}
       {popover && (() => {
-        const popoverH  = Math.min(popover.series.length * 28 + 8, 256) // estimate height (28px per row, capped at max-h-64)
+        const sortedSeries = [...popover.series].sort((a, b) => {
+          const da = parsePeriodDate(a.period)
+          const db = parsePeriodDate(b.period)
+          if (da !== null && db !== null) return db - da
+          return b.period.localeCompare(a.period)
+        })
+        const popoverH  = Math.min(sortedSeries.length * 28 + 8, 256) // estimate height (28px per row, capped at max-h-64)
         const spaceBelow = window.innerHeight - popover.top - 6
         const flipAbove  = spaceBelow < popoverH
         const top = flipAbove ? popover.top - popoverH - 6 : popover.top + 6
@@ -669,11 +678,11 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
             className="fixed z-30 w-48 max-h-64 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-xl"
             style={{ top, left: popover.left }}
           >
-            {popover.series.map((p, i) => (
+            {sortedSeries.map((p, i) => (
               <div
                 key={p.period}
                 className={`flex items-center justify-between px-4 py-1.5 text-xs ${
-                  i === popover.series.length - 1
+                  i === 0
                     ? 'bg-zinc-50 font-medium text-zinc-900'
                     : 'text-zinc-600'
                 }`}
@@ -810,4 +819,14 @@ function SortableHeader({ header, isFirst }: { header: Header<LearnerRow, unknow
 function fmtNum(n: number): string {
   if (Number.isInteger(n)) return n.toString()
   return n.toFixed(1)
+}
+
+// Parse common period string formats to a timestamp for sorting.
+// Returns null if the string isn't a recognized date.
+function parsePeriodDate(s: string): number | null {
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)              // YYYY-MM-DD
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3])
+  m = /^(\d{2})[-/](\d{2})[-/](\d{4})$/.exec(s)            // DD-MM-YYYY or DD/MM/YYYY
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1])
+  return null
 }
