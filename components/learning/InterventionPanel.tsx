@@ -533,6 +533,8 @@ function Step3Card({
   const [completingIdx,   setCompletingIdx]   = useState<number | null>(null)
   const [completionDate,  setCompletionDate]  = useState('')
   const [completionNotes, setCompletionNotes] = useState('')
+  const [editingNotesIdx, setEditingNotesIdx] = useState<number | null>(null)
+  const [notesDraft,      setNotesDraft]      = useState('')
 
   useEffect(() => {
     if (!locked && !complete && !intervention?.action_items?.length) {
@@ -654,6 +656,21 @@ function Step3Card({
         setItems(updated)
         setCompletingIdx(null)
         setCompletionNotes('')
+        router.refresh()
+      } catch {}
+    })
+  }
+
+  function saveNotes(i: number) {
+    startTrans(async () => {
+      try {
+        const updated = items.map((item, idx) =>
+          idx === i ? { ...item, completion_notes: notesDraft.trim() || null } : item
+        )
+        await persistItems(updated)
+        setItems(updated)
+        setEditingNotesIdx(null)
+        setNotesDraft('')
         router.refresh()
       } catch {}
     })
@@ -800,8 +817,50 @@ function Step3Card({
                     {item.due_date && <span>Due {fmtDate(item.due_date)}</span>}
                     {item.completed_at && <span className="text-[#5BAE5B]">Done {fmtDate(item.completed_at)}</span>}
                   </div>
-                  {item.completed_at && item.completion_notes && (
-                    <p className="mt-1 text-xs text-zinc-400 italic">{item.completion_notes}</p>
+                  {item.completed_at && (
+                    editingNotesIdx === i ? (
+                      <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5">
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">Completion notes</p>
+                        <textarea
+                          autoFocus
+                          rows={3}
+                          value={notesDraft}
+                          onChange={(e) => setNotesDraft(e.target.value)}
+                          placeholder="What was done?"
+                          className="w-full resize-y rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="mt-2 flex gap-2">
+                          <button onClick={() => saveNotes(i)} disabled={isPending} className={primaryBtn}>
+                            {isPending ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={() => { setEditingNotesIdx(null); setNotesDraft('') }} className={ghostBtn}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : item.completion_notes ? (
+                      <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Completion notes</p>
+                            <p className="mt-0.5 whitespace-pre-wrap text-sm text-zinc-700">{item.completion_notes}</p>
+                          </div>
+                          <button
+                            onClick={() => { setEditingNotesIdx(i); setNotesDraft(item.completion_notes ?? '') }}
+                            className="shrink-0 text-xs text-emerald-700 hover:text-emerald-900"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingNotesIdx(i); setNotesDraft('') }}
+                        className="mt-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                      >
+                        + Add completion notes
+                      </button>
+                    )
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
