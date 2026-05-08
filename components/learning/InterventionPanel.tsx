@@ -949,7 +949,7 @@ function Step4Card({
       <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
         <div className="mb-3 flex items-center gap-2">
           <StepBadge n={4} done={false} active={false} />
-          <span className="text-sm font-semibold text-zinc-400">Follow-up</span>
+          <span className="text-sm font-semibold text-zinc-400">Monitoring</span>
         </div>
         <p className="text-xs text-zinc-400">Complete step 3 first.</p>
       </div>
@@ -1030,10 +1030,10 @@ function Step4Card({
   }
 
   return (
-    <div className={`rounded-xl border bg-white p-4 ${isOverdue || needsDecisionDate ? 'border-amber-300' : 'border-zinc-200'}`}>
+    <div className={`rounded-xl border bg-white p-4 ${isOverdue ? 'border-red-400' : needsDecisionDate ? 'border-amber-300' : 'border-zinc-200'}`}>
       <div className="mb-4 flex items-center gap-2">
         <StepBadge n={4} done={false} active />
-        <span className="text-sm font-semibold text-zinc-900">Follow-up</span>
+        <span className="text-sm font-semibold text-zinc-900">Monitoring</span>
       </div>
 
       <div className="space-y-4">

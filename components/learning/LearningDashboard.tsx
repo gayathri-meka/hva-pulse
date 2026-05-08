@@ -56,7 +56,16 @@ export type LearnerRow = {
   new_batch:    string | null
   new_mentor:   string | null
   metrics:      Record<string, ComputedMetric>
-  intervention: { id: string; status: string; decision_date: string | null } | null
+  intervention: {
+    id: string
+    status: string
+    decision_date: string | null
+    outcome: string | null
+    closed_at: string | null
+    step1_completed_at: string | null
+    step2_completed_at: string | null
+    step3_completed_at: string | null
+  } | null
 }
 
 export type MetricCol = {
@@ -187,23 +196,30 @@ function InterventionCell({ row }: { row: LearnerRow }) {
     )
   }
 
+  // Derive label from step-completion timestamps (the same signal the panel
+  // uses) rather than the `status` column, which can lag if it was ever set
+  // by legacy code paths or out-of-band edits.
+  const inMonitoring = !!intervention.step3_completed_at
   const needsReview =
-    intervention.status === 'follow_up' &&
+    inMonitoring &&
     intervention.decision_date !== null &&
     intervention.decision_date <= today
 
   const label =
-    needsReview                               ? 'Needs review'
-    : intervention.status === 'open'          ? 'Open'
-    : intervention.status === 'in_progress'   ? 'In progress'
-    : 'Monitoring'
+    intervention.status === 'closed'
+      ? (intervention.outcome === 'resolved' ? 'Back on track' : 'Closed')
+      : needsReview                       ? 'Needs review'
+      : inMonitoring                      ? 'Monitoring'
+      : intervention.step1_completed_at   ? 'Pending'
+      :                                     'Open'
 
   const cls =
-    needsReview
-      ? 'bg-amber-50 text-amber-700 border-2 border-amber-400'
-      : intervention.status === 'open'
-      ? 'bg-red-50 text-red-600 border border-red-200'
-      : 'bg-amber-50 text-amber-600 border border-amber-200'
+    label === 'Back on track' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+    : label === 'Closed'      ? 'bg-zinc-50 text-zinc-500 border border-zinc-200'
+    : label === 'Needs review' ? 'bg-red-50 text-red-700 border-2 border-red-500'
+    : label === 'Open'        ? 'bg-red-50 text-red-600 border border-red-200'
+    : label === 'Pending'     ? 'bg-amber-50 text-amber-600 border border-amber-200'
+    :                           'bg-blue-50 text-blue-600 border border-blue-200'  // Monitoring
 
   return (
     <Link
@@ -292,20 +308,25 @@ const fixedColumns = [
 // Label + sort priority: Needs review → Open → In progress → Monitoring → No intervention
 function interventionLabel(iv: LearnerRow['intervention']): string {
   if (!iv) return 'No intervention'
+  if (iv.status === 'closed') {
+    return iv.outcome === 'resolved' ? 'Back on track' : 'Closed'
+  }
   const today = new Date().toISOString().slice(0, 10)
-  if (iv.status === 'follow_up' && iv.decision_date && iv.decision_date <= today) return 'Needs review'
-  if (iv.status === 'open')        return 'Open'
-  if (iv.status === 'in_progress') return 'In progress'
-  if (iv.status === 'follow_up')   return 'Follow-up'
-  return 'No intervention'
+  const inMonitoring = !!iv.step3_completed_at
+  if (inMonitoring && iv.decision_date && iv.decision_date <= today) return 'Needs review'
+  if (inMonitoring)         return 'Monitoring'
+  if (iv.step1_completed_at) return 'Pending'
+  return 'Open'
 }
 
 const INTERVENTION_RANK: Record<string, number> = {
   'Needs review':    0,
   'Open':            1,
-  'In progress':     2,
+  'Pending':         2,
   'Monitoring':      3,
-  'No intervention': 4,
+  'Closed':          4,
+  'Back on track':   5,
+  'No intervention': 6,
 }
 
 const interventionColumn = col.accessor(

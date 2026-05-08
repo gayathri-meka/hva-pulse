@@ -58,11 +58,34 @@ export default async function LearningPage({ searchParams }: Props) {
     learnersQuery,
     supabase.from('metrics').select('*').order('created_at'),
     supabase.from('learners').select('sub_cohort').eq('is_current_cohort', true),
-    supabase.from('interventions').select('id, learner_id, status, decision_date').neq('status', 'closed'),
+    supabase.from('interventions').select('id, learner_id, status, decision_date, outcome, closed_at, step1_completed_at, step2_completed_at, step3_completed_at'),
   ])
 
+  // Build a per-learner intervention map. Active (non-closed) always wins.
+  // For closed interventions: only "resolved" outcomes are kept (so admins see
+  // "Back on track" badges); other closed outcomes (dropped/other) are hidden
+  // — the learner reads as "no intervention" again.
+  type InterventionMapEntry = {
+    id: string; learner_id: string; status: string
+    decision_date: string | null
+    outcome: string | null
+    closed_at: string | null
+    step1_completed_at: string | null
+    step2_completed_at: string | null
+    step3_completed_at: string | null
+  }
+  const relevantInterventions = (interventionsRaw ?? [])
+    .filter((iv) => iv.status !== 'closed' || iv.outcome === 'resolved') as InterventionMapEntry[]
+  const sortedInterventions = [...relevantInterventions].sort((a, b) => {
+    const aClosed = a.status === 'closed'
+    const bClosed = b.status === 'closed'
+    if (aClosed && !bClosed) return -1   // closed first → active overwrites in last-wins
+    if (!aClosed && bClosed) return 1
+    if (aClosed && bClosed)  return (a.closed_at ?? '').localeCompare(b.closed_at ?? '') // older first → newest wins
+    return 0
+  })
   const interventionMap = new Map(
-    (interventionsRaw ?? []).map((iv) => [iv.learner_id, iv as { id: string; learner_id: string; status: string; decision_date: string | null }])
+    sortedInterventions.map((iv) => [iv.learner_id, iv])
   )
 
   const subCohortOptions = Array.from(
@@ -161,14 +184,18 @@ export default async function LearningPage({ searchParams }: Props) {
     })
   }
 
-  // Sort: "Needs review" (monitoring + overdue) first, then other active, then no intervention
+  // Sort: "Needs review" first (overdue → action needed), then active, then closed, then no intervention.
+  // Uses step-completion timestamps (same as the badge label) so it stays in sync with what the user sees.
   const today = new Date().toISOString().slice(0, 10)
   learnerRows.sort((a, b) => {
     const score = (iv: LearnerRow['intervention']) => {
-      if (!iv) return 3
-      if (iv.status === 'follow_up' && iv.decision_date && iv.decision_date <= today) return 0
-      if (iv.status === 'follow_up') return 1
-      return 2
+      if (!iv) return 5
+      if (iv.status === 'closed') return 4
+      const inMonitoring = !!iv.step3_completed_at
+      if (inMonitoring && iv.decision_date && iv.decision_date <= today) return 0
+      if (inMonitoring) return 3
+      if (iv.step1_completed_at) return 2
+      return 1
     }
     return score(a.intervention) - score(b.intervention)
   })
@@ -249,7 +276,7 @@ export default async function LearningPage({ searchParams }: Props) {
     if (interventionView === 'table') {
       const { data: ivRows } = await supabase
         .from('interventions')
-        .select('id, learner_id, status, root_cause_categories, action_items, decision_date')
+        .select('id, learner_id, status, root_cause_categories, action_items, decision_date, step1_completed_at, step3_completed_at')
         .neq('status', 'closed')
         .order('decision_date', { ascending: true, nullsFirst: false })
 
@@ -269,6 +296,8 @@ export default async function LearningPage({ searchParams }: Props) {
           new_batch:          meta?.new_batch ?? null,
           sub_cohort:         meta?.sub_cohort ?? null,
           status:             iv.status as InterventionRow['status'],
+          step1_completed_at: (iv as unknown as { step1_completed_at: string | null }).step1_completed_at ?? null,
+          step3_completed_at: (iv as unknown as { step3_completed_at: string | null }).step3_completed_at ?? null,
           root_cause_filled:  rootCats.length > 0,
           total_action_items: items.length,
           done_action_items:  items.filter((it) => !!it.completed_at).length,
@@ -442,6 +471,7 @@ export default async function LearningPage({ searchParams }: Props) {
                   )}
 
                   <InterventionPanel
+                    key={`${selectedLearnerData.learner_id}:${selectedIntervention?.id ?? 'none'}`}
                     learnerId={selectedLearnerData.learner_id}
                     intervention={selectedIntervention}
                     staffUsers={staffUsers}

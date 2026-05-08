@@ -34,6 +34,8 @@ export type InterventionRow = {
   new_batch:           string | null
   sub_cohort:          string | null
   status:              'open' | 'in_progress' | 'follow_up'
+  step1_completed_at:  string | null
+  step3_completed_at:  string | null
   root_cause_filled:   boolean
   total_action_items:  number
   done_action_items:   number
@@ -281,21 +283,25 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
 
 function statusLabel(row: InterventionRow): string {
   const today = new Date().toISOString().slice(0, 10)
-  if (row.status === 'follow_up' && row.decision_date && row.decision_date <= today) return 'Needs review'
-  if (row.status === 'open')        return 'Open'
-  if (row.status === 'in_progress') return 'In progress'
-  if (row.status === 'follow_up')   return 'Follow-up'
+  const inMonitoring = !!row.step3_completed_at
+  if (inMonitoring && row.decision_date && row.decision_date <= today) return 'Needs review'
+  if (inMonitoring)         return 'Monitoring'
+  if (row.step1_completed_at) return 'Pending'
   return 'Open'
 }
 
 const STATUS_RANK: Record<string, number> = {
-  'Needs review': 0, Open: 1, 'In progress': 2, Monitoring: 3,
+  'Needs review': 0,
+  'Open':         1,
+  'Pending':      2,
+  'Monitoring':   3,
 }
 
 function statusBadge(label: string): string {
-  if (label === 'Needs review') return 'bg-amber-50 text-amber-700 border-2 border-amber-400'
+  if (label === 'Needs review') return 'bg-red-50 text-red-700 border-2 border-red-500'
   if (label === 'Open')         return 'bg-red-50 text-red-600 border border-red-200'
-  return 'bg-amber-50 text-amber-600 border border-amber-200'
+  if (label === 'Pending')      return 'bg-amber-50 text-amber-600 border border-amber-200'
+  return 'bg-blue-50 text-blue-600 border border-blue-200' // Monitoring
 }
 
 function fmtDate(iso: string | null): string {

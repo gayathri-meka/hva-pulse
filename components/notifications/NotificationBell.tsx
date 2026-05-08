@@ -4,6 +4,10 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { markNotificationRead, markAllNotificationsRead } from '@/app/(protected)/notifications/actions'
 
+// Notifications whose id starts with this prefix are synthesized live on the
+// server and have no row in the DB, so we never mark-read them.
+const COMPUTED_NOTIFICATION_PREFIX = 'action-item:'
+
 export type Notification = {
   id:         string
   type:       string
@@ -65,10 +69,15 @@ export default function NotificationBell({ notifications }: Props) {
   }
 
   function handleClick(n: Notification) {
-    if (!n.is_read) handleMarkRead(n.id)
+    // Synthesized notifications aren't backed by a DB row, so skip mark-read.
+    if (!n.is_read && !n.id.startsWith(COMPUTED_NOTIFICATION_PREFIX)) handleMarkRead(n.id)
     if (n.link) {
       setOpen(false)
       router.push(n.link)
+      // Force a server re-render so the destination page reflects current state
+      // (the existing mark-read path triggers this via its own refresh; for
+      // synthesized notifications we'd otherwise navigate without a refresh).
+      router.refresh()
     }
   }
 
