@@ -187,7 +187,7 @@ async function exportInterventions(supabase: Awaited<ReturnType<typeof createSer
   })
 }
 
-async function exportPlacementZip(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>): Promise<Buffer> {
+async function exportPlacementZip(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>): Promise<Uint8Array> {
   const [apps, companies, roles] = await Promise.all([
     exportApplications(supabase),
     exportCompanies(supabase),
@@ -197,7 +197,7 @@ async function exportPlacementZip(supabase: Awaited<ReturnType<typeof createServ
   zip.file('applications.csv', toCsv(apps))
   zip.file('companies.csv',    toCsv(companies))
   zip.file('roles.csv',        toCsv(roles))
-  return zip.generateAsync({ type: 'nodebuffer' })
+  return zip.generateAsync({ type: 'uint8array' })
 }
 
 export async function GET(req: NextRequest) {
@@ -216,7 +216,9 @@ export async function GET(req: NextRequest) {
     // Bundled placement download (zip of applications/companies/roles)
     if (table === 'placement') {
       const buf = await exportPlacementZip(supabase)
-      return new NextResponse(buf, {
+      // Cast through unknown — modern TS types narrow Uint8Array<ArrayBufferLike>
+      // in a way that doesn't match BodyInit, but at runtime any Uint8Array works.
+      return new NextResponse(buf as unknown as BodyInit, {
         headers: {
           'Content-Type':        'application/zip',
           'Content-Disposition': `attachment; filename="placement-data-${date}.zip"`,
