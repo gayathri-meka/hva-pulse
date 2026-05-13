@@ -352,16 +352,21 @@ export async function saveInterventionStep1(
   revalidatePath('/learning')
 }
 
-// Step 2: "Why?" — root cause categories (multi-select) + notes
+// Step 2: "Why?" — root cause type (time | learning | other) + categories + notes
 export async function saveInterventionStep2(
   id: string,
-  data: { root_cause_categories: string[]; root_cause_notes: string },
+  data: {
+    root_cause_type:       'time' | 'learning' | 'other'
+    root_cause_categories: string[]
+    root_cause_notes:      string
+  },
 ) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
     .from('interventions')
     .update({
+      root_cause_type:       data.root_cause_type,
       root_cause_categories: data.root_cause_categories,
       root_cause_notes:      data.root_cause_notes || null,
       step2_completed_at:    new Date().toISOString(),

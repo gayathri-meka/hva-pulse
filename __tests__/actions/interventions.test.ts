@@ -143,10 +143,12 @@ describe('saveInterventionStep2', () => {
   test('stores multi-select root cause categories', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
     await saveInterventionStep2('iv-1', {
+      root_cause_type:       'time',
       root_cause_categories: ['Life circumstance', 'External commitments'],
       root_cause_notes:      'Family emergency',
     })
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      root_cause_type:       'time',
       root_cause_categories: ['Life circumstance', 'External commitments'],
       root_cause_notes:      'Family emergency',
     }))
@@ -154,7 +156,7 @@ describe('saveInterventionStep2', () => {
 
   test('does not change status (step 2 is independent of status progression)', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await saveInterventionStep2('iv-1', { root_cause_categories: [], root_cause_notes: '' })
+    await saveInterventionStep2('iv-1', { root_cause_type: 'learning', root_cause_categories: [], root_cause_notes: '' })
     const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('status')
   })

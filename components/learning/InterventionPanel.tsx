@@ -58,6 +58,7 @@ export type Intervention = {
   flagged_items:         string[]
   what_wrong_notes:      string | null
   what_wrong_comments:   ActionItemComment[]
+  root_cause_type:       'time' | 'learning' | 'both' | 'other' | null
   root_cause_categories: string[]
   root_cause_notes:      string | null
   why_comments:          ActionItemComment[]
@@ -422,6 +423,9 @@ function Step2Card({
   const [isPending, startTrans] = useTransition()
   const complete = !!intervention?.step2_completed_at
   const [editing,    setEditing]    = useState(!complete)
+  const [rcType,     setRcType]     = useState<'time' | 'learning' | 'other' | ''>(
+    intervention?.root_cause_type === 'both' ? '' : (intervention?.root_cause_type ?? '')
+  )
   const [selected,   setSelected]   = useState<string[]>(intervention?.root_cause_categories ?? [])
   const [notes,      setNotes]      = useState(intervention?.root_cause_notes ?? '')
   const [error,      setError]      = useState('')
@@ -447,11 +451,13 @@ function Step2Card({
   }
 
   function handleSave() {
+    if (!rcType) { setError('Pick a root cause category'); return }
     if (selected.length === 0 && !notes.trim()) { setError('Select at least one category or add a note'); return }
     if (!intervention) return
     startTrans(async () => {
       try {
         await saveInterventionStep2(intervention.id, {
+          root_cause_type:       rcType,
           root_cause_categories: selected,
           root_cause_notes:      notes,
         })
@@ -476,6 +482,19 @@ function Step2Card({
 
       {intervention && editing && (
         <div className="space-y-3">
+          <div>
+            <label className={labelCls}>Category</label>
+            <select
+              className={inputCls}
+              value={rcType}
+              onChange={(e) => setRcType(e.target.value as 'time' | 'learning' | 'other' | '')}
+            >
+              <option value="">Select a category…</option>
+              <option value="time">Time</option>
+              <option value="learning">Learning</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
           {categories.length > 0 && (
             <div>
               <label className={labelCls}>Root cause categories</label>
@@ -519,6 +538,13 @@ function Step2Card({
         <div className="rounded-lg bg-zinc-50 px-3 py-2.5">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
+              {rcType && (
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  {rcType === 'time'     ? 'Time'
+                  : rcType === 'learning' ? 'Learning'
+                  :                         'Other'}
+                </p>
+              )}
               {selected.length > 0 && (
                 <ul className="space-y-0.5">
                   {selected.map((cat) => (

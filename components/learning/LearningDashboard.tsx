@@ -449,7 +449,10 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
     [metrics]
   )
 
-  const allColumns = useMemo(() => [...fixedColumns, interventionColumn, ...metricColumns], [metricColumns])
+  const allColumns = useMemo(() => {
+    const [nameCol, ...rest] = fixedColumns
+    return [nameCol, interventionColumn, ...rest, ...metricColumns]
+  }, [metricColumns])
 
   // Reconcile stored column order with actual columns — append any new columns
   // that weren't in the saved order, remove any that no longer exist

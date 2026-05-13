@@ -276,7 +276,7 @@ export default async function LearningPage({ searchParams }: Props) {
     if (interventionView === 'table') {
       const { data: ivRows } = await supabase
         .from('interventions')
-        .select('id, learner_id, status, root_cause_categories, action_items, decision_date, step1_completed_at, step3_completed_at')
+        .select('id, learner_id, status, root_cause_type, root_cause_categories, action_items, decision_date, step1_completed_at, step2_completed_at, step3_completed_at')
         .neq('status', 'closed')
         .order('decision_date', { ascending: true, nullsFirst: false })
 
@@ -284,24 +284,28 @@ export default async function LearningPage({ searchParams }: Props) {
       interventionRows = (ivRows ?? []).map((iv) => {
         const items    = (iv.action_items ?? []) as ActionItem[]
         const rootCats = ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? [])
+        const rcType   = ((iv as unknown as { root_cause_type?: 'time' | 'learning' | 'both' | 'other' | null }).root_cause_type) ?? null
+        const step2Done = !!((iv as unknown as { step2_completed_at?: string | null }).step2_completed_at)
         const meta     = learnerById.get(iv.learner_id)
         return {
-          id:                 iv.id,
-          learner_id:         iv.learner_id,
-          learner_name:       meta?.name ?? iv.learner_id,
-          lf_name:            meta?.lf_name ?? null,
-          batch_name:         meta?.batch_name ?? null,
-          program_status:     meta?.program_status ?? null,
-          new_lf:             meta?.new_lf ?? null,
-          new_batch:          meta?.new_batch ?? null,
-          sub_cohort:         meta?.sub_cohort ?? null,
-          status:             iv.status as InterventionRow['status'],
-          step1_completed_at: (iv as unknown as { step1_completed_at: string | null }).step1_completed_at ?? null,
-          step3_completed_at: (iv as unknown as { step3_completed_at: string | null }).step3_completed_at ?? null,
-          root_cause_filled:  rootCats.length > 0,
-          total_action_items: items.length,
-          done_action_items:  items.filter((it) => !!it.completed_at).length,
-          decision_date:      (iv as unknown as { decision_date: string | null }).decision_date ?? null,
+          id:                    iv.id,
+          learner_id:            iv.learner_id,
+          learner_name:          meta?.name ?? iv.learner_id,
+          lf_name:               meta?.lf_name ?? null,
+          batch_name:            meta?.batch_name ?? null,
+          program_status:        meta?.program_status ?? null,
+          new_lf:                meta?.new_lf ?? null,
+          new_batch:             meta?.new_batch ?? null,
+          sub_cohort:            meta?.sub_cohort ?? null,
+          status:                iv.status as InterventionRow['status'],
+          step1_completed_at:    (iv as unknown as { step1_completed_at: string | null }).step1_completed_at ?? null,
+          step3_completed_at:    (iv as unknown as { step3_completed_at: string | null }).step3_completed_at ?? null,
+          root_cause_filled:     step2Done,
+          root_cause_type:       rcType,
+          root_cause_categories: rootCats,
+          total_action_items:    items.length,
+          done_action_items:     items.filter((it) => !!it.completed_at).length,
+          decision_date:         (iv as unknown as { decision_date: string | null }).decision_date ?? null,
         }
       })
     }
@@ -315,7 +319,7 @@ export default async function LearningPage({ searchParams }: Props) {
           .single(),
         supabase
           .from('interventions')
-          .select('id, learner_id, status, flagged_items, what_wrong_notes, what_wrong_comments, root_cause_categories, root_cause_notes, why_comments, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
+          .select('id, learner_id, status, flagged_items, what_wrong_notes, what_wrong_comments, root_cause_type, root_cause_categories, root_cause_notes, why_comments, step1_completed_at, step2_completed_at, step3_completed_at, action_items, decision_date, last_reviewed_at, update_log')
           .eq('learner_id', selectedLearnerId)
           .neq('status', 'closed')
           .maybeSingle(),
@@ -390,6 +394,7 @@ export default async function LearningPage({ searchParams }: Props) {
           flagged_items:         ((iv as unknown as { flagged_items?: string[] }).flagged_items ?? []),
           what_wrong_notes:      (iv as unknown as { what_wrong_notes?: string | null }).what_wrong_notes ?? null,
           what_wrong_comments:   ((iv as unknown as { what_wrong_comments?: unknown[] }).what_wrong_comments ?? []) as Intervention['what_wrong_comments'],
+          root_cause_type:       ((iv as unknown as { root_cause_type?: 'time' | 'learning' | 'both' | 'other' | null }).root_cause_type) ?? null,
           root_cause_categories: ((iv as unknown as { root_cause_categories?: string[] }).root_cause_categories ?? []),
           root_cause_notes:      iv.root_cause_notes ?? null,
           why_comments:          ((iv as unknown as { why_comments?: unknown[] }).why_comments ?? []) as Intervention['why_comments'],

@@ -37,6 +37,8 @@ export type InterventionRow = {
   step1_completed_at:  string | null
   step3_completed_at:  string | null
   root_cause_filled:   boolean
+  root_cause_type:     'time' | 'learning' | 'both' | 'other' | null
+  root_cause_categories: string[]
   total_action_items:  number
   done_action_items:   number
   decision_date:       string | null
@@ -304,6 +306,22 @@ function statusBadge(label: string): string {
   return 'bg-blue-50 text-blue-600 border border-blue-200' // Monitoring
 }
 
+function rootCauseLabel(row: InterventionRow): string {
+  if (!row.root_cause_filled) return 'Not filled'
+  if (row.root_cause_type === 'time')     return 'Time'
+  if (row.root_cause_type === 'learning') return 'Learning'
+  if (row.root_cause_type === 'other')    return 'Other'
+  return 'Filled'
+}
+
+function rootCauseBadge(label: string): string {
+  if (label === 'Not filled') return 'bg-zinc-50 text-zinc-500 border border-zinc-200'
+  if (label === 'Time')       return 'bg-sky-50 text-sky-700 border border-sky-200'
+  if (label === 'Learning')   return 'bg-violet-50 text-violet-700 border border-violet-200'
+  if (label === 'Other')      return 'bg-amber-50 text-amber-700 border border-amber-200'
+  return 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -380,20 +398,23 @@ const columns = [
       )
     },
   }),
-  col.accessor((row) => (row.root_cause_filled ? 'Filled' : 'Not filled'), {
+  col.accessor((row) => rootCauseLabel(row), {
     id:       'root_cause',
     header:   'Root cause',
     filterFn: multiSelectFilter,
     cell: (info) => {
-      const filled = info.row.original.root_cause_filled
+      const r      = info.row.original
+      const label  = rootCauseLabel(r)
+      const cats   = r.root_cause_categories
       return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-          filled
-            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-            : 'bg-zinc-50 text-zinc-500 border border-zinc-200'
-        }`}>
-          {filled ? 'Filled' : 'Not filled'}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${rootCauseBadge(label)}`}>
+            {label}
+          </span>
+          {r.root_cause_filled && cats.length > 0 && (
+            <span className="text-xs text-zinc-500">{cats.join(', ')}</span>
+          )}
+        </div>
       )
     },
   }),
