@@ -38,6 +38,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import MultiSelectChips from '@/components/ui/MultiSelectChips'
+import ObservationsModal, { type Observation } from '@/components/learning/ObservationsModal'
 
 // ── Shared types ───────────────────────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ export type LearnerRow = {
   new_batch:    string | null
   new_mentor:   string | null
   metrics:      Record<string, ComputedMetric>
+  observations: Observation[]
   intervention: {
     id: string
     status: string
@@ -344,6 +346,28 @@ const interventionColumn = col.accessor(
   }
 )
 
+function ObservationsCell({
+  count,
+  onClick,
+}: {
+  count:   number
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={count === 0 ? 'Add observation' : `${count} observation${count !== 1 ? 's' : ''}`}
+      className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-3.5 w-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.67 1.09-.086 2.17-.208 3.238-.365 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+      </svg>
+      {count > 0 && <span className="font-medium">{count}</span>}
+    </button>
+  )
+}
+
 // ── Popover state ──────────────────────────────────────────────────────────────
 
 type PopoverState = {
@@ -360,11 +384,31 @@ interface Props {
   learners:         LearnerRow[]
   metrics:          MetricCol[]
   subCohortOptions: string[]
+  currentUserId:    string
+  currentUserName:  string | null
+  isAdmin:          boolean
+  canEdit:          boolean
 }
 
-export default function LearningDashboard({ learners, metrics, subCohortOptions }: Props) {
+export default function LearningDashboard({ learners, metrics, subCohortOptions, currentUserId, currentUserName, isAdmin, canEdit }: Props) {
   const router       = useRouter()
   const searchParams = useSearchParams()
+  const [obsLearner, setObsLearner] = useState<LearnerRow | null>(null)
+
+  const observationsColumn = useMemo(() => col.accessor(
+    (row) => row.observations.length,
+    {
+      id:            'observations',
+      header:        'Notes',
+      enableSorting: true,
+      cell: (info) => (
+        <ObservationsCell
+          count={info.row.original.observations.length}
+          onClick={() => setObsLearner(info.row.original)}
+        />
+      ),
+    }
+  ), [])
 
   const activeSubCohortSet = useMemo(() => {
     const param = searchParams.get('sub_cohort') ?? ''
@@ -451,8 +495,9 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
 
   const allColumns = useMemo(() => {
     const [nameCol, ...rest] = fixedColumns
-    return [nameCol, interventionColumn, ...rest, ...metricColumns]
-  }, [metricColumns])
+    const obsCol = canEdit ? [observationsColumn] : []
+    return [nameCol, interventionColumn, ...obsCol, ...rest, ...metricColumns]
+  }, [metricColumns, observationsColumn, canEdit])
 
   // Reconcile stored column order with actual columns — append any new columns
   // that weren't in the saved order, remove any that no longer exist
@@ -719,6 +764,18 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions 
         </>
         )
       })()}
+
+      {obsLearner && (
+        <ObservationsModal
+          learnerId={obsLearner.learner_id}
+          learnerName={obsLearner.name}
+          observations={obsLearner.observations}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          isAdmin={isAdmin}
+          onClose={() => setObsLearner(null)}
+        />
+      )}
     </div>
   )
 }

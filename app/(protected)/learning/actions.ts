@@ -844,3 +844,82 @@ export async function syncDataSource(id: string) {
 
   revalidatePath('/learning/settings')
 }
+
+// ── Learner observations ──────────────────────────────────────────────────────
+
+function validateObservedAt(observedAt: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(observedAt)) throw new Error('Invalid date (expected YYYY-MM-DD)')
+}
+
+export async function createObservation(
+  learnerId: string,
+  observedAt: string,
+  note: string,
+) {
+  const user = await requireStaff()
+  if (!note.trim()) throw new Error('Observation note is required')
+  validateObservedAt(observedAt)
+
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase.from('learner_observations').insert({
+    learner_id:  learnerId,
+    author_id:   user.id,
+    observed_at: observedAt,
+    note:        note.trim(),
+  })
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${learnerId}`)
+}
+
+export async function updateObservation(
+  id: string,
+  observedAt: string,
+  note: string,
+) {
+  const user = await requireStaff()
+  if (!note.trim()) throw new Error('Observation note is required')
+  validateObservedAt(observedAt)
+
+  const supabase = await createServerSupabaseClient()
+  const { data: existing, error: readErr } = await supabase
+    .from('learner_observations')
+    .select('author_id, learner_id')
+    .eq('id', id)
+    .single()
+  if (readErr || !existing) throw new Error('Observation not found')
+  if (existing.author_id !== user.id && user.role !== 'admin') {
+    throw new Error('You can only edit your own observations')
+  }
+
+  const { error } = await supabase
+    .from('learner_observations')
+    .update({
+      observed_at: observedAt,
+      note:        note.trim(),
+      updated_at:  new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${existing.learner_id}`)
+}
+
+export async function deleteObservation(id: string) {
+  const user = await requireStaff()
+  const supabase = await createServerSupabaseClient()
+  const { data: existing, error: readErr } = await supabase
+    .from('learner_observations')
+    .select('author_id, learner_id')
+    .eq('id', id)
+    .single()
+  if (readErr || !existing) throw new Error('Observation not found')
+  if (existing.author_id !== user.id && user.role !== 'admin') {
+    throw new Error('You can only delete your own observations')
+  }
+
+  const { error } = await supabase.from('learner_observations').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${existing.learner_id}`)
+}

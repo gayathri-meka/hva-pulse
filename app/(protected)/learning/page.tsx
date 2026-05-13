@@ -12,6 +12,8 @@ import LearnerSearchBox from '@/components/learning/LearnerSearchBox'
 import MetricsSection, { type MetricRow } from '@/components/learning/MetricsSection'
 import InterventionsTable, { type InterventionRow } from '@/components/learning/InterventionsTable'
 import InterventionHistory, { type ClosedIntervention } from '@/components/learning/InterventionHistory'
+import { type Observation } from '@/components/learning/ObservationsModal'
+import LearnerObservationsCard from '@/components/learning/LearnerObservationsCard'
 import {
   type RawRow,
   type MetricDef,
@@ -54,12 +56,32 @@ export default async function LearningPage({ searchParams }: Props) {
     { data: metricsRaw },
     { data: allLearners },
     { data: interventionsRaw },
+    { data: observationsRaw },
   ] = await Promise.all([
     learnersQuery,
     supabase.from('metrics').select('*').order('created_at'),
     supabase.from('learners').select('sub_cohort').eq('is_current_cohort', true),
     supabase.from('interventions').select('id, learner_id, status, decision_date, outcome, closed_at, step1_completed_at, step2_completed_at, step3_completed_at'),
+    supabase
+      .from('learner_observations')
+      .select('id, learner_id, author_id, observed_at, note, author:users!learner_observations_author_id_fkey(name)')
+      .order('observed_at', { ascending: false }),
   ])
+
+  const observationsByLearner = new Map<string, Observation[]>()
+  for (const o of observationsRaw ?? []) {
+    const author = (o as unknown as { author: { name: string } | null }).author
+    const obs: Observation = {
+      id:          o.id,
+      learner_id:  o.learner_id,
+      author_id:   o.author_id,
+      author_name: author?.name ?? null,
+      observed_at: o.observed_at,
+      note:        o.note,
+    }
+    if (!observationsByLearner.has(o.learner_id)) observationsByLearner.set(o.learner_id, [])
+    observationsByLearner.get(o.learner_id)!.push(obs)
+  }
 
   // Build a per-learner intervention map. Active (non-closed) always wins.
   // For closed interventions: only "resolved" outcomes are kept (so admins see
@@ -162,6 +184,7 @@ export default async function LearningPage({ searchParams }: Props) {
         new_batch:    (l as unknown as { new_batch: string | null }).new_batch ?? null,
         new_mentor:   (l as unknown as { new_mentor: string | null }).new_mentor ?? null,
         metrics,
+        observations: observationsByLearner.get(l.learner_id) ?? [],
         intervention: interventionMap.get(l.learner_id) ?? null,
       }
     })
@@ -179,6 +202,7 @@ export default async function LearningPage({ searchParams }: Props) {
         new_batch:    (l as unknown as { new_batch: string | null }).new_batch ?? null,
         new_mentor:   (l as unknown as { new_mentor: string | null }).new_mentor ?? null,
         metrics:      {},
+        observations: observationsByLearner.get(l.learner_id) ?? [],
         intervention: interventionMap.get(l.learner_id) ?? null,
       }
     })
@@ -439,7 +463,15 @@ export default async function LearningPage({ searchParams }: Props) {
       </div>
 
       {filter === 'all' && (
-        <LearningDashboard learners={learnerRows} metrics={metricCols} subCohortOptions={subCohortOptions} />
+        <LearningDashboard
+          learners={learnerRows}
+          metrics={metricCols}
+          subCohortOptions={subCohortOptions}
+          currentUserId={appUser.id}
+          currentUserName={appUser.name ?? null}
+          isAdmin={appUser.role === 'admin'}
+          canEdit={appUser.role === 'admin' || appUser.role === 'staff'}
+        />
       )}
 
       {filter === 'interventions' && (
@@ -472,6 +504,15 @@ export default async function LearningPage({ searchParams }: Props) {
               {selectedLearnerData && (
                 <div className="space-y-6">
                   <LearnerInfoCard learner={selectedLearnerData} />
+
+                  <LearnerObservationsCard
+                    learnerId={selectedLearnerData.learner_id}
+                    learnerName={selectedLearnerData.name}
+                    observations={observationsByLearner.get(selectedLearnerData.learner_id) ?? []}
+                    currentUserId={appUser.id}
+                    currentUserName={appUser.name ?? null}
+                    isAdmin={appUser.role === 'admin'}
+                  />
 
                   {selectedMetricRows.length > 0 && (
                     <MetricsSection metrics={selectedMetricRows} />
