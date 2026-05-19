@@ -13,11 +13,26 @@ type RoleCardData = {
   salary_range: string | null
   status: 'open' | 'closed'
   my_status: MyStatus
+  posted_at: string | null
   not_shortlisted_reasons: string[]
   not_shortlisted_reason: string | null
   rejection_reasons: string[]
   rejection_feedback: string | null
   not_interested_reasons: string[]
+}
+
+function formatPostedAgo(iso: string | null): string | null {
+  if (!iso) return null
+  const posted = new Date(iso).getTime()
+  if (Number.isNaN(posted)) return null
+  const days = Math.floor((Date.now() - posted) / (1000 * 60 * 60 * 24))
+  if (days < 1)   return 'Posted today'
+  if (days === 1) return 'Posted 1 day ago'
+  if (days < 7)   return `Posted ${days} days ago`
+  if (days < 14)  return 'Posted 1 week ago'
+  if (days < 30)  return `Posted ${Math.floor(days / 7)} weeks ago`
+  if (days < 60)  return 'Posted 1 month ago'
+  return `Posted ${Math.floor(days / 30)} months ago`
 }
 
 const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
@@ -216,7 +231,7 @@ export default function RoleCard({ role, readOnly = false }: { role: RoleCardDat
             </div>
           </div>
 
-          {/* Location + Salary */}
+          {/* Location + Salary + Posted */}
           <div className="mt-3 flex flex-wrap gap-3">
             <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-700">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
@@ -229,6 +244,15 @@ export default function RoleCard({ role, readOnly = false }: { role: RoleCardDat
               <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-700">
                 <span className="shrink-0 font-medium text-zinc-400">₹</span>
                 {role.salary_range}
+              </span>
+            )}
+
+            {formatPostedAgo(role.posted_at) && (
+              <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-500">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                {formatPostedAgo(role.posted_at)}
               </span>
             )}
           </div>

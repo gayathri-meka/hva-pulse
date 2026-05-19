@@ -22,7 +22,7 @@ export default async function LearnerDashboardPage() {
   ] = await Promise.all([
     supabase
       .from('roles')
-      .select('id, company_id, role_title, location, salary_range, status')
+      .select('id, company_id, role_title, location, salary_range, status, created_at')
       .order('created_at', { ascending: false }),
     supabase.from('companies').select('id, company_name, sort_order, created_at'),
     supabase
@@ -95,6 +95,7 @@ export default async function LearnerDashboardPage() {
         salary_range: role.salary_range as string | null,
         status: role.status as 'open' | 'closed',
         my_status: myStatus,
+        posted_at: (role as unknown as { created_at: string | null }).created_at ?? null,
         not_shortlisted_reasons: app?.not_shortlisted_reasons ?? [],
         not_shortlisted_reason:  app?.not_shortlisted_reason  ?? null,
         rejection_reasons:       app?.rejection_reasons       ?? [],

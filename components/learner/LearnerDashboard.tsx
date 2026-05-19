@@ -15,6 +15,7 @@ type RoleItem = {
   salary_range: string | null
   status: 'open' | 'closed'
   my_status: MyStatus
+  posted_at: string | null
   not_shortlisted_reasons: string[]
   not_shortlisted_reason: string | null
   rejection_reasons: string[]
