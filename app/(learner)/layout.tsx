@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
-import { getEffectiveLearnerIdentity } from '@/lib/impersonation'
+import { getEffectiveLearnerIdentity, getPreviewMode } from '@/lib/impersonation'
 import LearnerShell from '@/components/learner/LearnerShell'
 import ImpersonationBanner from '@/components/learner-view/ImpersonationBanner'
 
@@ -19,12 +19,22 @@ export default async function LearnerLayout({ children }: { children: React.Reac
   const effective = await getEffectiveLearnerIdentity()
   if (!effective) redirect('/dashboard')
 
+  const previewMode = effective.isImpersonating ? await getPreviewMode() : 'desktop'
+
   return (
     <>
       {effective.isImpersonating && (
-        <ImpersonationBanner learnerName={effective.name ?? effective.email} />
+        <ImpersonationBanner
+          learnerName={effective.name ?? effective.email}
+          previewMode={previewMode}
+        />
       )}
-      <LearnerShell>{children}</LearnerShell>
+      <LearnerShell
+        impersonating={effective.isImpersonating}
+        previewMode={previewMode}
+      >
+        {children}
+      </LearnerShell>
     </>
   )
 }

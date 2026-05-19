@@ -3,6 +3,25 @@ import { getAppUser, type AppUser } from './auth'
 import { createServerSupabaseClient } from './supabase-server'
 
 const COOKIE_NAME = 'pulse_impersonate_user_id'
+const PREVIEW_COOKIE_NAME = 'pulse_learner_preview_mode'
+
+export type PreviewMode = 'mobile' | 'desktop'
+
+/** Returns the admin's chosen preview mode (defaults to 'mobile'). */
+export async function getPreviewMode(): Promise<PreviewMode> {
+  const c = await cookies()
+  return c.get(PREVIEW_COOKIE_NAME)?.value === 'desktop' ? 'desktop' : 'mobile'
+}
+
+export async function setPreviewMode(mode: PreviewMode): Promise<void> {
+  const c = await cookies()
+  c.set(PREVIEW_COOKIE_NAME, mode, {
+    httpOnly: false, // client-readable not required, but harmless either way
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path:     '/',
+  })
+}
 
 export type EffectiveLearnerIdentity = {
   userId:          string

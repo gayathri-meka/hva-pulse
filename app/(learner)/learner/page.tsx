@@ -155,7 +155,7 @@ export default async function LearnerDashboardPage() {
   const firstName  = effective.name?.split(' ')[0] ?? 'there'
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
+    <div className="mx-auto max-w-2xl px-4 py-6 @lg:max-w-6xl">
       <LearnerDashboard
         firstName={firstName}
         snapshot={snapshot}

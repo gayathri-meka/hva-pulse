@@ -107,7 +107,7 @@ export default async function ProfilePage({ searchParams }: Props) {
     .toUpperCase()
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 space-y-5">
+    <div className="mx-auto max-w-2xl px-4 py-6 space-y-5 @lg:max-w-6xl">
       {backHref && (
         <Link
           href={backHref}
@@ -183,66 +183,65 @@ export default async function ProfilePage({ searchParams }: Props) {
         <ResumeManager resumes={resumes ?? []} readOnly={effective.isImpersonating} />
       </div>
 
-      {/* ── Academic ────────────────────────────────────────────────────── */}
+      {/* ── Info sections — 2-column on @lg+ ────────────────────────────── */}
       {learner && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Academic</h3>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-            <InfoItem label="Degree"          value={learner.degree} />
-            <InfoItem label="Specialisation"  value={learner.specialisation} />
-            <InfoItem label="Graduation Year" value={learner.year_of_graduation} />
+        <div className="grid grid-cols-1 gap-5 @lg:grid-cols-2">
+          {/* Academic */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Academic</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 @sm:grid-cols-3">
+              <InfoItem label="Degree"          value={learner.degree} />
+              <InfoItem label="Specialisation"  value={learner.specialisation} />
+              <InfoItem label="Graduation Year" value={learner.year_of_graduation} />
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* ── Programme ───────────────────────────────────────────────────── */}
-      {learner && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Programme</h3>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-            <InfoItem label="Batch"              value={learner.batch_name} />
-            <InfoItem label="Track"              value={learner.track} />
-            <InfoItem label="LF"                 value={learner.lf_name} />
-            <InfoItem label="Tech Mentor"        value={learner.tech_mentor_name} />
-            <InfoItem label="Core Skills Mentor" value={learner.core_skills_mentor_name} />
-            <InfoItem label="Category"           value={learner.category} />
-            <InfoItem label="Joined"             value={fmtDate(learner.join_date)} />
+          {/* Programme */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Programme</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 @sm:grid-cols-3">
+              <InfoItem label="Batch"              value={learner.batch_name} />
+              <InfoItem label="Track"              value={learner.track} />
+              <InfoItem label="LF"                 value={learner.lf_name} />
+              <InfoItem label="Tech Mentor"        value={learner.tech_mentor_name} />
+              <InfoItem label="Core Skills Mentor" value={learner.core_skills_mentor_name} />
+              <InfoItem label="Category"           value={learner.category} />
+              <InfoItem label="Joined"             value={fmtDate(learner.join_date)} />
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* ── Assessment ──────────────────────────────────────────────────── */}
-      {learner && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Assessment</h3>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">PRS (0–1)</p>
-              <PrsBar value={learner.prs} />
-            </div>
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Readiness</p>
-              {learner.readiness ? (
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${READINESS_BADGE[learner.readiness] ?? 'bg-zinc-100 text-zinc-600'}`}>
-                  {learner.readiness}
-                </span>
-              ) : <span className="text-sm text-zinc-300">—</span>}
-            </div>
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Proactiveness (1–4)</p>
-              <ScoreDots value={learner.proactiveness} />
-            </div>
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Articulation (1–4)</p>
-              <ScoreDots value={learner.articulation} />
-            </div>
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Comprehension (1–4)</p>
-              <ScoreDots value={learner.comprehension} />
-            </div>
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Tech Score (1–4)</p>
-              <ScoreDots value={learner.tech_score} />
+          {/* Assessment — full row on @lg+ */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm @lg:col-span-2">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">Assessment</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 @sm:grid-cols-3 @lg:grid-cols-6">
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">PRS (0–1)</p>
+                <PrsBar value={learner.prs} />
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Readiness</p>
+                {learner.readiness ? (
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${READINESS_BADGE[learner.readiness] ?? 'bg-zinc-100 text-zinc-600'}`}>
+                    {learner.readiness}
+                  </span>
+                ) : <span className="text-sm text-zinc-300">—</span>}
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Proactiveness (1–4)</p>
+                <ScoreDots value={learner.proactiveness} />
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Articulation (1–4)</p>
+                <ScoreDots value={learner.articulation} />
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Comprehension (1–4)</p>
+                <ScoreDots value={learner.comprehension} />
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Tech Score (1–4)</p>
+                <ScoreDots value={learner.tech_score} />
+              </div>
             </div>
           </div>
         </div>

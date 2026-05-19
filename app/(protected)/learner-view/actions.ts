@@ -1,9 +1,15 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { setImpersonatedUserId, clearImpersonatedUserId } from '@/lib/impersonation'
+import {
+  setImpersonatedUserId,
+  clearImpersonatedUserId,
+  setPreviewMode,
+  type PreviewMode,
+} from '@/lib/impersonation'
 
 export async function startImpersonation(userId: string) {
   await requireStaff()
@@ -20,7 +26,16 @@ export async function startImpersonation(userId: string) {
   }
 
   await setImpersonatedUserId(userId)
+  // Default to mobile preview when entering learner-view
+  await setPreviewMode('mobile')
   redirect('/learner')
+}
+
+export async function togglePreviewMode(mode: PreviewMode) {
+  await requireStaff()
+  await setPreviewMode(mode)
+  revalidatePath('/learner')
+  revalidatePath('/learner/profile')
 }
 
 export async function exitImpersonation() {

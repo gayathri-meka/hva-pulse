@@ -147,13 +147,13 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
         </div>
       </div>
 
-      {/* Role list */}
-      <div className="space-y-3">
+      {/* Role list — single column on narrow containers, 2-col on @lg, 3-col on @2xl */}
+      <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
         {filteredRoles.map((role) => (
           <RoleCard key={role.id} role={role} readOnly={readOnly} />
         ))}
         {filteredRoles.length === 0 && (
-          <div className="rounded-xl border border-zinc-200 bg-white py-12 text-center">
+          <div className="col-span-full rounded-xl border border-zinc-200 bg-white py-12 text-center">
             <p className="text-sm text-zinc-400">No roles to show.</p>
           </div>
         )}
