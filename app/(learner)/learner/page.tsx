@@ -28,7 +28,7 @@ export default async function LearnerDashboardPage() {
     supabase.from('companies').select('id, company_name, sort_order, created_at'),
     supabase
       .from('applications')
-      .select('id, role_id, status, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
+      .select('id, role_id, status, created_at, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
       .eq('user_id', effective.userId),
     supabase
       .from('role_preferences')
@@ -57,6 +57,7 @@ export default async function LearnerDashboardPage() {
     (applications ?? []).map((a) => [a.role_id, {
       id: a.id,
       status: a.status,
+      applied_at: (a as unknown as { created_at: string | null }).created_at ?? null,
       not_shortlisted_reasons: (a.not_shortlisted_reasons as string[] | null) ?? [],
       not_shortlisted_reason:  (a.not_shortlisted_reason  as string | null) ?? null,
       rejection_reasons:       (a.rejection_reasons       as string[] | null) ?? [],
@@ -101,6 +102,7 @@ export default async function LearnerDashboardPage() {
         status: role.status as 'open' | 'closed',
         my_status: myStatus,
         posted_at: (role as unknown as { created_at: string | null }).created_at ?? null,
+        applied_at: app?.applied_at ?? null,
         not_shortlisted_reasons: app?.not_shortlisted_reasons ?? [],
         not_shortlisted_reason:  app?.not_shortlisted_reason  ?? null,
         rejection_reasons:       app?.rejection_reasons       ?? [],

@@ -212,13 +212,16 @@ export default function RoleCard({ role, readOnly = false, isExited = false }: {
 
             {/* Right: role status + my status stacked */}
             <div className="flex shrink-0 flex-col items-end gap-1.5 pt-0.5">
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  role.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'
-                }`}
-              >
-                {role.status === 'open' ? 'Open' : 'Closed'}
-              </span>
+              {/* Open/Closed pill — only useful when the learner can still act on the role */}
+              {(role.my_status === 'not_applied' || role.my_status === 'not_interested') && (
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    role.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'
+                  }`}
+                >
+                  {role.status === 'open' ? 'Open' : 'Closed'}
+                </span>
+              )}
               {statusBadgeClass && (
                 <div className="flex flex-col items-end gap-0.5">
                   <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass}`}>
