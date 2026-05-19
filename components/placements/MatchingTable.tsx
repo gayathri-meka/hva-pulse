@@ -706,44 +706,54 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
           >
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                {table.getFlatHeaders().map((header) => (
-                  <th
-                    key={header.id}
-                    style={{ width: header.getSize() }}
-                    className="sticky top-0 z-10 bg-zinc-50 relative select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400"
-                  >
-                    <div
-                      className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
-                      onClick={header.column.getToggleSortingHandler()}
+                {table.getFlatHeaders().map((header) => {
+                  const isFirst = header.column.id === 'name'
+                  return (
+                    <th
+                      key={header.id}
+                      style={{ width: header.getSize() }}
+                      className={`sticky top-0 bg-zinc-50 relative select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${
+                        isFirst ? 'left-0 z-20 border-r border-zinc-200' : 'z-10'
+                      }`}
                     >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
-                      {header.column.getIsSorted() === 'desc' && <span>↓</span>}
-                    </div>
-                    {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
-                    {header.column.getCanResize() && (
                       <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
-                      />
-                    )}
-                  </th>
-                ))}
+                        className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
+                        {header.column.getIsSorted() === 'desc' && <span>↓</span>}
+                      </div>
+                      {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+                      {header.column.getCanResize() && (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
+                        />
+                      )}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-zinc-50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      style={{ width: cell.column.getSize() }}
-                      className="px-4 py-3"
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                <tr key={row.id} className="group hover:bg-zinc-50">
+                  {row.getVisibleCells().map((cell) => {
+                    const isFirst = cell.column.id === 'name'
+                    return (
+                      <td
+                        key={cell.id}
+                        style={{ width: cell.column.getSize() }}
+                        className={`px-4 py-3 ${
+                          isFirst ? 'sticky left-0 z-10 bg-white group-hover:bg-zinc-50 border-r border-zinc-200' : ''
+                        }`}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
               {table.getRowModel().rows.length === 0 && (

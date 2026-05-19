@@ -131,6 +131,7 @@ export default async function ApplicationsPage({ searchParams }: Props) {
         total={byRole.length}
         nsReasons={(nsRow?.value as string[]) ?? undefined}
         rejectionReasons={(rejRow?.value as string[]) ?? undefined}
+        statusFilter={statusFilter ?? ''}
       />
     </div>
   )

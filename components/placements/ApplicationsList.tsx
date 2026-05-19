@@ -1,21 +1,110 @@
 'use client'
 
-import { useState, useTransition, Suspense } from 'react'
+import { useState, useTransition, Suspense, useEffect, useRef } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
   flexRender,
   createColumnHelper,
   type SortingState,
   type RowSelectionState,
   type ColumnSizingState,
+  type ColumnFiltersState,
+  type FilterFn,
+  type Column,
 } from '@tanstack/react-table'
 
 const SIZING_KEY = 'hva-col-applications'
 function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
+}
+
+// Row passes if ANY of its array reasons is in the selected filter values.
+const arrayAnyFilter: FilterFn<unknown> = (row, colId, filterValues: string[]) => {
+  if (!filterValues?.length) return true
+  const cellValue = row.getValue(colId)
+  if (!Array.isArray(cellValue) || cellValue.length === 0) return false
+  return cellValue.some((v) => filterValues.includes(String(v)))
+}
+arrayAnyFilter.autoRemove = (val: string[]) => !val?.length
+
+function ReasonFilterDropdown({
+  column,
+  options,
+}: {
+  column:  Column<unknown, unknown>
+  options: string[]
+}) {
+  const [open, setOpen]  = useState(false)
+  const containerRef     = useRef<HTMLDivElement>(null)
+  const selected         = (column.getFilterValue() as string[]) ?? []
+
+  useEffect(() => {
+    if (!open) return
+    function onOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [open])
+
+  function toggle(val: string) {
+    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
+    column.setFilterValue(next.length ? next : undefined)
+  }
+
+  const label =
+    selected.length === 0 ? 'All'
+    : selected.length === 1 ? selected[0]
+    : `${selected.length} selected`
+
+  return (
+    <div ref={containerRef} className="relative mt-1">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
+        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-xs font-normal normal-case tracking-normal focus:outline-none ${
+          selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-0.5 max-h-64 min-w-[220px] overflow-y-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); column.setFilterValue(undefined); setOpen(false) }}
+              className="w-full border-b border-zinc-100 px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50"
+            >
+              Clear filter
+            </button>
+          )}
+          {options.map((opt) => (
+            <label
+              key={opt}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={() => toggle(opt)}
+                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 import Link from 'next/link'
 import { updateApplicationStatus, bulkUpdateApplicationStatus, updateApplicationReasons } from '@/app/(protected)/placements/actions'
@@ -78,14 +167,19 @@ interface Props {
   total: number
   nsReasons?: string[]
   rejectionReasons?: string[]
+  statusFilter?: string
 }
 
-export default function ApplicationsList({ applications, statusCounts, total, nsReasons, rejectionReasons }: Props) {
+export default function ApplicationsList({ applications, statusCounts, total, nsReasons, rejectionReasons, statusFilter = '' }: Props) {
   const NS_REASONS = nsReasons ?? DEFAULT_NS_REASONS
   const REJECTION_REASONS = rejectionReasons ?? DEFAULT_REJECTION_REASONS
-  const [sorting, setSorting]           = useState<SortingState>([])
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
+  // Show reason columns only when the matching status filter pill is active.
+  const showNsReasonColumn       = statusFilter === 'not_shortlisted'
+  const showRejectionReasonColumn = statusFilter === 'rejected'
+  const [sorting, setSorting]               = useState<SortingState>([])
+  const [rowSelection, setRowSelection]     = useState<RowSelectionState>({})
+  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
+  const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [statusMap, setStatusMap]       = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
@@ -269,66 +363,92 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
           (pendingChange && !pendingChange.bulk && pendingChange.id === id)
             ? pendingChange.newStatus
             : (statusMap[id] ?? info.getValue())
-        const note = (() => {
-          if (currentStatus === 'not_shortlisted') {
-            const reasons = info.row.original.not_shortlisted_reasons ?? []
-            const comment = info.row.original.not_shortlisted_reason
-            if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
-            return comment  // backward compat
-          }
-          if (currentStatus === 'rejected') {
-            const reasons = info.row.original.rejection_reasons ?? []
-            const comment = info.row.original.rejection_feedback
-            if (reasons.length > 0) return reasons.join(', ') + (comment ? ` — ${comment}` : '')
-            return comment  // backward compat
-          }
-          return null
-        })()
         return (
-          <div>
-            <div className="relative inline-flex">
-              <select
-                value={currentStatus}
-                onChange={(e) => handleStatusChange(id, e.target.value)}
-                className={`appearance-none cursor-pointer rounded-full border-0 pl-2.5 pr-6 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
-                  STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
-                }`}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s] ?? s}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
-                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
-                </svg>
-              </div>
+          <div className="relative inline-flex">
+            <select
+              value={currentStatus}
+              onChange={(e) => handleStatusChange(id, e.target.value)}
+              className={`appearance-none cursor-pointer rounded-full border-0 pl-2.5 pr-6 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 ${
+                STATUS_BADGE[currentStatus] ?? 'bg-zinc-100 text-zinc-600'
+              }`}
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s] ?? s}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+              </svg>
             </div>
-            {note && (
-              <div className="flex items-start gap-1">
-                <ExpandableNote note={note} />
-                <button
-                  onClick={() => {
-                    const row = info.row.original
-                    const st = statusMap[id] ?? row.status
-                    if (st === 'not_shortlisted') {
-                      setEditingReasons({ id, status: 'not_shortlisted', reasons: new Set(row.not_shortlisted_reasons ?? []), note: row.not_shortlisted_reason ?? '' })
-                    } else if (st === 'rejected') {
-                      setEditingReasons({ id, status: 'rejected', reasons: new Set(row.rejection_reasons ?? []), note: row.rejection_feedback ?? '' })
-                    }
-                  }}
-                  className="mt-0.5 shrink-0 text-[10px] text-zinc-400 hover:text-zinc-600"
-                >
-                  edit
-                </button>
-              </div>
-            )}
           </div>
         )
       },
     }),
+    ...(showNsReasonColumn ? [
+      col.accessor((row) => row.not_shortlisted_reasons ?? [], {
+        id:        'not_shortlisted_reasons',
+        header:    'Not Shortlisted Reason',
+        size:      220,
+        filterFn:  arrayAnyFilter as FilterFn<ApplicationWithLearner>,
+        sortingFn: (a, b) => {
+          const av = (a.original.not_shortlisted_reasons ?? []).join(', ')
+          const bv = (b.original.not_shortlisted_reasons ?? []).join(', ')
+          return av.localeCompare(bv)
+        },
+        cell: (info) => {
+          const row     = info.row.original
+          const reasons = row.not_shortlisted_reasons ?? []
+          const comment = row.not_shortlisted_reason ?? ''
+          const text    = reasons.length > 0
+            ? reasons.join(', ') + (comment ? ` — ${comment}` : '')
+            : (comment || '—')
+          return (
+            <button
+              type="button"
+              onClick={() => setEditingReasons({ id: row.id, status: 'not_shortlisted', reasons: new Set(reasons), note: comment })}
+              className="block w-full text-left text-xs text-zinc-700 hover:text-zinc-900 hover:underline"
+              title="Click to edit reasons"
+            >
+              <ExpandableNote note={text} />
+            </button>
+          )
+        },
+      }),
+    ] : []),
+    ...(showRejectionReasonColumn ? [
+      col.accessor((row) => row.rejection_reasons ?? [], {
+        id:        'rejection_reasons',
+        header:    'Reject Reason',
+        size:      220,
+        filterFn:  arrayAnyFilter as FilterFn<ApplicationWithLearner>,
+        sortingFn: (a, b) => {
+          const av = (a.original.rejection_reasons ?? []).join(', ')
+          const bv = (b.original.rejection_reasons ?? []).join(', ')
+          return av.localeCompare(bv)
+        },
+        cell: (info) => {
+          const row     = info.row.original
+          const reasons = row.rejection_reasons ?? []
+          const comment = row.rejection_feedback ?? ''
+          const text    = reasons.length > 0
+            ? reasons.join(', ') + (comment ? ` — ${comment}` : '')
+            : (comment || '—')
+          return (
+            <button
+              type="button"
+              onClick={() => setEditingReasons({ id: row.id, status: 'rejected', reasons: new Set(reasons), note: comment })}
+              className="block w-full text-left text-xs text-zinc-700 hover:text-zinc-900 hover:underline"
+              title="Click to edit reasons"
+            >
+              <ExpandableNote note={text} />
+            </button>
+          )
+        },
+      }),
+    ] : []),
     col.accessor('created_at', {
       header: 'Applied',
       size: 110,
@@ -343,9 +463,10 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
   const table = useReactTable({
     data: applications,
     columns,
-    state: { sorting, rowSelection, columnSizing },
+    state: { sorting, rowSelection, columnSizing, columnFilters },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
+    onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater
@@ -355,6 +476,7 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     columnResizeMode: 'onChange',
     getRowId: (row) => row.id,
     enableRowSelection: true,
@@ -418,6 +540,12 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
                       {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
                       {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                     </div>
+                    {header.column.id === 'not_shortlisted_reasons' && (
+                      <ReasonFilterDropdown column={header.column as Column<unknown, unknown>} options={NS_REASONS} />
+                    )}
+                    {header.column.id === 'rejection_reasons' && (
+                      <ReasonFilterDropdown column={header.column as Column<unknown, unknown>} options={REJECTION_REASONS} />
+                    )}
                     {header.column.getCanResize() && (
                       <div
                         onMouseDown={header.getResizeHandler()}
