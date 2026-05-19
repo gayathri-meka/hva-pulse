@@ -24,6 +24,7 @@ interface Props {
   salaryRange: string | null
   application: Application | null
   resumes: Resume[]
+  readOnly?: boolean
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -45,7 +46,7 @@ const STATUS_LABEL: Record<string, string> = {
   hired:               'Hired',
 }
 
-export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes }: Props) {
+export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes, readOnly = false }: Props) {
   const router = useRouter()
   const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id ?? '')
   const [readJD, setReadJD]         = useState(false)
@@ -236,13 +237,13 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
 
           <button
             onClick={handleSubmit}
-            disabled={!allChecked || isPending}
+            disabled={!allChecked || isPending || readOnly}
             className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isPending ? 'Submitting…' : 'Submit Application'}
+            {isPending ? 'Submitting…' : readOnly ? 'Submit Application (disabled in preview)' : 'Submit Application'}
           </button>
 
-          {!allChecked && (
+          {!allChecked && !readOnly && (
             <p className="text-center text-xs text-zinc-400">
               Check all boxes above to enable the submit button.
             </p>

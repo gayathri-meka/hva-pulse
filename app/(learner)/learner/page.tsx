@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
-import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { getEffectiveLearnerIdentity } from '@/lib/impersonation'
 import LearnerDashboard from '@/components/learner/LearnerDashboard'
 import { computeSnapshot, type ReasonEntry } from '@/lib/snapshot'
 import type { MyStatus } from '@/types'
@@ -8,8 +8,8 @@ import type { MyStatus } from '@/types'
 export const dynamic = 'force-dynamic'
 
 export default async function LearnerDashboardPage() {
-  const appUser = await getAppUser()
-  if (!appUser) redirect('/login')
+  const effective = await getEffectiveLearnerIdentity()
+  if (!effective) redirect('/login')
 
   const supabase = await createServerSupabaseClient()
 
@@ -28,12 +28,12 @@ export default async function LearnerDashboardPage() {
     supabase
       .from('applications')
       .select('id, role_id, status, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
-      .eq('user_id', appUser.id),
+      .eq('user_id', effective.userId),
     supabase
       .from('role_preferences')
       .select('role_id, preference, reasons')
-      .eq('user_id', appUser.id),
-    supabase.from('resumes').select('id').eq('user_id', appUser.id).limit(1),
+      .eq('user_id', effective.userId),
+    supabase.from('resumes').select('id').eq('user_id', effective.userId).limit(1),
   ])
 
   const companyMap = Object.fromEntries(
@@ -152,7 +152,7 @@ export default async function LearnerDashboardPage() {
   ).length
 
   const hasResume  = (resumeCheck ?? []).length > 0
-  const firstName  = appUser.name?.split(' ')[0] ?? 'there'
+  const firstName  = effective.name?.split(' ')[0] ?? 'there'
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
@@ -164,6 +164,7 @@ export default async function LearnerDashboardPage() {
         notShortlistedReasons={notShortlistedReasons}
         rejectedReasons={rejectedReasons}
         hasResume={hasResume}
+        readOnly={effective.isImpersonating}
       />
     </div>
   )

@@ -136,7 +136,7 @@ function NIReasonsModal({
   )
 }
 
-export default function RoleCard({ role }: { role: RoleCardData }) {
+export default function RoleCard({ role, readOnly = false }: { role: RoleCardData; readOnly?: boolean }) {
   const [myStatus, setMyStatus]     = useState<MyStatus>(role.my_status)
   const reason = (() => {
     if (myStatus === 'not_shortlisted') {
@@ -242,7 +242,7 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
               isNotInterested ? (
                 <button
                   onClick={handleUndo}
-                  disabled={isPending}
+                  disabled={isPending || readOnly}
                   className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-700 disabled:opacity-40"
                 >
                   Undo
@@ -250,7 +250,7 @@ export default function RoleCard({ role }: { role: RoleCardData }) {
               ) : (
                 <button
                   onClick={() => setShowNIModal(true)}
-                  disabled={isPending}
+                  disabled={isPending || readOnly}
                   className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-100 disabled:opacity-40"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">

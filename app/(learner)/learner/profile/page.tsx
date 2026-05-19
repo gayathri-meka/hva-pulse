@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { getEffectiveLearnerIdentity } from '@/lib/impersonation'
 import ResumeManager from '@/components/learner/ResumeManager'
 import { signOut } from '@/app/actions'
 
@@ -81,8 +81,8 @@ interface Props {
 export default async function ProfilePage({ searchParams }: Props) {
   const { back } = await searchParams
   const backHref = back?.startsWith('/learner/roles/') ? back : null
-  const appUser = await getAppUser()
-  if (!appUser) redirect('/login')
+  const effective = await getEffectiveLearnerIdentity()
+  if (!effective) redirect('/login')
 
   const supabase = await createServerSupabaseClient()
 
@@ -90,16 +90,16 @@ export default async function ProfilePage({ searchParams }: Props) {
     supabase
       .from('resumes')
       .select('id, version_name, file_url, created_at')
-      .eq('user_id', appUser.id)
+      .eq('user_id', effective.userId)
       .order('created_at', { ascending: false }),
     supabase
       .from('learners')
       .select('*')
-      .eq('user_id', appUser.id)
+      .eq('user_id', effective.userId)
       .maybeSingle(),
   ])
 
-  const initials = (appUser.name ?? appUser.email)
+  const initials = (effective.name ?? effective.email)
     .split(' ')
     .map((n: string) => n[0])
     .join('')
@@ -143,8 +143,8 @@ export default async function ProfilePage({ searchParams }: Props) {
               {initials}
             </div>
             <div>
-              <h2 className="text-xl font-bold text-zinc-900">{appUser.name ?? '—'}</h2>
-              <p className="text-sm text-zinc-500">{appUser.email}</p>
+              <h2 className="text-xl font-bold text-zinc-900">{effective.name ?? '—'}</h2>
+              <p className="text-sm text-zinc-500">{effective.email}</p>
               {(learner?.phone_number || learner?.current_location) && (
                 <p className="text-xs text-zinc-400">
                   {[learner.phone_number, learner.current_location].filter(Boolean).join(' · ')}
@@ -180,7 +180,7 @@ export default async function ProfilePage({ searchParams }: Props) {
           Save different versions here — e.g. one for tech roles and one for non-tech roles.
           You&apos;ll choose which to use when applying.
         </p>
-        <ResumeManager resumes={resumes ?? []} />
+        <ResumeManager resumes={resumes ?? []} readOnly={effective.isImpersonating} />
       </div>
 
       {/* ── Academic ────────────────────────────────────────────────────── */}

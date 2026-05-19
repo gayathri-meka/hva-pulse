@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { getEffectiveLearnerIdentity } from '@/lib/impersonation'
 import ApplyForm from '@/components/learner/ApplyForm'
 
 export const dynamic = 'force-dynamic'
@@ -13,8 +13,8 @@ interface Props {
 export default async function RoleDetailPage({ params }: Props) {
   const { id } = await params
 
-  const appUser = await getAppUser()
-  if (!appUser) redirect('/login')
+  const effective = await getEffectiveLearnerIdentity()
+  if (!effective) redirect('/login')
 
   const supabase = await createServerSupabaseClient()
 
@@ -28,12 +28,12 @@ export default async function RoleDetailPage({ params }: Props) {
       .from('applications')
       .select('id, status, resume_url, created_at, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
       .eq('role_id', id)
-      .eq('user_id', appUser.id)
+      .eq('user_id', effective.userId)
       .maybeSingle(),
     supabase
       .from('resumes')
       .select('id, version_name, file_url, created_at')
-      .eq('user_id', appUser.id)
+      .eq('user_id', effective.userId)
       .order('created_at', { ascending: false }),
   ])
 
@@ -100,6 +100,7 @@ export default async function RoleDetailPage({ params }: Props) {
             salaryRange={role.salary_range as string | null}
             application={application}
             resumes={resumes ?? []}
+            readOnly={effective.isImpersonating}
           />
         </div>
       )}
@@ -148,6 +149,7 @@ export default async function RoleDetailPage({ params }: Props) {
             salaryRange={role.salary_range as string | null}
             application={null}
             resumes={resumes ?? []}
+            readOnly={effective.isImpersonating}
           />
         </div>
       )}

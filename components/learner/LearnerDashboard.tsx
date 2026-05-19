@@ -71,9 +71,10 @@ type Props = {
   notShortlistedReasons: ReasonEntry[]
   rejectedReasons: ReasonEntry[]
   hasResume: boolean
+  readOnly?: boolean
 }
 
-export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume }: Props) {
+export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume, readOnly = false }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
 
   function handleViewIgnored() {
@@ -149,7 +150,7 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
       {/* Role list */}
       <div className="space-y-3">
         {filteredRoles.map((role) => (
-          <RoleCard key={role.id} role={role} />
+          <RoleCard key={role.id} role={role} readOnly={readOnly} />
         ))}
         {filteredRoles.length === 0 && (
           <div className="rounded-xl border border-zinc-200 bg-white py-12 text-center">

@@ -6,7 +6,7 @@ import { uploadResume, deleteResume } from '@/app/(learner)/learner/actions'
 
 type Resume = { id: string; version_name: string; file_url: string; created_at: string }
 
-export default function ResumeManager({ resumes }: { resumes: Resume[] }) {
+export default function ResumeManager({ resumes, readOnly = false }: { resumes: Resume[]; readOnly?: boolean }) {
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const [versionName, setVersionName] = useState('')
@@ -38,43 +38,45 @@ export default function ResumeManager({ resumes }: { resumes: Resume[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Upload form */}
-      <form
-        ref={formRef}
-        onSubmit={handleUpload}
-        className="space-y-3 rounded-xl border border-dashed border-zinc-300 bg-white p-5"
-      >
-        <p className="text-xs font-medium text-zinc-500">Give this resume a name</p>
+      {/* Upload form — hidden in preview mode */}
+      {!readOnly && (
+        <form
+          ref={formRef}
+          onSubmit={handleUpload}
+          className="space-y-3 rounded-xl border border-dashed border-zinc-300 bg-white p-5"
+        >
+          <p className="text-xs font-medium text-zinc-500">Give this resume a name</p>
 
-        <input
-          name="version_name"
-          type="text"
-          placeholder='e.g. "Tech roles", "Non-tech roles", "Updated Jan 2025"'
-          value={versionName}
-          onChange={(e) => setVersionName(e.target.value)}
-          required
-          className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900"
-        />
-
-        <div className="flex items-center gap-3">
           <input
-            name="file"
-            type="file"
-            accept="application/pdf"
+            name="version_name"
+            type="text"
+            placeholder='e.g. "Tech roles", "Non-tech roles", "Updated Jan 2025"'
+            value={versionName}
+            onChange={(e) => setVersionName(e.target.value)}
             required
-            className="min-w-0 flex-1 text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
+            className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900"
           />
-          <button
-            type="submit"
-            disabled={isPending}
-            className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
-          >
-            {isPending ? 'Uploading…' : 'Upload'}
-          </button>
-        </div>
 
-        {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
-      </form>
+          <div className="flex items-center gap-3">
+            <input
+              name="file"
+              type="file"
+              accept="application/pdf"
+              required
+              className="min-w-0 flex-1 text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
+            />
+            <button
+              type="submit"
+              disabled={isPending}
+              className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
+            >
+              {isPending ? 'Uploading…' : 'Upload'}
+            </button>
+          </div>
+
+          {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
+        </form>
+      )}
 
       {/* Resume list */}
       {resumes.length === 0 ? (
@@ -101,13 +103,15 @@ export default function ResumeManager({ resumes }: { resumes: Resume[] }) {
                 >
                   View
                 </a>
-                <button
-                  onClick={() => handleDelete(resume.id, resume.file_url)}
-                  disabled={isPending}
-                  className="text-xs text-red-400 transition-colors hover:text-red-600 disabled:opacity-40"
-                >
-                  Delete
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() => handleDelete(resume.id, resume.file_url)}
+                    disabled={isPending}
+                    className="text-xs text-red-400 transition-colors hover:text-red-600 disabled:opacity-40"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -59,6 +59,15 @@ function AlumniIcon() {
   )
 }
 
+function LearnerViewIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+    </svg>
+  )
+}
+
 function SettingsIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
@@ -76,15 +85,18 @@ type NavItem = {
   children?: ChildLink[]
   // if true, "active" is also triggered by these extra prefixes
   extraPrefixes?: string[]
+  // hide from guests (read-only role)
+  hideForGuest?: boolean
 }
 
 const ADMIN_LINKS: NavItem[] = [
-  { href: '/dashboard',  label: 'Dashboard',   Icon: DashboardIcon  },
-  { href: '/learners',   label: 'Learners',    Icon: LearnersIcon   },
-  { href: '/learning',   label: 'Learning',    Icon: LearningIcon   },
-  { href: '/placements', label: 'Placements',  Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
-  { href: '/alumni',     label: 'Alumni',      Icon: AlumniIcon     },
-  { href: '/ask-pulse',  label: 'Ask Pulse',   Icon: AskPulseIcon   },
+  { href: '/dashboard',    label: 'Dashboard',    Icon: DashboardIcon  },
+  { href: '/learners',     label: 'Learners',     Icon: LearnersIcon   },
+  { href: '/learning',     label: 'Learning',     Icon: LearningIcon   },
+  { href: '/placements',   label: 'Placements',   Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
+  { href: '/alumni',       label: 'Alumni',       Icon: AlumniIcon     },
+  { href: '/ask-pulse',    label: 'Ask Pulse',    Icon: AskPulseIcon   },
+  { href: '/learner-view', label: 'Learner view', Icon: LearnerViewIcon, hideForGuest: true },
   {
     href:  '/settings',
     label: 'Settings',
@@ -99,17 +111,19 @@ const ADMIN_LINKS: NavItem[] = [
 ]
 
 const STAFF_LINKS: NavItem[] = [
-  { href: '/dashboard',  label: 'Dashboard',   Icon: DashboardIcon  },
-  { href: '/learners',   label: 'Learners',    Icon: LearnersIcon   },
-  { href: '/learning',   label: 'Learning',    Icon: LearningIcon   },
-  { href: '/placements', label: 'Placements',  Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
-  { href: '/alumni',     label: 'Alumni',      Icon: AlumniIcon     },
-  { href: '/ask-pulse',  label: 'Ask Pulse',   Icon: AskPulseIcon   },
+  { href: '/dashboard',    label: 'Dashboard',    Icon: DashboardIcon  },
+  { href: '/learners',     label: 'Learners',     Icon: LearnersIcon   },
+  { href: '/learning',     label: 'Learning',     Icon: LearningIcon   },
+  { href: '/placements',   label: 'Placements',   Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
+  { href: '/alumni',       label: 'Alumni',       Icon: AlumniIcon     },
+  { href: '/ask-pulse',    label: 'Ask Pulse',    Icon: AskPulseIcon   },
+  { href: '/learner-view', label: 'Learner view', Icon: LearnerViewIcon },
 ]
 
 export default function NavLinks({ role }: { role: 'admin' | 'staff' | 'guest' }) {
   const pathname = usePathname()
-  const links    = (role === 'admin' || role === 'guest') ? ADMIN_LINKS : STAFF_LINKS
+  const rawLinks = (role === 'admin' || role === 'guest') ? ADMIN_LINKS : STAFF_LINKS
+  const links    = role === 'guest' ? rawLinks.filter((l) => !l.hideForGuest) : rawLinks
 
   return (
     <nav className="flex flex-col gap-0.5 px-3">
