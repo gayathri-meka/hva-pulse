@@ -21,12 +21,31 @@ async function getLearnerDomainId(supabase: Awaited<ReturnType<typeof createServ
   return data?.learner_id ?? null
 }
 
+const EXITED_ERROR = 'Discontinued / Dropped out learners cannot apply'
+
+async function assertCanApply(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+): Promise<{ error?: string }> {
+  const { data } = await supabase
+    .from('learners')
+    .select('status')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const s = (data as unknown as { status: string | null } | null)?.status
+  if (s === 'Dropout' || s === 'Discontinued') return { error: EXITED_ERROR }
+  return {}
+}
+
 export async function applyToRole(
   roleId: string,
   resumeUrl: string | null,
 ): Promise<{ error?: string }> {
   const appUser = await requireLearner()
   const supabase = await createServerSupabaseClient()
+
+  const gate = await assertCanApply(supabase, appUser.id)
+  if (gate.error) return gate
 
   // Prevent duplicate applications
   const { data: existing } = await supabase
@@ -59,6 +78,9 @@ export async function markNotInterested(roleId: string, reasons: string[] = []):
   const appUser = await requireLearner()
   const supabase = await createServerSupabaseClient()
 
+  const gate = await assertCanApply(supabase, appUser.id)
+  if (gate.error) return gate
+
   const { error } = await supabase.from('role_preferences').upsert(
     { user_id: appUser.id, role_id: roleId, preference: 'not_interested', reasons },
     { onConflict: 'user_id,role_id' },
@@ -73,6 +95,9 @@ export async function markNotInterested(roleId: string, reasons: string[] = []):
 export async function removeNotInterested(roleId: string): Promise<{ error?: string }> {
   const appUser = await requireLearner()
   const supabase = await createServerSupabaseClient()
+
+  const gate = await assertCanApply(supabase, appUser.id)
+  if (gate.error) return gate
 
   const { error } = await supabase
     .from('role_preferences')

@@ -151,7 +151,8 @@ function NIReasonsModal({
   )
 }
 
-export default function RoleCard({ role, readOnly = false }: { role: RoleCardData; readOnly?: boolean }) {
+export default function RoleCard({ role, readOnly = false, isExited = false }: { role: RoleCardData; readOnly?: boolean; isExited?: boolean }) {
+  const disabled = readOnly || isExited
   const [myStatus, setMyStatus]     = useState<MyStatus>(role.my_status)
   const reason = (() => {
     if (myStatus === 'not_shortlisted') {
@@ -266,7 +267,8 @@ export default function RoleCard({ role, readOnly = false }: { role: RoleCardDat
               isNotInterested ? (
                 <button
                   onClick={handleUndo}
-                  disabled={isPending || readOnly}
+                  disabled={isPending || disabled}
+                  title={isExited ? 'Discontinued / Dropped out learners cannot apply' : undefined}
                   className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-700 disabled:opacity-40"
                 >
                   Undo
@@ -274,7 +276,8 @@ export default function RoleCard({ role, readOnly = false }: { role: RoleCardDat
               ) : (
                 <button
                   onClick={() => setShowNIModal(true)}
-                  disabled={isPending || readOnly}
+                  disabled={isPending || disabled}
+                  title={isExited ? 'Discontinued / Dropped out learners cannot apply' : undefined}
                   className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-100 disabled:opacity-40"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
@@ -287,12 +290,21 @@ export default function RoleCard({ role, readOnly = false }: { role: RoleCardDat
 
             {/* Apply */}
             {canApply && (
-              <Link
-                href={`/learner/roles/${role.id}`}
-                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-zinc-700"
-              >
-                Apply →
-              </Link>
+              isExited ? (
+                <span
+                  title="Discontinued / Dropped out learners cannot apply"
+                  className="cursor-not-allowed rounded-lg bg-zinc-300 px-4 py-1.5 text-xs font-semibold text-white"
+                >
+                  Apply →
+                </span>
+              ) : (
+                <Link
+                  href={`/learner/roles/${role.id}`}
+                  className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-zinc-700"
+                >
+                  Apply →
+                </Link>
+              )
             )}
           </div>
         </div>

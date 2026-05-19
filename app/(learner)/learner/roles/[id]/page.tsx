@@ -18,7 +18,7 @@ export default async function RoleDetailPage({ params }: Props) {
 
   const supabase = await createServerSupabaseClient()
 
-  const [{ data: role }, { data: application }, { data: resumes }] = await Promise.all([
+  const [{ data: role }, { data: application }, { data: resumes }, { data: learnerRow }] = await Promise.all([
     supabase
       .from('roles')
       .select('id, role_title, location, salary_range, job_description, jd_attachment_url, status, company_id, created_at, companies(company_name)')
@@ -35,7 +35,11 @@ export default async function RoleDetailPage({ params }: Props) {
       .select('id, version_name, file_url, created_at')
       .eq('user_id', effective.userId)
       .order('created_at', { ascending: false }),
+    supabase.from('learners').select('status').eq('user_id', effective.userId).maybeSingle(),
   ])
+
+  const learnerStatus = (learnerRow as unknown as { status: string | null } | null)?.status ?? null
+  const isExited      = learnerStatus === 'Dropout' || learnerStatus === 'Discontinued'
 
   if (!role) notFound()
 
@@ -146,6 +150,7 @@ export default async function RoleDetailPage({ params }: Props) {
             application={application}
             resumes={resumes ?? []}
             readOnly={effective.isImpersonating}
+            isExited={isExited}
           />
         </div>
       </div>

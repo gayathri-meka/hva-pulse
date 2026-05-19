@@ -135,53 +135,51 @@ describe('applyToRole', () => {
     await expect(applyToRole('role-1', null)).rejects.toThrow('NEXT_REDIRECT')
   })
 
+  // Helper: builds a from() mock that dispatches by table name.
+  // 'learners' (status check) returns Ongoing so the guard passes.
+  function buildApplyMocks(opts: {
+    existingApp?: { id: string } | null
+    learnerDomainId?: string | null
+    insertResult?: { error: { message: string } | null }
+  }) {
+    const mockInsert = vi.fn().mockResolvedValue(opts.insertResult ?? { error: null })
+    const from = vi.fn().mockImplementation((table: string) => {
+      if (table === 'learners') {
+        // Guard or domain-id lookup. Both shape `select(...).eq(...).maybeSingle()`.
+        return {
+          select: vi.fn().mockImplementation((cols: string) =>
+            cols === 'status'
+              ? { eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Ongoing' } }) }) }
+              : { eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: opts.learnerDomainId != null ? { learner_id: opts.learnerDomainId } : null }) }) }
+          ),
+        }
+      }
+      if (table === 'applications') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: opts.existingApp ?? null }) }),
+            }),
+          }),
+          insert: mockInsert,
+        }
+      }
+      return {}
+    })
+    return { from, mockInsert }
+  }
+
   test('returns error when application already exists', async () => {
-    const mockMaybeSingle = vi.fn().mockResolvedValue({ data: { id: 'existing-app' } })
-    const mockClient = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }) }),
-        }),
-      }),
-    }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+    const { from } = buildApplyMocks({ existingApp: { id: 'existing-app' } })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await applyToRole('role-1', null)
     expect(result.error).toBe('You have already applied to this role.')
   })
 
   test('inserts application with user_id and role_id on success', async () => {
-    const mockInsert = vi.fn().mockResolvedValue({ error: null })
-    // First call: check existing application (returns null = no duplicate)
-    // Second call: get learner domain id (returns null = no record)
-    // Third call: insert application
-    let callCount = 0
-    const mockClient = {
-      from: vi.fn().mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
-          // existing application check
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null }) }),
-              }),
-            }),
-          }
-        }
-        if (callCount === 2) {
-          // learner domain id lookup
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null }) }),
-            }),
-          }
-        }
-        // insert application
-        return { insert: mockInsert }
-      }),
-    }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+    const { from, mockInsert } = buildApplyMocks({})
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await applyToRole('role-1', 'https://example.com/resume.pdf')
 
@@ -195,33 +193,23 @@ describe('applyToRole', () => {
   })
 
   test('returns error when insert fails', async () => {
-    let callCount = 0
-    const mockClient = {
-      from: vi.fn().mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null }) }),
-              }),
-            }),
-          }
-        }
-        if (callCount === 2) {
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null }) }),
-            }),
-          }
-        }
-        return { insert: vi.fn().mockResolvedValue({ error: { message: 'insert failed' } }) }
-      }),
-    }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+    const { from } = buildApplyMocks({ insertResult: { error: { message: 'insert failed' } } })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await applyToRole('role-1', null)
     expect(result.error).toBe('insert failed')
+  })
+
+  test('blocks exited learners (Discontinued / Dropout)', async () => {
+    const from = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Dropout' } }) }),
+      }),
+    })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
+
+    const result = await applyToRole('role-1', null)
+    expect(result.error).toBe('Discontinued / Dropped out learners cannot apply')
   })
 })
 
@@ -240,8 +228,17 @@ describe('markNotInterested', () => {
 
   test('upserts role_preference with not_interested and reasons', async () => {
     const mockUpsert = vi.fn().mockResolvedValue({ error: null })
-    const mockClient = { from: vi.fn().mockReturnValue({ upsert: mockUpsert }) }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+    const from = vi.fn().mockImplementation((table: string) => {
+      if (table === 'learners') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Ongoing' } }) }),
+          }),
+        }
+      }
+      return { upsert: mockUpsert }
+    })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await markNotInterested('role-1', ['Not relevant', 'Too far'])
 
@@ -258,15 +255,32 @@ describe('markNotInterested', () => {
   })
 
   test('returns error when upsert fails', async () => {
-    const mockClient = {
-      from: vi.fn().mockReturnValue({
-        upsert: vi.fn().mockResolvedValue({ error: { message: 'upsert error' } }),
-      }),
-    }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+    const from = vi.fn().mockImplementation((table: string) => {
+      if (table === 'learners') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Ongoing' } }) }),
+          }),
+        }
+      }
+      return { upsert: vi.fn().mockResolvedValue({ error: { message: 'upsert error' } }) }
+    })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await markNotInterested('role-1')
     expect(result.error).toBe('upsert error')
+  })
+
+  test('blocks exited learners (Discontinued / Dropout)', async () => {
+    const from = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Discontinued' } }) }),
+      }),
+    })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
+
+    const result = await markNotInterested('role-1')
+    expect(result.error).toBe('Discontinued / Dropped out learners cannot apply')
   })
 })
 
@@ -286,10 +300,17 @@ describe('removeNotInterested', () => {
   test('deletes the preference row scoped to current user', async () => {
     const mockEq2 = vi.fn().mockResolvedValue({ error: null })
     const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 })
-    const mockClient = {
-      from: vi.fn().mockReturnValue({ delete: vi.fn().mockReturnValue({ eq: mockEq1 }) }),
-    }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+    const from = vi.fn().mockImplementation((table: string) => {
+      if (table === 'learners') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Ongoing' } }) }),
+          }),
+        }
+      }
+      return { delete: vi.fn().mockReturnValue({ eq: mockEq1 }) }
+    })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await removeNotInterested('role-1')
 
@@ -299,16 +320,23 @@ describe('removeNotInterested', () => {
   })
 
   test('returns error when delete fails', async () => {
-    const mockClient = {
-      from: vi.fn().mockReturnValue({
+    const from = vi.fn().mockImplementation((table: string) => {
+      if (table === 'learners') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'Ongoing' } }) }),
+          }),
+        }
+      }
+      return {
         delete: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockResolvedValue({ error: { message: 'delete error' } }),
           }),
         }),
-      }),
-    }
-    vi.mocked(createServerSupabaseClient).mockResolvedValue(mockClient as any)
+      }
+    })
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({ from } as any)
 
     const result = await removeNotInterested('role-1')
     expect(result.error).toBe('delete error')

@@ -25,6 +25,7 @@ interface Props {
   application: Application | null
   resumes: Resume[]
   readOnly?: boolean
+  isExited?: boolean
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -46,7 +47,7 @@ const STATUS_LABEL: Record<string, string> = {
   hired:               'Hired',
 }
 
-export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes, readOnly = false }: Props) {
+export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes, readOnly = false, isExited = false }: Props) {
   const router = useRouter()
   const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id ?? '')
   const [readJD, setReadJD]         = useState(false)
@@ -157,6 +158,22 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
         router.refresh()
       }
     })
+  }
+
+  if (isExited) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-sm">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">
+          Apply for this role
+        </h2>
+        <p className="text-sm font-semibold text-zinc-700">
+          Discontinued / Dropped out learners cannot apply.
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          If you believe this is a mistake, please reach out to your LF.
+        </p>
+      </div>
+    )
   }
 
   return (

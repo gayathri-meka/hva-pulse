@@ -73,9 +73,11 @@ type Props = {
   rejectedReasons: ReasonEntry[]
   hasResume: boolean
   readOnly?: boolean
+  isExited?: boolean
+  learnerStatus?: string | null
 }
 
-export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume, readOnly = false }: Props) {
+export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume, readOnly = false, isExited = false, learnerStatus = null }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
 
   function handleViewIgnored() {
@@ -106,7 +108,18 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
         <h1 className="text-xl font-bold text-zinc-900">Hey, {firstName}!</h1>
       </div>
 
-      {!hasResume && (
+      {isExited && (
+        <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3.5">
+          <p className="text-sm font-semibold text-zinc-800">
+            {learnerStatus === 'Dropout' ? 'Dropped out' : 'Discontinued'} learners cannot apply.
+          </p>
+          <p className="mt-0.5 text-xs text-zinc-600">
+            Apply and Not Interested actions are disabled. If you believe this is a mistake, please reach out to your LF.
+          </p>
+        </div>
+      )}
+
+      {!hasResume && !isExited && (
         <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-amber-900">You haven&apos;t uploaded a resume yet.</p>
@@ -151,7 +164,7 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
       {/* Role list — single column on narrow containers, 2-col on @lg, 3-col on @2xl */}
       <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
         {filteredRoles.map((role) => (
-          <RoleCard key={role.id} role={role} readOnly={readOnly} />
+          <RoleCard key={role.id} role={role} readOnly={readOnly} isExited={isExited} />
         ))}
         {filteredRoles.length === 0 && (
           <div className="col-span-full rounded-xl border border-zinc-200 bg-white py-12 text-center">

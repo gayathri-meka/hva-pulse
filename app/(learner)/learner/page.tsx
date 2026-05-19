@@ -19,6 +19,7 @@ export default async function LearnerDashboardPage() {
     { data: applications },
     { data: preferences },
     { data: resumeCheck },
+    { data: learnerRow },
   ] = await Promise.all([
     supabase
       .from('roles')
@@ -34,7 +35,11 @@ export default async function LearnerDashboardPage() {
       .select('role_id, preference, reasons')
       .eq('user_id', effective.userId),
     supabase.from('resumes').select('id').eq('user_id', effective.userId).limit(1),
+    supabase.from('learners').select('status').eq('user_id', effective.userId).maybeSingle(),
   ])
+
+  const learnerStatus = (learnerRow as unknown as { status: string | null } | null)?.status ?? null
+  const isExited      = learnerStatus === 'Dropout' || learnerStatus === 'Discontinued'
 
   const companyMap = Object.fromEntries(
     (companies ?? []).map((c) => [c.id, c.company_name]),
@@ -148,9 +153,11 @@ export default async function LearnerDashboardPage() {
       }
     })
 
-  const ignoredOpenCount = sortedRoles.filter(
-    (r) => r.status === 'open' && r.my_status === 'not_applied',
-  ).length
+  const ignoredOpenCount = isExited
+    ? 0
+    : sortedRoles.filter(
+        (r) => r.status === 'open' && r.my_status === 'not_applied',
+      ).length
 
   const hasResume  = (resumeCheck ?? []).length > 0
   const firstName  = effective.name?.split(' ')[0] ?? 'there'
@@ -166,6 +173,8 @@ export default async function LearnerDashboardPage() {
         rejectedReasons={rejectedReasons}
         hasResume={hasResume}
         readOnly={effective.isImpersonating}
+        isExited={isExited}
+        learnerStatus={learnerStatus}
       />
     </div>
   )
