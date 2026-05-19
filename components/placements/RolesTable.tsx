@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   useReactTable,
@@ -13,11 +13,11 @@ import {
   createColumnHelper,
   type FilterFn,
   type Column,
-  type Row,
   type SortingState,
   type ColumnFiltersState,
   type ColumnSizingState,
 } from '@tanstack/react-table'
+import Link from 'next/link'
 import { exportToCsv } from '@/lib/exportToCsv'
 import type { CompanyWithRoles, RoleWithCounts } from '@/types'
 
@@ -40,15 +40,6 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 const multiSelectFilter: FilterFn<FlatRole> = (row, colId, filterValues: string[]) =>
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
-
-// Defined outside component so the reference is stable across renders
-function globalSearchFn(row: Row<FlatRole>, _colId: string, filterValue: string): boolean {
-  const q = filterValue.toLowerCase()
-  return (
-    row.getValue<string>('company_name').toLowerCase().includes(q) ||
-    row.getValue<string>('role_title').toLowerCase().includes(q)
-  )
-}
 
 // ── FilterDropdown ─────────────────────────────────────────────────────────────
 function FilterDropdown({ column }: { column: Column<FlatRole, unknown> }) {
@@ -173,10 +164,27 @@ const columns = [
     },
     sortingFn: 'datetime',
   }),
+  col.display({
+    id: 'applications',
+    header: '',
+    size: 130,
+    enableSorting: false,
+    enableResizing: false,
+    cell: (info) => (
+      <Link
+        href={`/placements/applications?role=${info.row.original.id}`}
+        className="text-xs font-medium text-zinc-500 hover:text-zinc-900"
+      >
+        Applications →
+      </Link>
+    ),
+  }),
 ]
 
 // ── Component ──────────────────────────────────────────────────────────────────
-export default function RolesTable({ companies }: { companies: CompanyWithRoles[] }) {
+export type RolesTableHandle = { exportCsv: () => void; visibleCount: number }
+
+const RolesTable = forwardRef<RolesTableHandle, { companies: CompanyWithRoles[] }>(function RolesTable({ companies }, ref) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const weekParam    = searchParams.get('week')
@@ -184,7 +192,6 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
   const [sorting, setSorting]             = useState<SortingState>([{ id: 'created_at', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
-  const [globalFilter, setGlobalFilter]   = useState('')
 
   useEffect(() => {
     localStorage.setItem(SIZING_KEY, JSON.stringify(columnSizing))
@@ -224,12 +231,10 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
     data: weekFilteredRoles,
     columns,
     filterFns: { multiSelectFilter },
-    state: { sorting, columnFilters, columnSizing, globalFilter },
+    state: { sorting, columnFilters, columnSizing },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: setColumnSizing,
-    onGlobalFilterChange: setGlobalFilter,
-    globalFilterFn: globalSearchFn,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -239,12 +244,17 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
   })
 
   const rows            = table.getRowModel().rows
-  const hasActiveFilter = columnFilters.length > 0 || globalFilter.length > 0
+  const hasActiveFilter = columnFilters.length > 0
 
   function clearAllFilters() {
     setColumnFilters([])
-    setGlobalFilter('')
   }
+
+  // Expose CSV export + filtered count to the parent toolbar.
+  useImperativeHandle(ref, () => ({
+    exportCsv: () => exportToCsv(table, `roles_${new Date().toISOString().slice(0, 10)}.csv`),
+    visibleCount: rows.length,
+  }), [table, rows.length])
 
   return (
     <div>
@@ -261,57 +271,16 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
           </span>
         )}
 
-        <div className="relative min-w-[180px] max-w-xs flex-1">
-          <svg
-            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
-          >
-            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
-          </svg>
-          <input
-            type="text"
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder="Search company or role…"
-            className="w-full rounded-full border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1"
-          />
-          {globalFilter && (
-            <button
-              onClick={() => setGlobalFilter('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        <span className="text-sm text-zinc-400">{rows.length} role{rows.length !== 1 ? 's' : ''}</span>
-
         {hasActiveFilter && (
           <button onClick={clearAllFilters} className="text-xs font-medium text-blue-500 hover:text-blue-700">
             Clear filters
           </button>
         )}
-
-        <button
-          onClick={() => exportToCsv(table, `roles_${new Date().toISOString().slice(0, 10)}.csv`)}
-          disabled={rows.length === 0}
-          className="ml-auto flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
-          title="Download CSV"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
-            <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
-            <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
-          </svg>
-          CSV
-        </button>
       </div>
 
       {/* Table */}
       <div className="overflow-auto rounded-xl border border-zinc-200 bg-white" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-        <table className="w-full text-sm" style={{ tableLayout: 'fixed', width: table.getTotalSize() }}>
+        <table className="text-sm" style={{ tableLayout: 'fixed', width: '100%', minWidth: table.getTotalSize() }}>
           <thead>
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id} className="border-b border-zinc-100">
@@ -369,4 +338,6 @@ export default function RolesTable({ companies }: { companies: CompanyWithRoles[
       </div>
     </div>
   )
-}
+})
+
+export default RolesTable

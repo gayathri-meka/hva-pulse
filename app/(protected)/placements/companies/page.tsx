@@ -47,6 +47,12 @@ export default async function CompaniesPage({ searchParams }: Props) {
           applicant_count:      roleApps.length,
           hired_count:          roleApps.filter((a) => a.status === 'hired').length,
           not_interested_count: niMap[r.id] ?? 0,
+          ongoing_count:        roleApps.filter((a) =>
+            a.status === 'applied' ||
+            a.status === 'shortlisted' ||
+            a.status === 'interviews_ongoing' ||
+            a.status === 'on_hold'
+          ).length,
         }
       })
     return { ...c, roles: companyRoles }
@@ -54,6 +60,7 @@ export default async function CompaniesPage({ searchParams }: Props) {
 
   const totalRoles     = companiesWithRoles.reduce((s, c) => s + c.roles.length, 0)
   const openRoles      = companiesWithRoles.reduce((s, c) => s + c.roles.filter((r) => r.status === 'open').length, 0)
+  const ongoingRoles   = companiesWithRoles.reduce((s, c) => s + c.roles.filter((r) => r.ongoing_count > 0).length, 0)
   const openCompanies  = companiesWithRoles.filter((c) => c.roles.some((r) => r.status === 'open')).length
 
   return (
@@ -67,6 +74,12 @@ export default async function CompaniesPage({ searchParams }: Props) {
             <>
               {' · '}
               <span className="text-emerald-600">{openRoles} open</span>
+            </>
+          )}
+          {ongoingRoles > 0 && (
+            <>
+              {' · '}
+              <span className="text-violet-600">{ongoingRoles} process ongoing</span>
             </>
           )}
         </p>

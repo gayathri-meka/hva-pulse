@@ -485,6 +485,9 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
   const selectedApplications = applications.filter((a) => rowSelection[a.id])
   const selectedCount        = Object.keys(rowSelection).length
 
+  const filteredRowCount = table.getRowModel().rows.length
+  const hasColumnFilter  = columnFilters.length > 0
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -492,6 +495,11 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
           <StatusFilter statusCounts={statusCounts} total={total} />
         </Suspense>
         <div className="flex items-center gap-2">
+          {hasColumnFilter && (
+            <span className="text-xs text-zinc-500">
+              {filteredRowCount} of {applications.length}
+            </span>
+          )}
           {selectedCount > 0 && (
             <>
               <span className="text-xs text-zinc-500">{selectedCount} selected</span>
