@@ -19,6 +19,14 @@ function LearnersIcon() {
   )
 }
 
+function AdmissionsIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+    </svg>
+  )
+}
+
 function PlacementsIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
@@ -90,13 +98,14 @@ type NavItem = {
 }
 
 const ADMIN_LINKS: NavItem[] = [
-  { href: '/dashboard',    label: 'Dashboard',    Icon: DashboardIcon  },
-  { href: '/learners',     label: 'Learners',     Icon: LearnersIcon   },
-  { href: '/learning',     label: 'Learning',     Icon: LearningIcon   },
-  { href: '/placements',   label: 'Placements',   Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
-  { href: '/alumni',       label: 'Alumni',       Icon: AlumniIcon     },
-  { href: '/ask-pulse',    label: 'Ask Pulse',    Icon: AskPulseIcon   },
-  { href: '/learner-view', label: 'Learner view', Icon: LearnerViewIcon, hideForGuest: true },
+  { href: '/dashboard',          label: 'Dashboard',          Icon: DashboardIcon  },
+  { href: '/learners',           label: 'Learners',           Icon: LearnersIcon   },
+  { href: '/learning',           label: 'Learning',           Icon: LearningIcon   },
+  { href: '/placements',         label: 'Placements',         Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
+  { href: '/admissions',         label: 'Admissions',         Icon: AdmissionsIcon },
+  { href: '/alumni',             label: 'Alumni',             Icon: AlumniIcon     },
+  { href: '/ask-pulse',          label: 'Ask Pulse',          Icon: AskPulseIcon   },
+  { href: '/learner-view',       label: 'Learner view',       Icon: LearnerViewIcon, hideForGuest: true },
   {
     href:  '/settings',
     label: 'Settings',
@@ -111,13 +120,14 @@ const ADMIN_LINKS: NavItem[] = [
 ]
 
 const STAFF_LINKS: NavItem[] = [
-  { href: '/dashboard',    label: 'Dashboard',    Icon: DashboardIcon  },
-  { href: '/learners',     label: 'Learners',     Icon: LearnersIcon   },
-  { href: '/learning',     label: 'Learning',     Icon: LearningIcon   },
-  { href: '/placements',   label: 'Placements',   Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
-  { href: '/alumni',       label: 'Alumni',       Icon: AlumniIcon     },
-  { href: '/ask-pulse',    label: 'Ask Pulse',    Icon: AskPulseIcon   },
-  { href: '/learner-view', label: 'Learner view', Icon: LearnerViewIcon },
+  { href: '/dashboard',          label: 'Dashboard',          Icon: DashboardIcon  },
+  { href: '/learners',           label: 'Learners',           Icon: LearnersIcon   },
+  { href: '/learning',           label: 'Learning',           Icon: LearningIcon   },
+  { href: '/placements',         label: 'Placements',         Icon: PlacementsIcon, extraPrefixes: ['/outreach'] },
+  { href: '/admissions',         label: 'Admissions',         Icon: AdmissionsIcon },
+  { href: '/alumni',             label: 'Alumni',             Icon: AlumniIcon     },
+  { href: '/ask-pulse',          label: 'Ask Pulse',          Icon: AskPulseIcon   },
+  { href: '/learner-view',       label: 'Learner view',       Icon: LearnerViewIcon },
 ]
 
 export default function NavLinks({ role }: { role: 'admin' | 'staff' | 'guest' }) {
