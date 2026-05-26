@@ -381,16 +381,17 @@ type PopoverState = {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
-  learners:         LearnerRow[]
-  metrics:          MetricCol[]
-  subCohortOptions: string[]
-  currentUserId:    string
-  currentUserName:  string | null
-  isAdmin:          boolean
-  canEdit:          boolean
+  learners:              LearnerRow[]
+  metrics:               MetricCol[]
+  subCohortOptions:      string[]
+  currentUserId:         string
+  currentUserName:       string | null
+  isAdmin:               boolean
+  canEdit:               boolean
+  observationCategories: string[]
 }
 
-export default function LearningDashboard({ learners, metrics, subCohortOptions, currentUserId, currentUserName, isAdmin, canEdit }: Props) {
+export default function LearningDashboard({ learners, metrics, subCohortOptions, currentUserId, currentUserName, isAdmin, canEdit, observationCategories }: Props) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [obsLearner, setObsLearner] = useState<LearnerRow | null>(null)
@@ -399,7 +400,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
     (row) => row.observations.length,
     {
       id:            'observations',
-      header:        'Notes',
+      header:        'Observations',
       enableSorting: true,
       cell: (info) => (
         <ObservationsCell
@@ -773,6 +774,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
           currentUserId={currentUserId}
           currentUserName={currentUserName}
           isAdmin={isAdmin}
+          categories={observationCategories}
           onClose={() => setObsLearner(null)}
         />
       )}

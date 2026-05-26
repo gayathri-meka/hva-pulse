@@ -2,14 +2,21 @@
 
 import { useState } from 'react'
 import ObservationsModal, { type Observation } from '@/components/learning/ObservationsModal'
+import {
+  OBSERVATION_TYPE_BADGE,
+  OBSERVATION_SEVERITY_BADGE,
+  type ObservationType,
+  type ObservationSeverity,
+} from '@/lib/learning/observation-vocab'
 
 interface Props {
-  learnerId:       string
-  learnerName:     string
-  observations:    Observation[]
-  currentUserId:   string
-  currentUserName: string | null
-  isAdmin:         boolean
+  learnerId:             string
+  learnerName:           string
+  observations:          Observation[]
+  currentUserId:         string
+  currentUserName:       string | null
+  isAdmin:               boolean
+  observationCategories: string[]
 }
 
 function fmtDate(iso: string): string {
@@ -20,6 +27,34 @@ function fmtDate(iso: string): string {
   })
 }
 
+function ObservationChips({ o }: { o: Observation }) {
+  if (!o.type && !o.category && !o.severity && !o.accountable_team) return null
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {o.type && (
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${OBSERVATION_TYPE_BADGE[o.type as ObservationType] ?? 'bg-zinc-100 text-zinc-600'}`}>
+          {o.type}
+        </span>
+      )}
+      {o.category && (
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
+          {o.category}
+        </span>
+      )}
+      {o.severity && (
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${OBSERVATION_SEVERITY_BADGE[o.severity as ObservationSeverity] ?? 'bg-zinc-100 text-zinc-600'}`}>
+          Severity: {o.severity}
+        </span>
+      )}
+      {o.accountable_team && (
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
+          {o.accountable_team} team
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function LearnerObservationsCard({
   learnerId,
   learnerName,
@@ -27,6 +62,7 @@ export default function LearnerObservationsCard({
   currentUserId,
   currentUserName,
   isAdmin,
+  observationCategories,
 }: Props) {
   const [open, setOpen] = useState(false)
   const recent = [...observations]
@@ -66,7 +102,8 @@ export default function LearnerObservationsCard({
                   <span className="font-medium text-zinc-800">{fmtDate(o.observed_at)}</span>
                   <span className="text-zinc-400">{' · '}{o.author_name ?? 'Unknown'}</span>
                 </div>
-                <p className="mt-0.5 whitespace-pre-wrap text-sm text-zinc-700">{o.note}</p>
+                <ObservationChips o={o} />
+                <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{o.note}</p>
               </li>
             ))}
           </ul>
@@ -81,6 +118,7 @@ export default function LearnerObservationsCard({
           currentUserId={currentUserId}
           currentUserName={currentUserName}
           isAdmin={isAdmin}
+          categories={observationCategories}
           onClose={() => setOpen(false)}
         />
       )}

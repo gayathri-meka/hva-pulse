@@ -144,13 +144,21 @@ function ListEditor({ title, description, settingsKey, initial, placeholder }: {
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 interface Props {
-  categories:     string[]
-  checklistItems: string[]
+  categories:            string[]
+  checklistItems:        string[]
+  observationCategories: string[]
 }
 
-export default function LearningConfigurationsPanel({ categories, checklistItems }: Props) {
+export default function LearningConfigurationsPanel({ categories, checklistItems, observationCategories }: Props) {
   return (
     <div className="space-y-6">
+      <ListEditor
+        title="Observation Categories"
+        description="Shown in the Category dropdown when logging an observation. Pick a theme like Engagement or Integrity."
+        settingsKey="observation_categories"
+        initial={observationCategories}
+        placeholder="Add a category…"
+      />
       <ListEditor
         title="Root Cause Categories"
         description="Shown in the 'Why?' dropdown when diagnosing an intervention. Admins pick from this list."

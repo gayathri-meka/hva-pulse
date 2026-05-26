@@ -21,6 +21,7 @@ import {
   computeAllForLearner,
 } from '@/lib/learning/compute'
 import { readSettings } from '@/lib/settings-server'
+import { DEFAULT_OBSERVATION_CATEGORIES } from '@/lib/learning/observation-vocab'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +58,7 @@ export default async function LearningPage({ searchParams }: Props) {
     { data: allLearners },
     { data: interventionsRaw },
     { data: observationsRaw },
+    pageSettings,
   ] = await Promise.all([
     learnersQuery,
     supabase.from('metrics').select('*').order('created_at'),
@@ -64,20 +66,28 @@ export default async function LearningPage({ searchParams }: Props) {
     supabase.from('interventions').select('id, learner_id, status, decision_date, outcome, closed_at, step1_completed_at, step2_completed_at, step3_completed_at'),
     supabase
       .from('learner_observations')
-      .select('id, learner_id, author_id, observed_at, note, author:users!learner_observations_author_id_fkey(name)')
+      .select('id, learner_id, author_id, observed_at, note, type, category, severity, accountable_team, author:users!learner_observations_author_id_fkey(name)')
       .order('observed_at', { ascending: false }),
+    readSettings(['observation_categories']),
   ])
+
+  const observationCategories: string[] =
+    (pageSettings['observation_categories'] as string[] | null) ?? DEFAULT_OBSERVATION_CATEGORIES
 
   const observationsByLearner = new Map<string, Observation[]>()
   for (const o of observationsRaw ?? []) {
     const author = (o as unknown as { author: { name: string } | null }).author
     const obs: Observation = {
-      id:          o.id,
-      learner_id:  o.learner_id,
-      author_id:   o.author_id,
-      author_name: author?.name ?? null,
-      observed_at: o.observed_at,
-      note:        o.note,
+      id:               o.id,
+      learner_id:       o.learner_id,
+      author_id:        o.author_id,
+      author_name:      author?.name ?? null,
+      observed_at:      o.observed_at,
+      note:             o.note,
+      type:             (o as unknown as { type:             string | null }).type             ?? null,
+      category:         (o as unknown as { category:         string | null }).category         ?? null,
+      severity:         (o as unknown as { severity:         string | null }).severity         ?? null,
+      accountable_team: (o as unknown as { accountable_team: string | null }).accountable_team ?? null,
     }
     if (!observationsByLearner.has(o.learner_id)) observationsByLearner.set(o.learner_id, [])
     observationsByLearner.get(o.learner_id)!.push(obs)
@@ -471,6 +481,7 @@ export default async function LearningPage({ searchParams }: Props) {
           currentUserName={appUser.name ?? null}
           isAdmin={appUser.role === 'admin'}
           canEdit={appUser.role === 'admin' || appUser.role === 'staff'}
+          observationCategories={observationCategories}
         />
       )}
 
@@ -512,6 +523,7 @@ export default async function LearningPage({ searchParams }: Props) {
                     currentUserId={appUser.id}
                     currentUserName={appUser.name ?? null}
                     isAdmin={appUser.role === 'admin'}
+                    observationCategories={observationCategories}
                   />
 
                   {selectedMetricRows.length > 0 && (

@@ -6,6 +6,7 @@ import DataSourcesPanel from '@/components/learning/DataSourcesPanel'
 import MetricsPanel from '@/components/learning/MetricsPanel'
 import LearningConfigurationsPanel from '@/components/learning/LearningConfigurationsPanel'
 import { readSettings } from '@/lib/settings-server'
+import { DEFAULT_OBSERVATION_CATEGORIES } from '@/lib/learning/observation-vocab'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,11 +41,12 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
   const [{ data: sources }, { data: metrics }, settingsMap] = await Promise.all([
     supabase.from('metric_sources').select('*, metric_source_columns(*)').order('created_at'),
     supabase.from('metrics').select('*').order('created_at'),
-    readSettings(['root_cause_categories', 'intervention_checklist_items']),
+    readSettings(['root_cause_categories', 'intervention_checklist_items', 'observation_categories']),
   ])
 
-  const categories: string[]     = (settingsMap['root_cause_categories'] as string[] | null) ?? DEFAULT_CATEGORIES
-  const checklistItems: string[] = (settingsMap['intervention_checklist_items'] as string[] | null) ?? DEFAULT_CHECKLIST_ITEMS
+  const categories: string[]            = (settingsMap['root_cause_categories']  as string[] | null) ?? DEFAULT_CATEGORIES
+  const checklistItems: string[]        = (settingsMap['intervention_checklist_items'] as string[] | null) ?? DEFAULT_CHECKLIST_ITEMS
+  const observationCategories: string[] = (settingsMap['observation_categories'] as string[] | null) ?? DEFAULT_OBSERVATION_CATEGORIES
 
   return (
     <div>
@@ -103,7 +105,11 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
           <MetricsPanel metrics={metrics ?? []} sources={sources ?? []} />
         )}
         {(tab === 'configurations' || tab === 'categories') && (
-          <LearningConfigurationsPanel categories={categories} checklistItems={checklistItems} />
+          <LearningConfigurationsPanel
+            categories={categories}
+            checklistItems={checklistItems}
+            observationCategories={observationCategories}
+          />
         )}
       </div>
     </div>

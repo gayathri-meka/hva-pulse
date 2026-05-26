@@ -851,21 +851,71 @@ function validateObservedAt(observedAt: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(observedAt)) throw new Error('Invalid date (expected YYYY-MM-DD)')
 }
 
+import {
+  OBSERVATION_TYPES,
+  OBSERVATION_SEVERITIES,
+  OBSERVATION_TEAMS,
+  type ObservationType,
+  type ObservationSeverity,
+  type ObservationTeam,
+} from '@/lib/learning/observation-vocab'
+
+export type ObservationFields = {
+  type:             ObservationType
+  category:         string
+  severity:         ObservationSeverity | null
+  accountable_team: ObservationTeam | null
+}
+
+function validateFields(fields: ObservationFields): ObservationFields {
+  if (!OBSERVATION_TYPES.includes(fields.type)) {
+    throw new Error('Type must be Positive, Neutral, or Concern')
+  }
+  const category = fields.category.trim()
+  if (!category) throw new Error('Category is required')
+
+  // Severity is required iff type is Concern.
+  if (fields.type === 'Concern') {
+    if (!fields.severity || !OBSERVATION_SEVERITIES.includes(fields.severity)) {
+      throw new Error('Severity is required for Concerns (Low / Medium / High)')
+    }
+  } else if (fields.severity != null) {
+    throw new Error('Severity only applies to Concerns')
+  }
+
+  if (fields.accountable_team != null && !OBSERVATION_TEAMS.includes(fields.accountable_team)) {
+    throw new Error('Accountable team must be Program or Learning')
+  }
+
+  return {
+    type:             fields.type,
+    category,
+    severity:         fields.type === 'Concern' ? fields.severity : null,
+    accountable_team: fields.accountable_team,
+  }
+}
+
 export async function createObservation(
   learnerId: string,
   observedAt: string,
   note: string,
+  fields: ObservationFields,
 ) {
   const user = await requireStaff()
   if (!note.trim()) throw new Error('Observation note is required')
   validateObservedAt(observedAt)
+  const clean = validateFields(fields)
 
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase.from('learner_observations').insert({
-    learner_id:  learnerId,
-    author_id:   user.id,
-    observed_at: observedAt,
-    note:        note.trim(),
+    learner_id:       learnerId,
+    author_id:        user.id,
+    observed_at:      observedAt,
+    note:             note.trim(),
+    type:             clean.type,
+    category:         clean.category,
+    severity:         clean.severity,
+    accountable_team: clean.accountable_team,
   })
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
@@ -876,10 +926,12 @@ export async function updateObservation(
   id: string,
   observedAt: string,
   note: string,
+  fields: ObservationFields,
 ) {
   const user = await requireStaff()
   if (!note.trim()) throw new Error('Observation note is required')
   validateObservedAt(observedAt)
+  const clean = validateFields(fields)
 
   const supabase = await createServerSupabaseClient()
   const { data: existing, error: readErr } = await supabase
@@ -895,9 +947,13 @@ export async function updateObservation(
   const { error } = await supabase
     .from('learner_observations')
     .update({
-      observed_at: observedAt,
-      note:        note.trim(),
-      updated_at:  new Date().toISOString(),
+      observed_at:      observedAt,
+      note:             note.trim(),
+      type:             clean.type,
+      category:         clean.category,
+      severity:         clean.severity,
+      accountable_team: clean.accountable_team,
+      updated_at:       new Date().toISOString(),
     })
     .eq('id', id)
   if (error) throw new Error(error.message)
