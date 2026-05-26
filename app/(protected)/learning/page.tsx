@@ -14,6 +14,7 @@ import InterventionsTable, { type InterventionRow } from '@/components/learning/
 import InterventionHistory, { type ClosedIntervention } from '@/components/learning/InterventionHistory'
 import { type Observation } from '@/components/learning/ObservationsModal'
 import LearnerObservationsCard from '@/components/learning/LearnerObservationsCard'
+import LearningTabs from '@/components/learning/LearningTabs'
 import {
   type RawRow,
   type MetricDef,
@@ -452,25 +453,15 @@ export default async function LearningPage({ searchParams }: Props) {
       </div>
 
       {/* Top-level tabs */}
-      <div className="mb-6 flex items-center gap-1 border-b border-zinc-200">
-        {[
+      <LearningTabs
+        activeKey={filter}
+        tabs={[
           { key: 'all',           label: 'Dashboard',     href: `/learning?filter=all${lf ? `&lf=${lf}` : ''}` },
           { key: 'interventions', label: 'Interventions', href: `/learning?filter=interventions${lf ? `&lf=${lf}` : ''}` },
           { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
           ...(appUser.role !== 'learner' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
-        ].map(({ key, label, href }) => (
-          <Link
-            key={key}
-            href={href}
-            className={`relative pb-3 px-1 mr-4 text-sm font-medium transition-colors ${
-              filter === key ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
-            }`}
-          >
-            {label}
-            {filter === key && <span className="absolute bottom-0 left-0 h-0.5 w-full bg-[#5BAE5B]" />}
-          </Link>
-        ))}
-      </div>
+        ]}
+      />
 
       {filter === 'all' && (
         <LearningDashboard

@@ -3,6 +3,7 @@ import { getAppUser, canSeePII } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import AppShell from '@/components/AppShell'
 import { PermissionsProvider } from '@/components/PermissionsContext'
+import GlobalNavigationLoader from '@/components/GlobalNavigationLoader'
 import type { Notification } from '@/components/notifications/NotificationBell'
 import { computeActionItemNotifications } from '@/lib/learning/action-item-notifications'
 
@@ -38,7 +39,9 @@ export default async function ProtectedLayout({
 
   return (
     <PermissionsProvider role={appUser.role}>
-      <AppShell role={appUser.role} notifications={notifications}>{children}</AppShell>
+      <GlobalNavigationLoader>
+        <AppShell role={appUser.role} notifications={notifications}>{children}</AppShell>
+      </GlobalNavigationLoader>
     </PermissionsProvider>
   )
 }

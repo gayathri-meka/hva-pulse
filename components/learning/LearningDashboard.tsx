@@ -225,7 +225,7 @@ function InterventionCell({ row }: { row: LearnerRow }) {
 
   return (
     <Link
-      href={`/learning?filter=interventions&learner=${row.learner_id}`}
+      href={`/learning?filter=interventions&view=learner&learner=${row.learner_id}`}
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity hover:opacity-75 ${cls}`}
     >
       {label}

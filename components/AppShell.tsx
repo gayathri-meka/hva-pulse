@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import NotificationBell, { type Notification } from './notifications/NotificationBell'
+import PageLoader from './PageLoader'
+import { useNavigationLoader } from './GlobalNavigationLoader'
 
 export default function AppShell({
   role,
@@ -16,6 +18,7 @@ export default function AppShell({
 }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
+  const { active: navigating } = useNavigationLoader()
 
   useEffect(() => {
     setOpen(false)
@@ -73,9 +76,14 @@ export default function AppShell({
           </div>
         </header>
 
-        {/* Page content — only this scrolls */}
+        {/* Page content — only this scrolls. When a manual navigation is in
+            flight (e.g. searchParam-only transitions that Next.js's loading.tsx
+            can't catch), swap the page body for the same loader Next.js uses
+            so the sidebar + topbar stay put. */}
         <main className="flex-1 overflow-auto p-5 lg:p-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
+          <div className="mx-auto max-w-7xl">
+            {navigating ? <PageLoader /> : children}
+          </div>
         </main>
       </div>
     </div>
