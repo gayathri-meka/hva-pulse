@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
+import { getApplyBlockReason } from '@/lib/learner/apply-eligibility'
 
 async function requireLearner() {
   const appUser = await getAppUser()
@@ -21,8 +22,6 @@ async function getLearnerDomainId(supabase: Awaited<ReturnType<typeof createServ
   return data?.learner_id ?? null
 }
 
-const EXITED_ERROR = 'Discontinued / Dropped out learners cannot apply'
-
 async function assertCanApply(
   supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
   userId: string,
@@ -33,7 +32,8 @@ async function assertCanApply(
     .eq('user_id', userId)
     .maybeSingle()
   const s = (data as unknown as { status: string | null } | null)?.status
-  if (s === 'Dropout' || s === 'Discontinued') return { error: EXITED_ERROR }
+  const block = getApplyBlockReason(s)
+  if (block) return { error: block.message }
   return {}
 }
 

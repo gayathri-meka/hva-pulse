@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { applyToRole } from '@/app/(learner)/learner/actions'
+import type { ApplyBlock } from '@/lib/learner/apply-eligibility'
 
 type Resume = { id: string; version_name: string; file_url: string }
 type Application = {
@@ -25,7 +26,7 @@ interface Props {
   application: Application | null
   resumes: Resume[]
   readOnly?: boolean
-  isExited?: boolean
+  blockReason?: ApplyBlock | null
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -47,7 +48,7 @@ const STATUS_LABEL: Record<string, string> = {
   hired:               'Hired',
 }
 
-export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes, readOnly = false, isExited = false }: Props) {
+export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes, readOnly = false, blockReason = null }: Props) {
   const router = useRouter()
   const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id ?? '')
   const [readJD, setReadJD]         = useState(false)
@@ -160,17 +161,26 @@ export default function ApplyForm({ roleId, roleStatus, location, salaryRange, a
     })
   }
 
-  if (isExited) {
+  if (blockReason) {
+    const isPlaced = blockReason.type === 'placed'
     return (
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-sm">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">
-          Apply for this role
+      <div className={`rounded-xl border p-5 shadow-sm ${
+        isPlaced
+          ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50'
+          : 'border-zinc-200 bg-zinc-50'
+      }`}>
+        <h2 className={`mb-2 text-sm font-bold uppercase tracking-wide ${
+          isPlaced ? 'text-emerald-700' : 'text-zinc-400'
+        }`}>
+          {isPlaced ? 'Congratulations!' : 'Apply for this role'}
         </h2>
-        <p className="text-sm font-semibold text-zinc-700">
-          Discontinued / Dropped out learners cannot apply.
+        <p className={`text-sm font-semibold ${isPlaced ? 'text-emerald-900' : 'text-zinc-700'}`}>
+          {blockReason.message}.
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          If you believe this is a mistake, please reach out to your LF.
+        <p className={`mt-1 text-xs ${isPlaced ? 'text-emerald-800/80' : 'text-zinc-500'}`}>
+          {isPlaced
+            ? "We're so happy for you — wishing you the best in this next chapter."
+            : 'If you believe this is a mistake, please reach out to your LF.'}
         </p>
       </div>
     )

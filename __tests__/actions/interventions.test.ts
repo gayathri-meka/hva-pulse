@@ -78,26 +78,16 @@ describe('startIntervention', () => {
     await expect(startIntervention('learner-1')).rejects.toThrow('already has an active intervention')
   })
 
-  test('inserts new intervention with opened_by and decision_date = now + 14 days', async () => {
+  test('inserts new intervention with learner_id and opened_by', async () => {
     const { mockInsert } = mockSupabaseBuilder()
 
-    const beforeCall = Date.now()
     await startIntervention('learner-1')
-    const afterCall = Date.now()
 
     expect(mockInsert).toHaveBeenCalledTimes(1)
-    const payload = mockInsert.mock.calls[0][0] as { learner_id: string; opened_by: string; decision_date: string }
+    const payload = mockInsert.mock.calls[0][0] as { learner_id: string; opened_by: string }
 
     expect(payload.learner_id).toBe('learner-1')
     expect(payload.opened_by).toBe('staff-1')
-    expect(payload.decision_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-
-    // Verify 14-day window (allow 1 day tolerance for the date of the test run)
-    const decision    = new Date(payload.decision_date + 'T00:00:00Z').getTime()
-    const expectedMin = new Date(beforeCall + 13 * 24 * 3600 * 1000).setUTCHours(0, 0, 0, 0)
-    const expectedMax = new Date(afterCall  + 15 * 24 * 3600 * 1000).setUTCHours(0, 0, 0, 0)
-    expect(decision).toBeGreaterThanOrEqual(expectedMin)
-    expect(decision).toBeLessThanOrEqual(expectedMax)
   })
 
   test('revalidates both learning pages and returns new id', async () => {

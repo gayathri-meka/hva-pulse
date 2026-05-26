@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { markNotInterested, removeNotInterested } from '@/app/(learner)/learner/actions'
 import type { MyStatus } from '@/types'
+import type { ApplyBlock } from '@/lib/learner/apply-eligibility'
 
 type RoleCardData = {
   id: string
@@ -151,8 +152,9 @@ function NIReasonsModal({
   )
 }
 
-export default function RoleCard({ role, readOnly = false, isExited = false }: { role: RoleCardData; readOnly?: boolean; isExited?: boolean }) {
-  const disabled = readOnly || isExited
+export default function RoleCard({ role, readOnly = false, blockReason = null }: { role: RoleCardData; readOnly?: boolean; blockReason?: ApplyBlock | null }) {
+  const isBlocked = blockReason !== null
+  const disabled  = readOnly || isBlocked
   const [myStatus, setMyStatus]     = useState<MyStatus>(role.my_status)
   const reason = (() => {
     if (myStatus === 'not_shortlisted') {
@@ -271,7 +273,7 @@ export default function RoleCard({ role, readOnly = false, isExited = false }: {
                 <button
                   onClick={handleUndo}
                   disabled={isPending || disabled}
-                  title={isExited ? 'Discontinued / Dropped out learners cannot apply' : undefined}
+                  title={blockReason?.message}
                   className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-700 disabled:opacity-40"
                 >
                   Undo
@@ -280,7 +282,7 @@ export default function RoleCard({ role, readOnly = false, isExited = false }: {
                 <button
                   onClick={() => setShowNIModal(true)}
                   disabled={isPending || disabled}
-                  title={isExited ? 'Discontinued / Dropped out learners cannot apply' : undefined}
+                  title={blockReason?.message}
                   className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-100 disabled:opacity-40"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
@@ -293,9 +295,9 @@ export default function RoleCard({ role, readOnly = false, isExited = false }: {
 
             {/* Apply */}
             {canApply && (
-              isExited ? (
+              isBlocked ? (
                 <span
-                  title="Discontinued / Dropped out learners cannot apply"
+                  title={blockReason?.message}
                   className="cursor-not-allowed rounded-lg bg-zinc-300 px-4 py-1.5 text-xs font-semibold text-white"
                 >
                   Apply →

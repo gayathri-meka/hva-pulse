@@ -34,7 +34,7 @@ const requireAdmin = requireStaff
 
 function buildStatusUpdate(status: string, note?: string, reasons?: string[]): Record<string, unknown> {
   const now = new Date().toISOString()
-  const updates: Record<string, unknown> = { status }
+  const updates: Record<string, unknown> = { status, updated_at: now }
 
   if (status === 'shortlisted' || status === 'not_shortlisted') {
     updates.shortlisting_decision_taken_at = now
@@ -77,7 +77,7 @@ export async function updateApplicationReasons(
   const { data: app } = await supabase.from('applications').select('status').eq('id', appId).single()
   if (!app) throw new Error('Application not found')
 
-  const updates: Record<string, unknown> = {}
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (app.status === 'not_shortlisted') {
     updates.not_shortlisted_reasons = reasons
     updates.not_shortlisted_reason  = note ?? null

@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getEffectiveLearnerIdentity } from '@/lib/impersonation'
+import { getApplyBlockReason } from '@/lib/learner/apply-eligibility'
 import ApplyForm from '@/components/learner/ApplyForm'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +40,7 @@ export default async function RoleDetailPage({ params }: Props) {
   ])
 
   const learnerStatus = (learnerRow as unknown as { status: string | null } | null)?.status ?? null
-  const isExited      = learnerStatus === 'Dropout' || learnerStatus === 'Discontinued'
+  const blockReason   = getApplyBlockReason(learnerStatus)
 
   if (!role) notFound()
 
@@ -150,7 +151,7 @@ export default async function RoleDetailPage({ params }: Props) {
             application={application}
             resumes={resumes ?? []}
             readOnly={effective.isImpersonating}
-            isExited={isExited}
+            blockReason={blockReason}
           />
         </div>
       </div>

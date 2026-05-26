@@ -4,8 +4,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import PlacementSnapshot from '@/components/learner/PlacementSnapshot'
 import RoleCard from '@/components/learner/RoleCard'
+import PlacedCelebration from '@/components/learner/PlacedCelebration'
 import type { MyStatus } from '@/types'
 import type { ReasonEntry } from '@/lib/snapshot'
+import type { ApplyBlock } from '@/lib/learner/apply-eligibility'
 
 type RoleItem = {
   id: string
@@ -17,6 +19,7 @@ type RoleItem = {
   my_status: MyStatus
   posted_at: string | null
   applied_at: string | null
+  latest_activity_at: string | null
   not_shortlisted_reasons: string[]
   not_shortlisted_reason: string | null
   rejection_reasons: string[]
@@ -119,11 +122,12 @@ type Props = {
   rejectedReasons: ReasonEntry[]
   hasResume: boolean
   readOnly?: boolean
-  isExited?: boolean
-  learnerStatus?: string | null
+  blockReason?: ApplyBlock | null
 }
 
-export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume, readOnly = false, isExited = false, learnerStatus = null }: Props) {
+export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume, readOnly = false, blockReason = null }: Props) {
+  const isBlocked = blockReason !== null
+  const isPlaced  = blockReason?.type === 'placed'
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
   const [appliedSort, setAppliedSort] = useState<AppliedSort>('most_active')
 
@@ -142,15 +146,23 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
 
   const filteredRoles = (() => {
     const matched = roles.filter((r) => matchesFilter(r, activeFilter))
-    if (activeFilter !== 'applied_any') return matched
 
-    const sorted = [...matched]
-    if (appliedSort === 'most_active') {
-      sorted.sort((a, b) => (STATUS_PRIORITY[a.my_status] ?? 99) - (STATUS_PRIORITY[b.my_status] ?? 99))
-    } else if (appliedSort === 'date_applied') {
-      sorted.sort((a, b) => (b.applied_at ?? '').localeCompare(a.applied_at ?? ''))
+    // Applied superset keeps its own dropdown (status priority / date applied).
+    // Every other filter sorts by most recent activity — the moment the row
+    // last changed for the learner. Falls back to role posted date.
+    if (activeFilter === 'applied_any') {
+      const sorted = [...matched]
+      if (appliedSort === 'most_active') {
+        sorted.sort((a, b) => (STATUS_PRIORITY[a.my_status] ?? 99) - (STATUS_PRIORITY[b.my_status] ?? 99))
+      } else if (appliedSort === 'date_applied') {
+        sorted.sort((a, b) => (b.applied_at ?? '').localeCompare(a.applied_at ?? ''))
+      }
+      return sorted
     }
-    return sorted
+
+    return [...matched].sort((a, b) =>
+      (b.latest_activity_at ?? '').localeCompare(a.latest_activity_at ?? ''),
+    )
   })()
 
   // Only show filter pills that have matching roles (always show 'all')
@@ -165,10 +177,12 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
         <h1 className="text-xl font-bold text-zinc-900">Hey, {firstName}!</h1>
       </div>
 
-      {isExited && (
+      {isPlaced && <PlacedCelebration firstName={firstName} />}
+
+      {isBlocked && !isPlaced && (
         <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3.5">
           <p className="text-sm font-semibold text-zinc-800">
-            {learnerStatus === 'Dropout' ? 'Dropped out' : 'Discontinued'} learners cannot apply.
+            {blockReason!.message}.
           </p>
           <p className="mt-0.5 text-xs text-zinc-600">
             Apply and Not Interested actions are disabled. If you believe this is a mistake, please reach out to your LF.
@@ -176,7 +190,7 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
         </div>
       )}
 
-      {!hasResume && !isExited && (
+      {!hasResume && !isBlocked && (
         <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-amber-900">You haven&apos;t uploaded a resume yet.</p>
@@ -250,17 +264,33 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
       )}
 
       {/* Role list — single column on narrow containers, 2-col on @lg, 3-col on @2xl.
-          Open roles render first; once both open and closed roles are present in
-          the current filter, a divider clarifies the transition. */}
+          On the All view we surface open vs. closed because the learner is
+          deciding where to apply; on every other filter we trust the activity
+          sort and render in pure order so the most recent thing is on top. */}
       {(() => {
+        if (activeFilter !== 'all') {
+          return (
+            <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
+              {filteredRoles.map((role) => (
+                <RoleCard key={role.id} role={role} readOnly={readOnly} blockReason={blockReason} />
+              ))}
+              {filteredRoles.length === 0 && (
+                <div className="col-span-full rounded-xl border border-zinc-200 bg-white py-12 text-center">
+                  <p className="text-sm text-zinc-400">No roles to show.</p>
+                </div>
+              )}
+            </div>
+          )
+        }
+
         const openRoles   = filteredRoles.filter((r) => r.status === 'open')
         const closedRoles = filteredRoles.filter((r) => r.status === 'closed')
-        const showDivider = activeFilter === 'all' && openRoles.length > 0 && closedRoles.length > 0
+        const showDivider = openRoles.length > 0 && closedRoles.length > 0
 
         return (
           <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
             {openRoles.map((role) => (
-              <RoleCard key={role.id} role={role} readOnly={readOnly} isExited={isExited} />
+              <RoleCard key={role.id} role={role} readOnly={readOnly} blockReason={blockReason} />
             ))}
 
             {showDivider && (
@@ -272,7 +302,7 @@ export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount
             )}
 
             {closedRoles.map((role) => (
-              <RoleCard key={role.id} role={role} readOnly={readOnly} isExited={isExited} />
+              <RoleCard key={role.id} role={role} readOnly={readOnly} blockReason={blockReason} />
             ))}
 
             {filteredRoles.length === 0 && (

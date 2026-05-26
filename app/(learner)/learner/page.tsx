@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getEffectiveLearnerIdentity } from '@/lib/impersonation'
 import LearnerDashboard from '@/components/learner/LearnerDashboard'
 import { computeSnapshot, type ReasonEntry } from '@/lib/snapshot'
+import { getApplyBlockReason } from '@/lib/learner/apply-eligibility'
 import type { MyStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -28,18 +29,19 @@ export default async function LearnerDashboardPage() {
     supabase.from('companies').select('id, company_name, sort_order, created_at'),
     supabase
       .from('applications')
-      .select('id, role_id, status, created_at, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
+      .select('id, role_id, status, created_at, updated_at, not_shortlisted_reasons, not_shortlisted_reason, rejection_reasons, rejection_feedback')
       .eq('user_id', effective.userId),
     supabase
       .from('role_preferences')
-      .select('role_id, preference, reasons')
+      .select('role_id, preference, reasons, created_at')
       .eq('user_id', effective.userId),
     supabase.from('resumes').select('id').eq('user_id', effective.userId).limit(1),
     supabase.from('learners').select('status').eq('user_id', effective.userId).maybeSingle(),
   ])
 
   const learnerStatus = (learnerRow as unknown as { status: string | null } | null)?.status ?? null
-  const isExited      = learnerStatus === 'Dropout' || learnerStatus === 'Discontinued'
+  const blockReason   = getApplyBlockReason(learnerStatus)
+  const isBlocked     = blockReason !== null
 
   const companyMap = Object.fromEntries(
     (companies ?? []).map((c) => [c.id, c.company_name]),
@@ -58,6 +60,7 @@ export default async function LearnerDashboardPage() {
       id: a.id,
       status: a.status,
       applied_at: (a as unknown as { created_at: string | null }).created_at ?? null,
+      updated_at: (a as unknown as { updated_at: string | null }).updated_at ?? null,
       not_shortlisted_reasons: (a.not_shortlisted_reasons as string[] | null) ?? [],
       not_shortlisted_reason:  (a.not_shortlisted_reason  as string | null) ?? null,
       rejection_reasons:       (a.rejection_reasons       as string[] | null) ?? [],
@@ -69,6 +72,9 @@ export default async function LearnerDashboardPage() {
   )
   const prefReasonsMap = Object.fromEntries(
     (preferences ?? []).map((p) => [p.role_id, (p.reasons as string[] | null) ?? []]),
+  )
+  const prefAtMap = Object.fromEntries(
+    (preferences ?? []).map((p) => [p.role_id, (p as unknown as { created_at: string | null }).created_at ?? null]),
   )
 
   // Build role list sorted by company order, then split open-first
@@ -93,6 +99,12 @@ export default async function LearnerDashboardPage() {
         myStatus = 'not_applied'
       }
 
+      const postedAt = (role as unknown as { created_at: string | null }).created_at ?? null
+      // Most recent action on this row, for "Recent activity" sort. App status
+      // change wins; else NI mark time; else the role's posted date.
+      const latestActivityAt =
+        app?.updated_at ?? prefAtMap[role.id] ?? postedAt
+
       return {
         id: role.id,
         company_name: companyMap[role.company_id] ?? '',
@@ -101,8 +113,9 @@ export default async function LearnerDashboardPage() {
         salary_range: role.salary_range as string | null,
         status: role.status as 'open' | 'closed',
         my_status: myStatus,
-        posted_at: (role as unknown as { created_at: string | null }).created_at ?? null,
+        posted_at: postedAt,
         applied_at: app?.applied_at ?? null,
+        latest_activity_at: latestActivityAt,
         not_shortlisted_reasons: app?.not_shortlisted_reasons ?? [],
         not_shortlisted_reason:  app?.not_shortlisted_reason  ?? null,
         rejection_reasons:       app?.rejection_reasons       ?? [],
@@ -155,7 +168,7 @@ export default async function LearnerDashboardPage() {
       }
     })
 
-  const ignoredOpenCount = isExited
+  const ignoredOpenCount = isBlocked
     ? 0
     : sortedRoles.filter(
         (r) => r.status === 'open' && r.my_status === 'not_applied',
@@ -175,8 +188,7 @@ export default async function LearnerDashboardPage() {
         rejectedReasons={rejectedReasons}
         hasResume={hasResume}
         readOnly={effective.isImpersonating}
-        isExited={isExited}
-        learnerStatus={learnerStatus}
+        blockReason={blockReason}
       />
     </div>
   )
