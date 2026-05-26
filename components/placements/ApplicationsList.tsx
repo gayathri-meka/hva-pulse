@@ -406,14 +406,22 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
             ? reasons.join(', ') + (comment ? ` — ${comment}` : '')
             : (comment || '—')
           return (
-            <button
-              type="button"
-              onClick={() => setEditingReasons({ id: row.id, status: 'not_shortlisted', reasons: new Set(reasons), note: comment })}
-              className="block w-full text-left text-xs text-zinc-700 hover:text-zinc-900 hover:underline"
-              title="Click to edit reasons"
-            >
-              <ExpandableNote note={text} />
-            </button>
+            <div className="flex items-start gap-1.5">
+              <div className="flex-1 min-w-0 text-xs text-zinc-700">
+                <ExpandableNote note={text} />
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingReasons({ id: row.id, status: 'not_shortlisted', reasons: new Set(reasons), note: comment })}
+                className="shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                title="Edit reasons"
+                aria-label="Edit reasons"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                  <path d="M2.695 14.762l-1.262 3.155a.5.5 0 0 0 .65.65l3.155-1.262a4 4 0 0 0 1.343-.886L17.5 5.501a2.121 2.121 0 0 0-3-3L3.58 13.419a4 4 0 0 0-.885 1.343Z" />
+                </svg>
+              </button>
+            </div>
           )
         },
       }),
@@ -437,14 +445,22 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
             ? reasons.join(', ') + (comment ? ` — ${comment}` : '')
             : (comment || '—')
           return (
-            <button
-              type="button"
-              onClick={() => setEditingReasons({ id: row.id, status: 'rejected', reasons: new Set(reasons), note: comment })}
-              className="block w-full text-left text-xs text-zinc-700 hover:text-zinc-900 hover:underline"
-              title="Click to edit reasons"
-            >
-              <ExpandableNote note={text} />
-            </button>
+            <div className="flex items-start gap-1.5">
+              <div className="flex-1 min-w-0 text-xs text-zinc-700">
+                <ExpandableNote note={text} />
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingReasons({ id: row.id, status: 'rejected', reasons: new Set(reasons), note: comment })}
+                className="shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                title="Edit reasons"
+                aria-label="Edit reasons"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                  <path d="M2.695 14.762l-1.262 3.155a.5.5 0 0 0 .65.65l3.155-1.262a4 4 0 0 0 1.343-.886L17.5 5.501a2.121 2.121 0 0 0-3-3L3.58 13.419a4 4 0 0 0-.885 1.343Z" />
+                </svg>
+              </button>
+            </div>
           )
         },
       }),

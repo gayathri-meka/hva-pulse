@@ -116,12 +116,12 @@ describe('ApplicationsList', () => {
   })
 
   test('existing not_shortlisted_reason is shown below status badge', () => {
-    render(<ApplicationsList applications={[makeApp({ status: 'not_shortlisted', not_shortlisted_reason: 'Too competitive' })]} {...defaultProps} />)
+    render(<ApplicationsList applications={[makeApp({ status: 'not_shortlisted', not_shortlisted_reason: 'Too competitive' })]} {...defaultProps} statusFilter="not_shortlisted" />)
     expect(screen.getByText('Too competitive')).toBeInTheDocument()
   })
 
   test('existing rejection_feedback is shown below status badge', () => {
-    render(<ApplicationsList applications={[makeApp({ status: 'rejected', rejection_feedback: 'Needs more depth' })]} {...defaultProps} />)
+    render(<ApplicationsList applications={[makeApp({ status: 'rejected', rejection_feedback: 'Needs more depth' })]} {...defaultProps} statusFilter="rejected" />)
     expect(screen.getByText('Needs more depth')).toBeInTheDocument()
   })
 })
