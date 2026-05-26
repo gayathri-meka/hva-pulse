@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 
 const TABS = [
   { href: '/admissions/learner-applications', label: 'Learner Applications' },
+  { href: '/admissions/prospects',            label: 'Prospects' },
 ]
 
 export default function AdmissionsNav() {
