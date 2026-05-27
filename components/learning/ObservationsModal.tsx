@@ -6,6 +6,8 @@ import {
   createObservation,
   updateObservation,
   deleteObservation,
+  startCase,
+  getCaseSummaryForLearner,
 } from '@/app/(protected)/learning/actions'
 import {
   OBSERVATION_TYPES,
@@ -108,7 +110,7 @@ function PrinciplesPanel() {
         💡 What&apos;s an observation?
       </p>
       <p className="mt-1 text-xs leading-relaxed text-zinc-600">
-        A timestamped signal you noticed about a learner. Factual. Not an intervention. Not a conclusion.
+        A timestamped signal you noticed about a learner. Factual. Not a case. Not a conclusion.
       </p>
       <ul className="mt-3 grid grid-cols-1 gap-1.5 text-xs text-zinc-700 sm:grid-cols-2">
         <li className="flex items-start gap-2"><span>🪶</span><span>Keep them lightweight.</span></li>
@@ -286,6 +288,61 @@ export default function ObservationsModal({
   // Custom delete confirmation — null means no prompt open, otherwise the
   // observation pending deletion.
   const [pendingDelete, setPendingDelete] = useState<Observation | null>(null)
+  const [startingCaseFor, setStartingCaseFor] = useState<string | null>(null)
+
+  // Three-way prompt when staff clicks "Start case" on an observation:
+  // - 'active' → a case already exists, surface a redirect button
+  // - 'past'   → no active case but past cases exist; confirm + offer a link
+  // null means no prompt open (or no special handling needed — see start flow).
+  type CasePrompt =
+    | { kind: 'active'; observation: Observation; activeCaseId: string }
+    | { kind: 'past';   observation: Observation; closedCount: number }
+    | null
+  const [casePrompt, setCasePrompt] = useState<CasePrompt>(null)
+
+  function goToCase() {
+    router.push(`/learning?filter=cases&view=learner&learner=${learnerId}`)
+  }
+
+  function startNewCase(o: Observation) {
+    setError('')
+    setStartingCaseFor(o.id)
+    setCasePrompt(null)
+    startTrans(async () => {
+      try {
+        await startCase(learnerId, [{ kind: 'observation', observation_id: o.id }])
+        goToCase()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setStartingCaseFor(null)
+      }
+    })
+  }
+
+  function startCaseFromObservation(o: Observation) {
+    setError('')
+    setStartingCaseFor(o.id)
+    startTrans(async () => {
+      try {
+        const summary = await getCaseSummaryForLearner(learnerId)
+        if (summary.activeCaseId) {
+          setCasePrompt({ kind: 'active', observation: o, activeCaseId: summary.activeCaseId })
+          return
+        }
+        if (summary.closedCount > 0) {
+          setCasePrompt({ kind: 'past', observation: o, closedCount: summary.closedCount })
+          return
+        }
+        await startCase(learnerId, [{ kind: 'observation', observation_id: o.id }])
+        goToCase()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setStartingCaseFor(null)
+      }
+    })
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -293,11 +350,12 @@ export default function ObservationsModal({
       // Inner dialogs intercept Escape first so the outer modal doesn't dismiss
       // before the user has dismissed the prompt.
       if (pendingDelete) { setPendingDelete(null); return }
+      if (casePrompt)    { setCasePrompt(null);    return }
       onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, pendingDelete])
+  }, [onClose, pendingDelete, casePrompt])
 
   function handleAdd() {
     const trimmed = newNote.trim()
@@ -507,12 +565,22 @@ export default function ObservationsModal({
                                 <span className="font-medium text-zinc-800">{fmtDate(o.observed_at)}</span>
                                 <span className="text-zinc-400">{' · '}{o.author_name ?? 'Unknown'}{isMine ? ' (you)' : ''}</span>
                               </div>
-                              {canModify && (
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <button onClick={() => startEditing(o)} className="text-xs text-zinc-400 hover:text-zinc-600">Edit</button>
-                                  <button onClick={() => setPendingDelete(o)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
-                                </div>
-                              )}
+                              <div className="flex shrink-0 items-center gap-2">
+                                <button
+                                  onClick={() => startCaseFromObservation(o)}
+                                  disabled={startingCaseFor !== null}
+                                  className="text-xs text-[#5BAE5B] hover:text-emerald-700 disabled:opacity-40"
+                                  title="Start a case anchored to this observation"
+                                >
+                                  {startingCaseFor === o.id ? 'Starting…' : 'Start case'}
+                                </button>
+                                {canModify && (
+                                  <>
+                                    <button onClick={() => startEditing(o)} className="text-xs text-zinc-400 hover:text-zinc-600">Edit</button>
+                                    <button onClick={() => setPendingDelete(o)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                             <ObservationChips o={o} />
                             <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{o.note}</p>
@@ -572,6 +640,83 @@ export default function ObservationsModal({
                 {isPending ? 'Deleting…' : 'Delete observation'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Case start prompt — explains why we're not creating a new case
+          immediately and routes the user to the right next step. */}
+      {casePrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-2xl">
+            {casePrompt.kind === 'active' ? (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 text-amber-600">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-zinc-900">An active case already exists</h3>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {learnerName} already has an open case. You can only have one case per learner at a time — attach this observation from inside the existing case instead.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    onClick={() => setCasePrompt(null)}
+                    className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:border-zinc-300 hover:text-zinc-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={goToCase}
+                    className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+                  >
+                    Go to case
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 text-blue-600">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-zinc-900">This learner has past cases</h3>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {learnerName} has {casePrompt.closedCount} closed case{casePrompt.closedCount === 1 ? '' : 's'}. Worth a glance before opening a new one.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                  <button
+                    onClick={() => setCasePrompt(null)}
+                    className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:border-zinc-300 hover:text-zinc-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={goToCase}
+                    className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"
+                  >
+                    View past cases
+                  </button>
+                  <button
+                    onClick={() => startNewCase(casePrompt.observation)}
+                    disabled={startingCaseFor !== null}
+                    className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40"
+                  >
+                    {startingCaseFor === casePrompt.observation.id ? 'Starting…' : 'Start new case'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

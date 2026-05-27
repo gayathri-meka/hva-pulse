@@ -41,11 +41,11 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
   const [{ data: sources }, { data: metrics }, settingsMap] = await Promise.all([
     supabase.from('metric_sources').select('*, metric_source_columns(*)').order('created_at'),
     supabase.from('metrics').select('*').order('created_at'),
-    readSettings(['root_cause_categories', 'intervention_checklist_items', 'observation_categories']),
+    readSettings(['root_cause_categories', 'case_checklist_items', 'observation_categories']),
   ])
 
   const categories: string[]            = (settingsMap['root_cause_categories']  as string[] | null) ?? DEFAULT_CATEGORIES
-  const checklistItems: string[]        = (settingsMap['intervention_checklist_items'] as string[] | null) ?? DEFAULT_CHECKLIST_ITEMS
+  const checklistItems: string[]        = (settingsMap['case_checklist_items'] as string[] | null) ?? DEFAULT_CHECKLIST_ITEMS
   const observationCategories: string[] = (settingsMap['observation_categories'] as string[] | null) ?? DEFAULT_OBSERVATION_CATEGORIES
 
   return (
@@ -58,7 +58,7 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
       <div className="mb-6 flex items-center gap-1 border-b border-zinc-200">
         {[
           { key: 'all',           label: 'Dashboard',     href: '/learning?filter=all' },
-          { key: 'interventions', label: 'Interventions', href: '/learning?filter=interventions' },
+          { key: 'cases', label: 'Cases', href: '/learning?filter=cases' },
           { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
           { key: 'settings',      label: 'Settings',      href: '/learning/settings' },
         ].map(({ key, label, href }) => (

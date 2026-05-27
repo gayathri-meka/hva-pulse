@@ -5,6 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser, requireStaff } from '@/lib/auth'
 import { getSheetRaw, getSheetRows } from '@/lib/google'
 import { runBigQuery } from '@/lib/bigquery'
+import { type ComputedMetric } from '@/components/learning/LearningDashboard'
+import { type MetricDef, type RawRow, topoSortMetrics, computeAllForLearner } from '@/lib/learning/compute'
 
 async function requireAdmin() {
   const user = await getAppUser()
@@ -174,6 +176,53 @@ export async function getDistinctDimensionValues(sourceId: string, columnName: s
   return Array.from(seen).sort()
 }
 
+// Compute one metric's value/series for a specific learner. Used by the
+// case triggers picker so staff can see the chart and click a bar to attach
+// a metric snapshot to a case.
+export async function computeLearnerMetric(
+  learnerId: string,
+  metricId: string,
+): Promise<ComputedMetric | null> {
+  await requireStaff()
+  const supabase = await createServerSupabaseClient()
+
+  // metric_raw_rows is keyed by learner email (the join key used everywhere).
+  const { data: learnerRow } = await supabase
+    .from('learners')
+    .select('users!learners_user_id_fkey(email)')
+    .eq('learner_id', learnerId)
+    .single()
+  const email = (learnerRow?.users as { email?: string | null } | null)?.email?.trim().toLowerCase() ?? ''
+  if (!email) return null
+
+  const [{ data: metricsRaw }, { data: rawRowsData }] = await Promise.all([
+    supabase.from('metrics').select('*'),
+    supabase
+      .from('metric_raw_rows')
+      .select('source_id, learner_id, dimensions, value')
+      .eq('learner_id', email)
+      .limit(10000),
+  ])
+
+  const metricDefs = (metricsRaw ?? []) as MetricDef[]
+  const rawRows: RawRow[] = (rawRowsData ?? []).map((r) => ({
+    source_id:  r.source_id,
+    learner_id: r.learner_id,
+    dimensions: (r.dimensions ?? {}) as Record<string, string | null>,
+    value:      r.value,
+  }))
+
+  const bySource = new Map<string, RawRow[]>()
+  for (const r of rawRows) {
+    if (!bySource.has(r.source_id)) bySource.set(r.source_id, [])
+    bySource.get(r.source_id)!.push(r)
+  }
+
+  const ordered  = topoSortMetrics(metricDefs)
+  const computed = computeAllForLearner(ordered, bySource)
+  return computed[metricId] ?? null
+}
+
 // ── Data source actions ───────────────────────────────────────────────────────
 
 function extractSheetId(urlOrId: string): string {
@@ -303,22 +352,57 @@ export async function createDataSource(data: {
   revalidatePath('/learning/settings')
 }
 
-// ── Intervention actions ──────────────────────────────────────────────────────
+// ── Case actions ──────────────────────────────────────────────────────
 
-export async function startIntervention(learnerId: string) {
+export type TriggerInput =
+  | { kind: 'observation'; observation_id: string }
+  | { kind: 'metric';      metric_id: string; metric_period_label: string | null; metric_value: number | null }
+
+// Lightweight summary of a learner's cases so the Observations modal can show
+// the right "Start case" prompt: redirect to active, link to past, or just
+// start fresh.
+export async function getCaseSummaryForLearner(learnerId: string): Promise<{
+  activeCaseId: string | null
+  closedCount:  number
+}> {
+  await requireStaff()
+  const supabase = await createServerSupabaseClient()
+  const [activeRes, closedRes] = await Promise.all([
+    supabase
+      .from('cases')
+      .select('id')
+      .eq('learner_id', learnerId)
+      .neq('status', 'closed')
+      .maybeSingle(),
+    supabase
+      .from('cases')
+      .select('id', { count: 'exact', head: true })
+      .eq('learner_id', learnerId)
+      .eq('status', 'closed'),
+  ])
+  return {
+    activeCaseId: activeRes.data?.id ?? null,
+    closedCount:  closedRes.count ?? 0,
+  }
+}
+
+export async function startCase(
+  learnerId: string,
+  initialTriggers: TriggerInput[] = [],
+) {
   const user = await requireStaff()
   const supabase = await createServerSupabaseClient()
 
   const { data: existing } = await supabase
-    .from('interventions')
+    .from('cases')
     .select('id')
     .eq('learner_id', learnerId)
     .neq('status', 'closed')
     .maybeSingle()
-  if (existing) throw new Error('Learner already has an active intervention')
+  if (existing) throw new Error('Learner already has an active case')
 
   const { data, error } = await supabase
-    .from('interventions')
+    .from('cases')
     .insert({
       learner_id: learnerId,
       opened_by:  user.id,
@@ -326,20 +410,99 @@ export async function startIntervention(learnerId: string) {
     .select('id')
     .single()
   if (error) throw new Error(error.message)
+
+  // Seed the new case with whatever triggers the caller supplied. Best-effort —
+  // if any single trigger fails we still keep the case (the user can re-add).
+  if (initialTriggers.length > 0) {
+    const rows = initialTriggers.map((t) => triggerInsertRow(data.id, t, user.id))
+    await supabase.from('case_triggers').insert(rows)
+  }
+
   revalidatePath('/learning')
   revalidatePath(`/learning/${learnerId}`)
   return data.id
 }
 
+function triggerInsertRow(caseId: string, t: TriggerInput, userId: string) {
+  if (t.kind === 'observation') {
+    return {
+      case_id:        caseId,
+      kind:           'observation' as const,
+      observation_id: t.observation_id,
+      created_by:     userId,
+    }
+  }
+  return {
+    case_id:             caseId,
+    kind:                'metric' as const,
+    metric_id:           t.metric_id,
+    metric_period_label: t.metric_period_label,
+    metric_value:        t.metric_value,
+    created_by:          userId,
+  }
+}
+
+export async function attachCaseTrigger(caseId: string, trigger: TriggerInput) {
+  const user = await requireStaff()
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('case_triggers')
+    .insert(triggerInsertRow(caseId, trigger, user.id))
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+}
+
+export async function removeCaseTrigger(triggerId: string) {
+  await requireStaff()
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase.from('case_triggers').delete().eq('id', triggerId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+}
+
+export async function updateCaseSeverity(
+  caseId: string,
+  severity: 'Low' | 'Medium' | 'High' | null,
+) {
+  await requireStaff()
+  if (severity !== null && !['Low', 'Medium', 'High'].includes(severity)) {
+    throw new Error('Severity must be Low, Medium, or High')
+  }
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('cases')
+    .update({ severity, updated_at: new Date().toISOString() })
+    .eq('id', caseId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+}
+
+export async function updateCaseAccountableTeam(
+  caseId: string,
+  team: 'Program' | 'Learning' | null,
+) {
+  await requireStaff()
+  if (team !== null && !['Program', 'Learning'].includes(team)) {
+    throw new Error('Accountable team must be Program or Learning')
+  }
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('cases')
+    .update({ accountable_team: team, updated_at: new Date().toISOString() })
+    .eq('id', caseId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+}
+
 // Step 1: "What's wrong?" — checklist items + free text
-export async function saveInterventionStep1(
+export async function saveCaseStep1(
   id: string,
   data: { flagged_items: string[]; what_wrong_notes: string },
 ) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
-    .from('interventions')
+    .from('cases')
     .update({
       flagged_items:      data.flagged_items,
       what_wrong_notes:   data.what_wrong_notes || null,
@@ -353,7 +516,7 @@ export async function saveInterventionStep1(
 }
 
 // Step 2: "Why?" — root cause type (time | learning | other) + categories + notes
-export async function saveInterventionStep2(
+export async function saveCaseStep2(
   id: string,
   data: {
     root_cause_type:       'time' | 'learning' | 'other'
@@ -364,7 +527,7 @@ export async function saveInterventionStep2(
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
-    .from('interventions')
+    .from('cases')
     .update({
       root_cause_type:       data.root_cause_type,
       root_cause_categories: data.root_cause_categories,
@@ -378,18 +541,18 @@ export async function saveInterventionStep2(
 }
 
 // Step 3: "What next?" — action items (initial save, transitions to follow_up)
-export async function saveInterventionStep3(
+export async function saveCaseStep3(
   id: string,
-  actionItems: { description: string; owner: string; due_date: string | null }[],
+  interventions: { description: string; owner: string; due_date: string | null }[],
 ) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const now      = new Date()
 
   const { error } = await supabase
-    .from('interventions')
+    .from('cases')
     .update({
-      action_items:       actionItems,
+      interventions:       interventions,
       status:             'follow_up',
       step3_completed_at: now.toISOString(),
       updated_at:         now.toISOString(),
@@ -399,15 +562,15 @@ export async function saveInterventionStep3(
   revalidatePath('/learning')
 }
 
-export async function saveActionItems(
+export async function saveInterventions(
   id: string,
-  actionItems: { description: string; owner: string; due_date: string | null; completed_at: string | null }[],
+  interventions: { description: string; owner: string; due_date: string | null; completed_at: string | null }[],
 ) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
-    .from('interventions')
-    .update({ action_items: actionItems, updated_at: new Date().toISOString() })
+    .from('cases')
+    .update({ interventions: interventions, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
@@ -424,7 +587,7 @@ type StoredComment = {
   edited_at: string | null
 }
 
-type StoredActionItem = {
+type StoredIntervention = {
   description:      string
   owner:            string
   due_date:         string | null
@@ -433,35 +596,35 @@ type StoredActionItem = {
   comments?:        StoredComment[]
 }
 
-async function loadInterventionItems(id: string): Promise<StoredActionItem[]> {
+async function loadCaseItems(id: string): Promise<StoredIntervention[]> {
   const supabase = await createServerSupabaseClient()
   const { data, error } = await supabase
-    .from('interventions')
-    .select('action_items')
+    .from('cases')
+    .select('interventions')
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
-  if (!data) throw new Error('Intervention not found')
-  return ((data.action_items ?? []) as StoredActionItem[])
+  if (!data) throw new Error('Case not found')
+  return ((data.interventions ?? []) as StoredIntervention[])
 }
 
-async function writeInterventionItems(id: string, items: StoredActionItem[]) {
+async function writeCaseItems(id: string, items: StoredIntervention[]) {
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
-    .from('interventions')
-    .update({ action_items: items, updated_at: new Date().toISOString() })
+    .from('cases')
+    .update({ interventions: items, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
 
-export async function addActionItemComment(
-  interventionId: string,
+export async function addInterventionComment(
+  caseId: string,
   itemIdx:        number,
   comment:        StoredComment,
 ) {
   if (!comment.text?.trim()) throw new Error('Comment cannot be empty')
   const user = await requireStaff()
-  const items = await loadInterventionItems(interventionId)
+  const items = await loadCaseItems(caseId)
   if (itemIdx < 0 || itemIdx >= items.length) throw new Error('Action item not found')
 
   // Stamp with the authenticated user — never trust the client's "by" field.
@@ -479,19 +642,19 @@ export async function addActionItemComment(
       ? { ...item, comments: [...(item.comments ?? []), safe] }
       : item
   )
-  await writeInterventionItems(interventionId, updated)
+  await writeCaseItems(caseId, updated)
   revalidatePath('/learning')
 }
 
-export async function editActionItemComment(
-  interventionId: string,
+export async function editInterventionComment(
+  caseId: string,
   itemIdx:        number,
   commentId:      string,
   newText:        string,
 ) {
   if (!newText.trim()) throw new Error('Comment cannot be empty')
   const user = await requireStaff()
-  const items = await loadInterventionItems(interventionId)
+  const items = await loadCaseItems(caseId)
   if (itemIdx < 0 || itemIdx >= items.length) throw new Error('Action item not found')
 
   const target = items[itemIdx]
@@ -508,17 +671,17 @@ export async function editActionItemComment(
   const updated = items.map((item, i) =>
     i === itemIdx ? { ...item, comments: nextComments } : item
   )
-  await writeInterventionItems(interventionId, updated)
+  await writeCaseItems(caseId, updated)
   revalidatePath('/learning')
 }
 
-export async function deleteActionItemComment(
-  interventionId: string,
+export async function deleteInterventionComment(
+  caseId: string,
   itemIdx:        number,
   commentId:      string,
 ) {
   const user = await requireStaff()
-  const items = await loadInterventionItems(interventionId)
+  const items = await loadCaseItems(caseId)
   if (itemIdx < 0 || itemIdx >= items.length) throw new Error('Action item not found')
 
   const target = items[itemIdx]
@@ -531,7 +694,7 @@ export async function deleteActionItemComment(
   const updated = items.map((item, i) =>
     i === itemIdx ? { ...item, comments: nextComments } : item
   )
-  await writeInterventionItems(interventionId, updated)
+  await writeCaseItems(caseId, updated)
   revalidatePath('/learning')
 }
 
@@ -544,37 +707,37 @@ const STEP_COLUMN: Record<StepKey, 'what_wrong_comments' | 'why_comments'> = {
   why:        'why_comments',
 }
 
-async function loadStepComments(interventionId: string, step: StepKey): Promise<StoredComment[]> {
+async function loadStepComments(caseId: string, step: StepKey): Promise<StoredComment[]> {
   const supabase = await createServerSupabaseClient()
   const column = STEP_COLUMN[step]
   const { data, error } = await supabase
-    .from('interventions')
+    .from('cases')
     .select(column)
-    .eq('id', interventionId)
+    .eq('id', caseId)
     .single()
   if (error) throw new Error(error.message)
-  if (!data) throw new Error('Intervention not found')
+  if (!data) throw new Error('Case not found')
   return ((data as Record<string, unknown>)[column] ?? []) as StoredComment[]
 }
 
-async function writeStepComments(interventionId: string, step: StepKey, comments: StoredComment[]) {
+async function writeStepComments(caseId: string, step: StepKey, comments: StoredComment[]) {
   const supabase = await createServerSupabaseClient()
   const column = STEP_COLUMN[step]
   const { error } = await supabase
-    .from('interventions')
+    .from('cases')
     .update({ [column]: comments, updated_at: new Date().toISOString() })
-    .eq('id', interventionId)
+    .eq('id', caseId)
   if (error) throw new Error(error.message)
 }
 
 export async function addStepComment(
-  interventionId: string,
+  caseId: string,
   step:           StepKey,
   comment:        StoredComment,
 ) {
   if (!comment.text?.trim()) throw new Error('Comment cannot be empty')
   const user = await requireStaff()
-  const existing = await loadStepComments(interventionId, step)
+  const existing = await loadStepComments(caseId, step)
 
   const safe: StoredComment = {
     id:        comment.id,
@@ -584,19 +747,19 @@ export async function addStepComment(
     text:      comment.text.trim(),
     edited_at: null,
   }
-  await writeStepComments(interventionId, step, [...existing, safe])
+  await writeStepComments(caseId, step, [...existing, safe])
   revalidatePath('/learning')
 }
 
 export async function editStepComment(
-  interventionId: string,
+  caseId: string,
   step:           StepKey,
   commentId:      string,
   newText:        string,
 ) {
   if (!newText.trim()) throw new Error('Comment cannot be empty')
   const user = await requireStaff()
-  const existing = await loadStepComments(interventionId, step)
+  const existing = await loadStepComments(caseId, step)
   const found = existing.find((c) => c.id === commentId)
   if (!found) throw new Error('Comment not found')
   if (found.by !== user.id) throw new Error('You can only edit your own comments')
@@ -606,35 +769,35 @@ export async function editStepComment(
       ? { ...c, text: newText.trim(), edited_at: new Date().toISOString() }
       : c
   )
-  await writeStepComments(interventionId, step, next)
+  await writeStepComments(caseId, step, next)
   revalidatePath('/learning')
 }
 
 export async function deleteStepComment(
-  interventionId: string,
+  caseId: string,
   step:           StepKey,
   commentId:      string,
 ) {
   const user = await requireStaff()
-  const existing = await loadStepComments(interventionId, step)
+  const existing = await loadStepComments(caseId, step)
   const found = existing.find((c) => c.id === commentId)
   if (!found) throw new Error('Comment not found')
   if (found.by !== user.id) throw new Error('You can only delete your own comments')
 
   const next = existing.filter((c) => c.id !== commentId)
-  await writeStepComments(interventionId, step, next)
+  await writeStepComments(caseId, step, next)
   revalidatePath('/learning')
 }
 
-export async function clearInterventionStep1(id: string) {
+export async function clearCaseStep1(id: string) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { data: existing } = await supabase
-    .from('interventions')
+    .from('cases')
     .select('step2_completed_at, learner_id')
     .eq('id', id)
     .single()
-  if (!existing) throw new Error('Intervention not found')
+  if (!existing) throw new Error('Case not found')
   const updates: Record<string, unknown> = {
     flagged_items:      [],
     what_wrong_notes:   null,
@@ -643,21 +806,21 @@ export async function clearInterventionStep1(id: string) {
   }
   if (!existing.step2_completed_at) updates.status = 'open'
 
-  const { error } = await supabase.from('interventions').update(updates).eq('id', id)
+  const { error } = await supabase.from('cases').update(updates).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
   revalidatePath(`/learning/${existing.learner_id}`)
 }
 
-export async function deleteIntervention(id: string) {
+export async function deleteCase(id: string) {
   await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { data: existing } = await supabase
-    .from('interventions')
+    .from('cases')
     .select('learner_id')
     .eq('id', id)
     .single()
-  const { error } = await supabase.from('interventions').delete().eq('id', id)
+  const { error } = await supabase.from('cases').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
   if (existing?.learner_id) revalidatePath(`/learning/${existing.learner_id}`)
@@ -669,7 +832,7 @@ export async function updateDecisionDate(id: string, newDate: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error('Invalid date')
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
-    .from('interventions')
+    .from('cases')
     .update({
       decision_date: newDate,
       updated_at:    new Date().toISOString(),
@@ -687,11 +850,11 @@ export async function saveUpdate(id: string, note: string, newDecisionDate: stri
   const supabase = await createServerSupabaseClient()
 
   const { data: existing } = await supabase
-    .from('interventions')
+    .from('cases')
     .select('update_log, learner_id')
     .eq('id', id)
     .single()
-  if (!existing) throw new Error('Intervention not found')
+  if (!existing) throw new Error('Case not found')
 
   const newEntry = {
     at:                      new Date().toISOString(),
@@ -708,13 +871,13 @@ export async function saveUpdate(id: string, note: string, newDecisionDate: stri
   }
   if (newDecisionDate) updates.decision_date = newDecisionDate
 
-  const { error } = await supabase.from('interventions').update(updates).eq('id', id)
+  const { error } = await supabase.from('cases').update(updates).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/learning')
   revalidatePath(`/learning/${existing.learner_id}`)
 }
 
-export async function closeIntervention(
+export async function closeCase(
   id: string,
   learnerId: string,
   outcome: 'resolved' | 'dropped' | 'other',
@@ -724,7 +887,7 @@ export async function closeIntervention(
   const user = await requireStaff()
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase
-    .from('interventions')
+    .from('cases')
     .update({
       status:       'closed',
       outcome,

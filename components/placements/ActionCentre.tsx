@@ -49,7 +49,7 @@ function BucketBar({
 }
 
 // ─── Individual action card ───────────────────────────────────────────────────
-function ActionItem({
+function Intervention({
   count, pctStr, title, description, href,
   countColor, borderColor, bgColor, dotColor,
   age,
@@ -157,7 +157,7 @@ export default function ActionCentre({
       </div>
 
       <div className="space-y-3">
-        <ActionItem
+        <Intervention
           count={awaitingShortlist}
           pctStr={pct(awaitingShortlist, totalApps)}
           title="applications need shortlisting"
@@ -169,7 +169,7 @@ export default function ActionCentre({
           dotColor="bg-blue-400"
           age={appliedAge}
         />
-        <ActionItem
+        <Intervention
           count={yetToStart}
           pctStr={pct(yetToStart, totalApps)}
           title="shortlisted yet to start interviews"
@@ -181,7 +181,7 @@ export default function ActionCentre({
           dotColor="bg-amber-400"
           age={shortlistedAge}
         />
-        <ActionItem
+        <Intervention
           count={interviewsOngoing}
           pctStr={pct(interviewsOngoing, totalApps)}
           title="interviews ongoing need an update"

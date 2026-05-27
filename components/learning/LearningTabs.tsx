@@ -10,7 +10,7 @@ export type LearningTab = {
 }
 
 // Top-level Learning tabs. Most switches are searchParam-only (?filter=all vs
-// ?filter=interventions) which Next.js doesn't treat as a route segment
+// ?filter=cases) which Next.js doesn't treat as a route segment
 // change, so loading.tsx never fires. Triggering the global loader via the
 // shared hook gives consistent behaviour with every other in-app navigation.
 export default function LearningTabs({ tabs, activeKey }: { tabs: LearningTab[]; activeKey: string }) {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { startIntervention } from '@/app/(protected)/learning/actions'
+import { startCase } from '@/app/(protected)/learning/actions'
 import {
   useReactTable,
   getCoreRowModel,
@@ -58,7 +58,7 @@ export type LearnerRow = {
   new_mentor:   string | null
   metrics:      Record<string, ComputedMetric>
   observations: Observation[]
-  intervention: {
+  cs: {
     id: string
     status: string
     decision_date: string | null
@@ -135,7 +135,7 @@ function FilterDropdown({ column }: { column: Column<LearnerRow, unknown> }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-xs font-normal normal-case tracking-normal focus:outline-none ${
+        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-xs font-normal normal-cs tracking-normal focus:outline-none ${
           selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
         }`}
       >
@@ -173,21 +173,21 @@ function FilterDropdown({ column }: { column: Column<LearnerRow, unknown> }) {
   )
 }
 
-// ── Intervention cell ──────────────────────────────────────────────────────────
+// ── Case cell ──────────────────────────────────────────────────────────
 
-function InterventionCell({ row }: { row: LearnerRow }) {
+function CaseCell({ row }: { row: LearnerRow }) {
   const router = useRouter()
   const [isPending, startTransitionFn] = useTransition()
   const today = new Date().toISOString().slice(0, 10)
-  const { intervention } = row
+  const { cs } = row
 
-  if (intervention === null) {
+  if (cs === null) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-zinc-300">—</span>
         <button
           onClick={() => startTransitionFn(async () => {
-            try { await startIntervention(row.learner_id); router.refresh() } catch {}
+            try { await startCase(row.learner_id); router.refresh() } catch {}
           })}
           disabled={isPending}
           className="opacity-0 rounded border border-zinc-200 px-2 py-0.5 text-xs text-zinc-500 transition-opacity hover:border-zinc-300 group-hover:opacity-100 disabled:opacity-50"
@@ -201,22 +201,22 @@ function InterventionCell({ row }: { row: LearnerRow }) {
   // Derive label from step-completion timestamps (the same signal the panel
   // uses) rather than the `status` column, which can lag if it was ever set
   // by legacy code paths or out-of-band edits.
-  const inMonitoring = !!intervention.step3_completed_at
+  const inMonitoring = !!cs.step3_completed_at
   const needsReview =
     inMonitoring &&
-    intervention.decision_date !== null &&
-    intervention.decision_date <= today
+    cs.decision_date !== null &&
+    cs.decision_date <= today
 
   const label =
-    intervention.status === 'closed'
-      ? (intervention.outcome === 'resolved' ? 'Back on track' : 'Closed')
+    cs.status === 'closed'
+      ? (cs.outcome === 'resolved' ? 'Resolved' : 'Closed')
       : needsReview                       ? 'Needs review'
       : inMonitoring                      ? 'Monitoring'
-      : intervention.step1_completed_at   ? 'Pending'
+      : cs.step1_completed_at   ? 'Pending'
       :                                     'Open'
 
   const cls =
-    label === 'Back on track' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+    label === 'Resolved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
     : label === 'Closed'      ? 'bg-zinc-50 text-zinc-500 border border-zinc-200'
     : label === 'Needs review' ? 'bg-red-50 text-red-700 border-2 border-red-500'
     : label === 'Open'        ? 'bg-red-50 text-red-600 border border-red-200'
@@ -225,7 +225,7 @@ function InterventionCell({ row }: { row: LearnerRow }) {
 
   return (
     <Link
-      href={`/learning?filter=interventions&view=learner&learner=${row.learner_id}`}
+      href={`/learning?filter=cases&view=learner&learner=${row.learner_id}`}
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity hover:opacity-75 ${cls}`}
     >
       {label}
@@ -254,7 +254,7 @@ const fixedColumns = [
     filterFn:     nameSearchFilter,
     cell: (info) => (
       <Link
-        href={`/learning?filter=interventions&view=learner&learner=${info.row.original.learner_id}`}
+        href={`/learning?filter=cases&view=learner&learner=${info.row.original.learner_id}`}
         className="font-medium text-zinc-900 hover:underline"
       >
         {info.getValue()}
@@ -307,11 +307,11 @@ const fixedColumns = [
   }),
 ]
 
-// Label + sort priority: Needs review → Open → In progress → Monitoring → No intervention
-function interventionLabel(iv: LearnerRow['intervention']): string {
-  if (!iv) return 'No intervention'
+// Label + sort priority: Needs review → Open → In progress → Monitoring → No cs
+function caseLabel(iv: LearnerRow['cs']): string {
+  if (!iv) return 'No cs'
   if (iv.status === 'closed') {
-    return iv.outcome === 'resolved' ? 'Back on track' : 'Closed'
+    return iv.outcome === 'resolved' ? 'Resolved' : 'Closed'
   }
   const today = new Date().toISOString().slice(0, 10)
   const inMonitoring = !!iv.step3_completed_at
@@ -321,28 +321,28 @@ function interventionLabel(iv: LearnerRow['intervention']): string {
   return 'Open'
 }
 
-const INTERVENTION_RANK: Record<string, number> = {
+const CASE_RANK: Record<string, number> = {
   'Needs review':    0,
   'Open':            1,
   'Pending':         2,
   'Monitoring':      3,
   'Closed':          4,
-  'Back on track':   5,
-  'No intervention': 6,
+  'Resolved':   5,
+  'No cs': 6,
 }
 
-const interventionColumn = col.accessor(
-  (row) => interventionLabel(row.intervention),
+const caseColumn = col.accessor(
+  (row) => caseLabel(row.cs),
   {
-    id:            'intervention',
-    header:        'Intervention',
+    id:            'cs',
+    header:        'Case',
     enableHiding:  false,
     enableSorting: true,
     filterFn:      multiSelectFilter,
     sortingFn:     (a, b) =>
-      INTERVENTION_RANK[interventionLabel(a.original.intervention)] -
-      INTERVENTION_RANK[interventionLabel(b.original.intervention)],
-    cell: (info) => <InterventionCell row={info.row.original} />,
+      CASE_RANK[caseLabel(a.original.cs)] -
+      CASE_RANK[caseLabel(b.original.cs)],
+    cell: (info) => <CaseCell row={info.row.original} />,
   }
 )
 
@@ -497,7 +497,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
   const allColumns = useMemo(() => {
     const [nameCol, ...rest] = fixedColumns
     const obsCol = canEdit ? [observationsColumn] : []
-    return [nameCol, interventionColumn, ...obsCol, ...rest, ...metricColumns]
+    return [nameCol, caseColumn, ...obsCol, ...rest, ...metricColumns]
   }, [metricColumns, observationsColumn, canEdit])
 
   // Reconcile stored column order with actual columns — append any new columns

@@ -122,13 +122,13 @@ async function exportRoles(supabase: Awaited<ReturnType<typeof createServerSupab
   })
 }
 
-async function exportInterventions(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
+async function exportCases(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
   const [
     { data: ivs,      error: ivsErr   },
     { data: learners, error: lrnErr   },
     { data: users,    error: usersErr },
   ] = await Promise.all([
-    supabase.from('interventions').select('*').order('created_at', { ascending: false }),
+    supabase.from('cases').select('*').order('created_at', { ascending: false }),
     supabase.from('learners').select('learner_id, user_id, lf_name, batch_name'),
     supabase.from('users').select('id, name, email'),
   ])
@@ -139,13 +139,13 @@ async function exportInterventions(supabase: Awaited<ReturnType<typeof createSer
   const userMap    = Object.fromEntries((users    ?? []).map((u) => [u.id, u]))
   const learnerMap = Object.fromEntries((learners ?? []).map((l) => [l.learner_id, l]))
 
-  type ActionItemLike = { description?: string; owner?: string; due_date?: string | null; completed_at?: string | null; completion_notes?: string | null; comments?: unknown[] }
+  type InterventionLike = { description?: string; owner?: string; due_date?: string | null; completed_at?: string | null; completion_notes?: string | null; comments?: unknown[] }
 
   return (ivs ?? []).map((iv) => {
     const learner = learnerMap[iv.learner_id ?? '']
     const user    = learner ? userMap[learner.user_id ?? ''] : null
 
-    const items = (iv.action_items ?? []) as ActionItemLike[]
+    const items = (iv.interventions ?? []) as InterventionLike[]
     const totalItems     = items.length
     const completedItems = items.filter((it) => !!it.completed_at).length
     const itemSummary    = items.map((it) =>
@@ -170,10 +170,10 @@ async function exportInterventions(supabase: Awaited<ReturnType<typeof createSer
       what_wrong_notes:         iv.what_wrong_notes ?? '',
       root_cause_categories:    ((iv.root_cause_categories ?? []) as string[]).join('; '),
       root_cause_notes:         iv.root_cause_notes ?? '',
-      total_action_items:       totalItems,
-      completed_action_items:   completedItems,
-      action_items_summary:     itemSummary,
-      action_item_comments:     itemCommentsCount,
+      total_interventions:       totalItems,
+      completed_interventions:   completedItems,
+      interventions_summary:     itemSummary,
+      intervention_comments:     itemCommentsCount,
       what_wrong_comments:      whatWrongCommentsCount,
       why_comments:             whyCommentsCount,
       created_at:               iv.created_at ?? '',
@@ -234,9 +234,9 @@ export async function GET(req: NextRequest) {
         rows     = await exportAlumni(supabase)
         filename = `alumni-${date}.csv`
         break
-      case 'interventions':
-        rows     = await exportInterventions(supabase)
-        filename = `interventions-${date}.csv`
+      case 'cases':
+        rows     = await exportCases(supabase)
+        filename = `cases-${date}.csv`
         break
       case 'applications':
         rows     = await exportApplications(supabase)
@@ -251,7 +251,7 @@ export async function GET(req: NextRequest) {
         filename = `roles-${date}.csv`
         break
       default:
-        return NextResponse.json({ error: 'Unknown table. Use: alumni, interventions, placement, applications, companies, roles' }, { status: 400 })
+        return NextResponse.json({ error: 'Unknown table. Use: alumni, cases, placement, applications, companies, roles' }, { status: 400 })
     }
 
     const csv = toCsv(rows)

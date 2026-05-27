@@ -40,7 +40,7 @@ export default function LearnerSearchBox({ learners, selectedId, baseUrl }: Prop
       router.push(baseUrl + '?learner=' + learner.learner_id)
     } else {
       const params = new URLSearchParams(searchParams.toString())
-      params.set('filter', 'interventions')
+      params.set('filter', 'cases')
       params.set('learner', learner.learner_id)
       router.push('/learning?' + params.toString())
     }
@@ -53,7 +53,7 @@ export default function LearnerSearchBox({ learners, selectedId, baseUrl }: Prop
       router.push(baseUrl)
     } else {
       const params = new URLSearchParams(searchParams.toString())
-      params.set('filter', 'interventions')
+      params.set('filter', 'cases')
       params.delete('learner')
       router.push('/learning?' + params.toString())
     }

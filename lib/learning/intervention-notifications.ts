@@ -4,17 +4,17 @@ import { maskName } from '@/lib/pii'
 
 const ACTION_ITEM_PREFIX = 'action-item:'
 
-interface ActionItem {
+interface Intervention {
   description:  string
   owner:        string
   due_date:     string | null
   completed_at: string | null
 }
 
-interface InterventionRow {
+interface CaseRow {
   id:           string
   learner_id:   string
-  action_items: ActionItem[] | null
+  interventions: Intervention[] | null
 }
 
 interface LearnerJoin {
@@ -24,10 +24,10 @@ interface LearnerJoin {
 
 /**
  * Returns synthesized "action item due/overdue" notifications.
- * Computed live from active interventions — not persisted, no read state.
+ * Computed live from active cases — not persisted, no read state.
  * The list is sorted most-overdue-first.
  */
-export async function computeActionItemNotifications(
+export async function computeInterventionNotifications(
   supabase: SupabaseClient,
   showPII:  boolean,
 ): Promise<Notification[]> {
@@ -41,8 +41,8 @@ export async function computeActionItemNotifications(
 
   const [{ data: ivs }, { data: learners }] = await Promise.all([
     supabase
-      .from('interventions')
-      .select('id, learner_id, action_items')
+      .from('cases')
+      .select('id, learner_id, interventions')
       .neq('status', 'closed'),
     supabase
       .from('learners')
@@ -58,8 +58,8 @@ export async function computeActionItemNotifications(
   const nowIso = new Date().toISOString()
   const out: { n: Notification; urgency: number }[] = []
 
-  for (const iv of (ivs ?? []) as unknown as InterventionRow[]) {
-    const items = iv.action_items ?? []
+  for (const iv of (ivs ?? []) as unknown as CaseRow[]) {
+    const items = iv.interventions ?? []
     const learnerName = learnerNameById.get(iv.learner_id) ?? iv.learner_id
 
     items.forEach((item, idx) => {
@@ -80,10 +80,10 @@ export async function computeActionItemNotifications(
         urgency: days, // smaller (more negative) = more overdue → top of list
         n: {
           id:         `${ACTION_ITEM_PREFIX}${iv.id}:${idx}`,
-          type:       'action_item',
+          type:       'intervention',
           title:      `${item.owner || 'Unassigned'}: ${item.description}`,
           body,
-          link:       `/learning?filter=interventions&view=learner&learner=${iv.learner_id}`,
+          link:       `/learning?filter=cases&view=learner&learner=${iv.learner_id}`,
           is_read:    false,
           created_at: nowIso,
         },

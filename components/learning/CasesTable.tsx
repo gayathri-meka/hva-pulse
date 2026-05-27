@@ -18,12 +18,17 @@ import {
   type Column,
   type VisibilityState,
 } from '@tanstack/react-table'
-import { startIntervention } from '@/app/(protected)/learning/actions'
+import { startCase, type TriggerInput } from '@/app/(protected)/learning/actions'
 import MultiSelectChips from '@/components/ui/MultiSelectChips'
+import ObservationsModal, { type Observation } from '@/components/learning/ObservationsModal'
+import MetricTriggerPicker, { type MetricTriggerValue, type MetricOption as _MetricOption } from '@/components/learning/MetricTriggerPicker'
+
+// Metric option as displayed in the triggers picker.
+export type MetricOption = _MetricOption
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type InterventionRow = {
+export type CaseRow = {
   id:                  string
   learner_id:          string
   learner_name:        string
@@ -34,14 +39,17 @@ export type InterventionRow = {
   new_batch:           string | null
   sub_cohort:          string | null
   status:              'open' | 'in_progress' | 'follow_up'
+  severity:            'Low' | 'Medium' | 'High' | null
+  accountable_team:    'Program' | 'Learning' | null
   step1_completed_at:  string | null
   step3_completed_at:  string | null
   root_cause_filled:   boolean
   root_cause_type:     'time' | 'learning' | 'both' | 'other' | null
   root_cause_categories: string[]
-  total_action_items:  number
-  done_action_items:   number
+  total_interventions:  number
+  done_interventions:   number
   decision_date:       string | null
+  observations:        Observation[]
 }
 
 export type LearnerOption = {
@@ -50,14 +58,23 @@ export type LearnerOption = {
 }
 
 interface Props {
-  rows:             InterventionRow[]
-  learners:         LearnerOption[]
-  subCohortOptions: string[]
+  rows:                  CaseRow[]
+  learners:              LearnerOption[]
+  subCohortOptions:      string[]
+  currentUserId:         string
+  currentUserName:       string | null
+  isAdmin:               boolean
+  observationCategories: string[]
+  /** Observations grouped by learner_id so the NewCaseModal can show the
+      learner's recent observations as candidate triggers. */
+  observationsByLearner: Record<string, Observation[]>
+  /** Metric definitions for the metric-trigger picker. */
+  metricOptions:         MetricOption[]
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const VISIBILITY_KEY = 'interventions-table-col-visibility'
+const VISIBILITY_KEY = 'cases-table-col-visibility'
 
 const LEARNER_INFO_COLS = [
   { id: 'lf_name',        label: 'LF'             },
@@ -67,12 +84,15 @@ const LEARNER_INFO_COLS = [
   { id: 'new_batch',      label: 'New Batch'      },
 ]
 
-const INTERVENTION_COLS = [
-  { id: 'learner_name',  label: 'Learner'       },
-  { id: 'status',        label: 'Status'        },
-  { id: 'root_cause',    label: 'Root cause'    },
-  { id: 'action_plan',   label: 'Action plan'   },
-  { id: 'decision_date', label: 'Decision date' },
+const CASE_COLS = [
+  { id: 'learner_name',     label: 'Learner'           },
+  { id: 'observations',     label: 'Observations'      },
+  { id: 'status',           label: 'Status'            },
+  { id: 'severity',         label: 'Severity'          },
+  { id: 'accountable_team', label: 'Accountable team'  },
+  { id: 'root_cause',       label: 'Root cause'        },
+  { id: 'action_plan',      label: 'Action plan'       },
+  { id: 'decision_date',    label: 'Decision date'     },
 ]
 
 const PROGRAM_STATUS_BADGE: Record<string, string> = {
@@ -86,15 +106,15 @@ const PROGRAM_STATUS_BADGE: Record<string, string> = {
 
 // ── Filters ────────────────────────────────────────────────────────────────────
 
-const multiSelectFilter: FilterFn<InterventionRow> = (row, colId, filterValues: string[]) =>
+const multiSelectFilter: FilterFn<CaseRow> = (row, colId, filterValues: string[]) =>
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
 
-const learnerSearchFilter: FilterFn<InterventionRow> = (row, _, filterValue: string[]) =>
+const learnerSearchFilter: FilterFn<CaseRow> = (row, _, filterValue: string[]) =>
   !filterValue?.length || filterValue.includes(row.original.learner_id)
 learnerSearchFilter.autoRemove = (val: string[]) => !val?.length
 
-function FilterDropdown({ column }: { column: Column<InterventionRow, unknown> }) {
+function FilterDropdown({ column }: { column: Column<CaseRow, unknown> }) {
   const [open, setOpen]  = useState(false)
   const containerRef     = useRef<HTMLDivElement>(null)
   const selected         = (column.getFilterValue() as string[]) ?? []
@@ -166,9 +186,20 @@ function FilterDropdown({ column }: { column: Column<InterventionRow, unknown> }
   )
 }
 
-// ── New Intervention Modal ─────────────────────────────────────────────────────
+// ── New Case Modal ─────────────────────────────────────────────────────
 
-function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]; onClose: () => void }) {
+function fmtObsDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+interface NewCaseModalProps {
+  learners:              LearnerOption[]
+  observationsByLearner: Record<string, Observation[]>
+  metricOptions:         MetricOption[]
+  onClose:               () => void
+}
+
+function NewCaseModal({ learners, observationsByLearner, metricOptions, onClose }: NewCaseModalProps) {
   const router                    = useRouter()
   const [query, setQuery]         = useState('')
   const [selected, setSelected]   = useState<LearnerOption | null>(null)
@@ -178,13 +209,18 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
   const inputRef                  = useRef<HTMLInputElement>(null)
   const dropRef                   = useRef<HTMLDivElement>(null)
 
+  // Trigger picker state.
+  const [obsChecked, setObsChecked]       = useState<Set<string>>(new Set())
+  const [metricPicks, setMetricPicks]     = useState<MetricTriggerValue[]>([])
+
   const filtered = query.trim()
     ? learners.filter((l) => l.name.toLowerCase().includes(query.toLowerCase()))
     : learners
 
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+  const learnerObservations = selected ? (observationsByLearner[selected.learner_id] ?? []) : []
+  const recentObservations  = learnerObservations.slice(0, 10)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
 
   useEffect(() => {
     function onOutside(e: MouseEvent) {
@@ -198,6 +234,32 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
     setSelected(l)
     setQuery(l.name)
     setDropOpen(false)
+    setObsChecked(new Set())
+    setMetricPicks([])
+  }
+
+  function toggleObs(id: string) {
+    setObsChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function buildTriggers(): TriggerInput[] {
+    const triggers: TriggerInput[] = []
+    for (const obsId of obsChecked) {
+      triggers.push({ kind: 'observation', observation_id: obsId })
+    }
+    for (const m of metricPicks) {
+      triggers.push({
+        kind:                'metric',
+        metric_id:           m.metric_id,
+        metric_period_label: m.metric_period_label,
+        metric_value:        m.metric_value,
+      })
+    }
+    return triggers
   }
 
   function handleCreate() {
@@ -205,7 +267,7 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
     setError('')
     startTrans(async () => {
       try {
-        await startIntervention(selected.learner_id)
+        await startCase(selected.learner_id, buildTriggers())
         router.refresh()
         onClose()
       } catch (e) {
@@ -215,10 +277,10 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-12">
+      <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-zinc-900">New intervention</h2>
+          <h2 className="text-base font-bold text-zinc-900">New case</h2>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -226,7 +288,9 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
           </button>
         </div>
 
-        <p className="mb-4 text-sm text-zinc-500">Search for a learner to start an intervention.</p>
+        <p className="mb-4 text-sm text-zinc-500">
+          Pick a learner, then anchor the case to the observations or metrics that prompted it.
+        </p>
 
         <div ref={dropRef} className="relative">
           <input
@@ -259,6 +323,54 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
           )}
         </div>
 
+        {selected && (
+          <div className="mt-5 space-y-4">
+            {/* Observations picker */}
+            <div className="rounded-lg border border-zinc-200 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Triggering observations <span className="font-normal text-zinc-400">(optional)</span>
+              </p>
+              {recentObservations.length === 0 ? (
+                <p className="text-xs text-zinc-400">No observations recorded for this learner yet.</p>
+              ) : (
+                <ul className="max-h-72 space-y-1.5 overflow-y-auto">
+                  {recentObservations.map((o) => (
+                    <li key={o.id}>
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-50">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-900"
+                          checked={obsChecked.has(o.id)}
+                          onChange={() => toggleObs(o.id)}
+                        />
+                        <span className="min-w-0 flex-1 text-xs">
+                          <span className="text-zinc-500">{fmtObsDate(o.observed_at)}</span>
+                          {o.type && <span className="ml-1.5 text-zinc-500">· {o.type}</span>}
+                          {o.severity && <span className="ml-1.5 text-zinc-500">· severity {o.severity}</span>}
+                          <span className="mt-0.5 block whitespace-pre-wrap text-zinc-700">{o.note}</span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Metric trigger */}
+            <div className="rounded-lg border border-zinc-200 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Triggering metric <span className="font-normal text-zinc-400">(optional)</span>
+              </p>
+              <MetricTriggerPicker
+                learnerId={selected.learner_id}
+                metricOptions={metricOptions}
+                value={metricPicks}
+                onChange={setMetricPicks}
+              />
+            </div>
+          </div>
+        )}
+
         {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
@@ -273,7 +385,7 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
             disabled={!selected || isPending}
             className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40"
           >
-            {isPending ? 'Creating…' : 'Create intervention'}
+            {isPending ? 'Creating…' : 'Create case'}
           </button>
         </div>
       </div>
@@ -283,7 +395,7 @@ function NewInterventionModal({ learners, onClose }: { learners: LearnerOption[]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function statusLabel(row: InterventionRow): string {
+function statusLabel(row: CaseRow): string {
   const today = new Date().toISOString().slice(0, 10)
   const inMonitoring = !!row.step3_completed_at
   if (inMonitoring && row.decision_date && row.decision_date <= today) return 'Needs review'
@@ -306,7 +418,21 @@ function statusBadge(label: string): string {
   return 'bg-blue-50 text-blue-600 border border-blue-200' // Monitoring
 }
 
-function rootCauseLabel(row: InterventionRow): string {
+// Severity sort rank used to make the column sortable by urgency.
+const SEVERITY_RANK: Record<string, number> = {
+  High:   0,
+  Medium: 1,
+  Low:    2,
+  '':     99,
+}
+
+const SEVERITY_BADGE: Record<string, string> = {
+  Low:    'bg-zinc-100 text-zinc-600',
+  Medium: 'bg-amber-100 text-amber-700',
+  High:   'bg-red-100 text-red-700',
+}
+
+function rootCauseLabel(row: CaseRow): string {
   if (!row.root_cause_filled) return 'Not filled'
   if (row.root_cause_type === 'time')     return 'Time'
   if (row.root_cause_type === 'learning') return 'Learning'
@@ -329,9 +455,26 @@ function fmtDate(iso: string | null): string {
 
 // ── Columns ────────────────────────────────────────────────────────────────────
 
-const col = createColumnHelper<InterventionRow>()
+const col = createColumnHelper<CaseRow>()
 
-const columns = [
+function ObservationsCell({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={count === 0 ? 'Add observation' : `${count} observation${count !== 1 ? 's' : ''}`}
+      className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-3.5 w-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.67 1.09-.086 2.17-.208 3.238-.365 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+      </svg>
+      {count > 0 && <span className="font-medium">{count}</span>}
+    </button>
+  )
+}
+
+function buildColumns(onOpenObservations: (row: CaseRow) => void) {
+ return [
   col.accessor('learner_name', {
     id:       'learner_name',
     header:   'Learner',
@@ -339,11 +482,22 @@ const columns = [
     filterFn: learnerSearchFilter,
     cell:     (info) => (
       <Link
-        href={`/learning?filter=interventions&view=learner&learner=${info.row.original.learner_id}`}
+        href={`/learning?filter=cases&view=learner&learner=${info.row.original.learner_id}`}
         className="font-medium text-zinc-900 hover:underline"
       >
         {info.getValue()}
       </Link>
+    ),
+  }),
+  col.accessor((row) => row.observations.length, {
+    id:            'observations',
+    header:        'Observations',
+    enableSorting: true,
+    cell: (info) => (
+      <ObservationsCell
+        count={info.row.original.observations.length}
+        onClick={() => onOpenObservations(info.row.original)}
+      />
     ),
   }),
   col.accessor('lf_name', {
@@ -398,6 +552,32 @@ const columns = [
       )
     },
   }),
+  col.accessor((row) => row.severity ?? '', {
+    id:       'severity',
+    header:   'Severity',
+    filterFn: multiSelectFilter,
+    sortingFn: (a, b) => (SEVERITY_RANK[a.original.severity ?? ''] ?? 99) - (SEVERITY_RANK[b.original.severity ?? ''] ?? 99),
+    cell: (info) => {
+      const v = info.getValue() as string
+      if (!v) return <span className="text-zinc-300">—</span>
+      return (
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[v] ?? 'bg-zinc-100 text-zinc-600'}`}>
+          {v}
+        </span>
+      )
+    },
+  }),
+  col.accessor((row) => row.accountable_team ?? '', {
+    id:       'accountable_team',
+    header:   'Accountable team',
+    filterFn: multiSelectFilter,
+    cell: (info) => {
+      const v = info.getValue() as string
+      return v
+        ? <span className="text-xs text-zinc-700">{v}</span>
+        : <span className="text-zinc-300">—</span>
+    },
+  }),
   col.accessor((row) => rootCauseLabel(row), {
     id:       'root_cause',
     header:   'Root cause',
@@ -418,17 +598,17 @@ const columns = [
       )
     },
   }),
-  col.accessor((row) => row.total_action_items, {
+  col.accessor((row) => row.total_interventions, {
     id:     'action_plan',
     header: 'Action plan',
     cell: (info) => {
       const r = info.row.original
-      if (r.total_action_items === 0) {
+      if (r.total_interventions === 0) {
         return <span className="text-xs text-zinc-400">No items</span>
       }
       return (
         <span className="text-sm tabular-nums text-zinc-700">
-          {r.done_action_items}/{r.total_action_items}{' '}
+          {r.done_interventions}/{r.total_interventions}{' '}
           <span className="text-xs text-zinc-400">done</span>
         </span>
       )
@@ -454,12 +634,17 @@ const columns = [
       )
     },
   }),
-]
+ ]
+}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function InterventionsTable({ rows, learners, subCohortOptions }: Props) {
-  const [sorting,          setSorting]          = useState<SortingState>([])
+export default function CasesTable({ rows, learners, subCohortOptions, currentUserId, currentUserName, isAdmin, observationCategories, observationsByLearner, metricOptions }: Props) {
+  const [obsRow, setObsRow] = useState<CaseRow | null>(null)
+  const columns = useMemo(() => buildColumns(setObsRow), [])
+  // Default sort matches the Dashboard's case column ordering — Needs review
+  // first, then Open, Pending, Monitoring (see STATUS_RANK below).
+  const [sorting,          setSorting]          = useState<SortingState>([{ id: 'status', desc: false }])
   const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     lf_name:    false,
@@ -534,8 +719,8 @@ export default function InterventionsTable({ rows, learners, subCohortOptions }:
   const filteredCount = table.getFilteredRowModel().rows.length
   const rowCountText  =
     filteredCount === rows.length
-      ? `${rows.length} intervention${rows.length !== 1 ? 's' : ''}`
-      : `${filteredCount} of ${rows.length} interventions`
+      ? `${rows.length} case${rows.length !== 1 ? 's' : ''}`
+      : `${filteredCount} of ${rows.length} cases`
 
   return (
     <div>
@@ -566,7 +751,7 @@ export default function InterventionsTable({ rows, learners, subCohortOptions }:
           />
         </div>
 
-        {/* Right: row count + columns + new intervention */}
+        {/* Right: row count + columns + new case */}
         <div className="flex items-center gap-3" ref={colMenuRef}>
           <span className="text-sm text-zinc-500">{rowCountText}</span>
 
@@ -601,8 +786,8 @@ export default function InterventionsTable({ rows, learners, subCohortOptions }:
                   )
                 })}
                 <hr className="my-1.5 border-zinc-100" />
-                <p className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">Intervention</p>
-                {INTERVENTION_COLS.map(({ id, label }) => {
+                <p className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">Case</p>
+                {CASE_COLS.map(({ id, label }) => {
                   const column = table.getColumn(id)
                   if (!column) return null
                   return (
@@ -626,14 +811,14 @@ export default function InterventionsTable({ rows, learners, subCohortOptions }:
             onClick={() => setShowModal(true)}
             className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700"
           >
-            + New intervention
+            + New case
           </button>
         </div>
       </div>
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-zinc-200 px-8 py-12 text-center">
-          <p className="text-sm text-zinc-400">No active interventions yet.</p>
+          <p className="text-sm text-zinc-400">No active cases yet.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -676,7 +861,25 @@ export default function InterventionsTable({ rows, learners, subCohortOptions }:
       )}
 
       {showModal && (
-        <NewInterventionModal learners={learners} onClose={() => setShowModal(false)} />
+        <NewCaseModal
+          learners={learners}
+          observationsByLearner={observationsByLearner}
+          metricOptions={metricOptions}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {obsRow && (
+        <ObservationsModal
+          learnerId={obsRow.learner_id}
+          learnerName={obsRow.learner_name}
+          observations={obsRow.observations}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          isAdmin={isAdmin}
+          categories={observationCategories}
+          onClose={() => setObsRow(null)}
+        />
       )}
     </div>
   )

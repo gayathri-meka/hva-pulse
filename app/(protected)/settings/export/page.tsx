@@ -11,9 +11,9 @@ const EXPORTS = [
     cta:         'Download CSV',
   },
   {
-    table:       'interventions',
-    name:        'Intervention data',
-    description: 'All interventions with learner, status, root cause, action items summary and key timestamps.',
+    table:       'cases',
+    name:        'Case data',
+    description: 'All cases with learner, status, root cause, action items summary and key timestamps.',
     cta:         'Download CSV',
   },
   {

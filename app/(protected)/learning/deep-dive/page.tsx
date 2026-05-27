@@ -46,7 +46,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
     track:      string | null
     status:     string | null
   } | null = null
-  let activeInterventionId: string | null = null
+  let activeCaseId: string | null = null
   let metricRows: MetricRow[] = []
 
   // Always fetch metric definitions (needed to compute values)
@@ -66,13 +66,13 @@ export default async function DeepDivePage({ searchParams }: Props) {
         .eq('learner_id', selectedLearnerId)
         .single(),
       supabase
-        .from('interventions')
+        .from('cases')
         .select('id')
         .eq('learner_id', selectedLearnerId)
         .neq('status', 'closed')
         .maybeSingle(),
     ])
-    activeInterventionId = activeIv?.id ?? null
+    activeCaseId = activeIv?.id ?? null
 
     if (analysisRow) {
       analysis = {
@@ -136,7 +136,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
       <div className="mb-6 flex items-center gap-1 border-b border-zinc-200">
         {[
           { key: 'all',           label: 'Dashboard',     href: '/learning?filter=all' },
-          { key: 'interventions', label: 'Interventions', href: '/learning?filter=interventions' },
+          { key: 'cases', label: 'Cases', href: '/learning?filter=cases' },
           { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
           ...(appUser.role !== 'learner' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
         ].map(({ key, label, href }) => (
@@ -199,12 +199,12 @@ export default async function DeepDivePage({ searchParams }: Props) {
                     {learnerInfo.status}
                   </span>
                 )}
-                {activeInterventionId && (
+                {activeCaseId && (
                   <Link
-                    href={`/learning?filter=interventions&view=learner&learner=${selectedLearnerId}`}
+                    href={`/learning?filter=cases&view=learner&learner=${selectedLearnerId}`}
                     className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
                   >
-                    View intervention
+                    View case
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                       <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
                     </svg>

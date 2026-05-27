@@ -16,16 +16,16 @@ import { requireStaff }               from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { revalidatePath }             from 'next/cache'
 import {
-  startIntervention,
-  saveInterventionStep1,
-  saveInterventionStep2,
-  saveInterventionStep3,
-  saveActionItems,
+  startCase,
+  saveCaseStep1,
+  saveCaseStep2,
+  saveCaseStep3,
+  saveInterventions,
   updateDecisionDate,
   saveUpdate,
-  closeIntervention,
-  clearInterventionStep1,
-  deleteIntervention,
+  closeCase,
+  clearCaseStep1,
+  deleteCase,
 } from '@/app/(protected)/learning/actions'
 
 const staffUser = { id: 'staff-1', role: 'admin' as const, name: 'Admin User', email: 'admin@test.com' }
@@ -67,21 +67,21 @@ function mockSupabaseBuilder(opts: {
   return { mockFrom, mockInsert, mockUpdate, mockDelete, mockEqUpdate, mockSelectMaybe, mockSelectSingle }
 }
 
-describe('startIntervention', () => {
+describe('startCase', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
   })
 
-  test('throws when learner already has an active intervention', async () => {
+  test('throws when learner already has an active case', async () => {
     mockSupabaseBuilder({ selectResult: { data: { id: 'existing-iv' }, error: null } })
-    await expect(startIntervention('learner-1')).rejects.toThrow('already has an active intervention')
+    await expect(startCase('learner-1')).rejects.toThrow('already has an active case')
   })
 
-  test('inserts new intervention with learner_id and opened_by', async () => {
+  test('inserts new case with learner_id and opened_by', async () => {
     const { mockInsert } = mockSupabaseBuilder()
 
-    await startIntervention('learner-1')
+    await startCase('learner-1')
 
     expect(mockInsert).toHaveBeenCalledTimes(1)
     const payload = mockInsert.mock.calls[0][0] as { learner_id: string; opened_by: string }
@@ -92,14 +92,14 @@ describe('startIntervention', () => {
 
   test('revalidates both learning pages and returns new id', async () => {
     mockSupabaseBuilder()
-    const id = await startIntervention('learner-1')
+    const id = await startCase('learner-1')
     expect(id).toBe('new-iv-1')
     expect(revalidatePath).toHaveBeenCalledWith('/learning')
     expect(revalidatePath).toHaveBeenCalledWith('/learning/learner-1')
   })
 })
 
-describe('saveInterventionStep1', () => {
+describe('saveCaseStep1', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -107,7 +107,7 @@ describe('saveInterventionStep1', () => {
 
   test('sets status to in_progress and stores flagged_items + notes', async () => {
     const { mockUpdate, mockEqUpdate } = mockSupabaseBuilder()
-    await saveInterventionStep1('iv-1', { flagged_items: ['Attendance', 'Quiz scores'], what_wrong_notes: 'Behind schedule' })
+    await saveCaseStep1('iv-1', { flagged_items: ['Attendance', 'Quiz scores'], what_wrong_notes: 'Behind schedule' })
 
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
       flagged_items:    ['Attendance', 'Quiz scores'],
@@ -119,12 +119,12 @@ describe('saveInterventionStep1', () => {
 
   test('stores null when notes is empty string', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await saveInterventionStep1('iv-1', { flagged_items: ['Attendance'], what_wrong_notes: '' })
+    await saveCaseStep1('iv-1', { flagged_items: ['Attendance'], what_wrong_notes: '' })
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ what_wrong_notes: null }))
   })
 })
 
-describe('saveInterventionStep2', () => {
+describe('saveCaseStep2', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -132,7 +132,7 @@ describe('saveInterventionStep2', () => {
 
   test('stores multi-select root cause categories', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await saveInterventionStep2('iv-1', {
+    await saveCaseStep2('iv-1', {
       root_cause_type:       'time',
       root_cause_categories: ['Life circumstance', 'External commitments'],
       root_cause_notes:      'Family emergency',
@@ -146,13 +146,13 @@ describe('saveInterventionStep2', () => {
 
   test('does not change status (step 2 is independent of status progression)', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await saveInterventionStep2('iv-1', { root_cause_type: 'learning', root_cause_categories: [], root_cause_notes: '' })
+    await saveCaseStep2('iv-1', { root_cause_type: 'learning', root_cause_categories: [], root_cause_notes: '' })
     const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('status')
   })
 })
 
-describe('saveInterventionStep3', () => {
+describe('saveCaseStep3', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -160,17 +160,17 @@ describe('saveInterventionStep3', () => {
 
   test('transitions status to follow_up on save', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await saveInterventionStep3('iv-1', [
+    await saveCaseStep3('iv-1', [
       { description: 'Call parent', owner: 'LF', due_date: '2026-05-01' },
     ])
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
       status:       'follow_up',
-      action_items: [{ description: 'Call parent', owner: 'LF', due_date: '2026-05-01' }],
+      interventions: [{ description: 'Call parent', owner: 'LF', due_date: '2026-05-01' }],
     }))
   })
 })
 
-describe('saveActionItems', () => {
+describe('saveInterventions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -178,11 +178,11 @@ describe('saveActionItems', () => {
 
   test('persists completion timestamps without changing status', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await saveActionItems('iv-1', [
+    await saveInterventions('iv-1', [
       { description: 'Call parent', owner: 'LF', due_date: null, completed_at: '2026-04-20T10:00:00Z' },
     ])
     const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>
-    expect(payload).toHaveProperty('action_items')
+    expect(payload).toHaveProperty('interventions')
     expect(payload).not.toHaveProperty('status')
   })
 })
@@ -262,7 +262,7 @@ describe('saveUpdate', () => {
   })
 })
 
-describe('closeIntervention', () => {
+describe('closeCase', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -270,12 +270,12 @@ describe('closeIntervention', () => {
 
   test('rejects empty outcome note', async () => {
     mockSupabaseBuilder()
-    await expect(closeIntervention('iv-1', 'learner-1', 'resolved', '   ')).rejects.toThrow('Outcome note is required')
+    await expect(closeCase('iv-1', 'learner-1', 'resolved', '   ')).rejects.toThrow('Outcome note is required')
   })
 
   test('sets status=closed and records closer', async () => {
     const { mockUpdate } = mockSupabaseBuilder()
-    await closeIntervention('iv-1', 'learner-1', 'resolved', 'Learner back on track')
+    await closeCase('iv-1', 'learner-1', 'resolved', 'Learner back on track')
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
       status:       'closed',
       outcome:      'resolved',
@@ -286,12 +286,12 @@ describe('closeIntervention', () => {
 
   test('revalidates learner detail page', async () => {
     mockSupabaseBuilder()
-    await closeIntervention('iv-1', 'learner-42', 'dropped', 'Left programme')
+    await closeCase('iv-1', 'learner-42', 'dropped', 'Left programme')
     expect(revalidatePath).toHaveBeenCalledWith('/learning/learner-42')
   })
 })
 
-describe('clearInterventionStep1', () => {
+describe('clearCaseStep1', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -301,7 +301,7 @@ describe('clearInterventionStep1', () => {
     const { mockUpdate } = mockSupabaseBuilder({
       selectResult: { data: { step2_completed_at: null, learner_id: 'learner-1' }, error: null },
     })
-    await clearInterventionStep1('iv-1')
+    await clearCaseStep1('iv-1')
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
       flagged_items:      [],
       what_wrong_notes:   null,
@@ -314,13 +314,13 @@ describe('clearInterventionStep1', () => {
     const { mockUpdate } = mockSupabaseBuilder({
       selectResult: { data: { step2_completed_at: '2026-04-01T00:00:00Z', learner_id: 'learner-1' }, error: null },
     })
-    await clearInterventionStep1('iv-1')
+    await clearCaseStep1('iv-1')
     const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('status')
   })
 })
 
-describe('deleteIntervention', () => {
+describe('deleteCase', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
@@ -330,7 +330,7 @@ describe('deleteIntervention', () => {
     const { mockDelete } = mockSupabaseBuilder({
       selectResult: { data: { learner_id: 'learner-7' }, error: null },
     })
-    await deleteIntervention('iv-1')
+    await deleteCase('iv-1')
     expect(mockDelete).toHaveBeenCalled()
     expect(revalidatePath).toHaveBeenCalledWith('/learning/learner-7')
   })

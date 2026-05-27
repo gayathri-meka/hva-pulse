@@ -64,7 +64,7 @@ export default function LearningCategoriesPanel({ initial }: Props) {
         {saved && <span className="text-xs text-[#5BAE5B]">Saved</span>}
       </div>
       <p className="mb-4 text-xs text-zinc-400">
-        Shown in the root cause dropdown when creating or editing an intervention. Admins pick from this list.
+        Shown in the root cause dropdown when creating or editing an case. Admins pick from this list.
       </p>
 
       <div className="space-y-1.5">

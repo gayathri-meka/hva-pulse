@@ -161,15 +161,15 @@ export default function LearningConfigurationsPanel({ categories, checklistItems
       />
       <ListEditor
         title="Root Cause Categories"
-        description="Shown in the 'Why?' dropdown when diagnosing an intervention. Admins pick from this list."
+        description="Shown in the 'Why?' dropdown when diagnosing an case. Admins pick from this list."
         settingsKey="root_cause_categories"
         initial={categories}
         placeholder="Add a category…"
       />
       <ListEditor
-        title="Intervention Checklist Items"
+        title="Case Checklist Items"
         description="Shown as checkboxes in the 'What's wrong?' step. Staff tick which signals are off for the learner."
-        settingsKey="intervention_checklist_items"
+        settingsKey="case_checklist_items"
         initial={checklistItems}
         placeholder="Add a checklist item…"
       />
