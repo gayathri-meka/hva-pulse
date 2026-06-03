@@ -68,5 +68,5 @@ export async function GET(request: NextRequest) {
       { onConflict: 'email' },
     )
 
-  return NextResponse.redirect(`${origin}/coming-soon`)
+  return NextResponse.redirect(`${origin}/candidate/welcome`)
 }
