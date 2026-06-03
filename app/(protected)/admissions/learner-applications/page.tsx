@@ -11,6 +11,7 @@ export type LearnerApplication = {
   email:              string | null
   college_name:       string | null
   educational_status: string | null
+  signed_into_pulse:  boolean
 }
 
 export default async function LearnerApplicationsPage() {
@@ -22,12 +23,22 @@ export default async function LearnerApplicationsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const { data } = await supabase
-    .from('learner_applications')
-    .select('id, created_at, name, phone, email, college_name, educational_status')
-    .order('created_at', { ascending: false })
+  const [{ data: rawApps }, { data: prospectRows }] = await Promise.all([
+    supabase
+      .from('learner_applications')
+      .select('id, created_at, name, phone, email, college_name, educational_status')
+      .order('created_at', { ascending: false }),
+    supabase.from('prospects').select('email'),
+  ])
 
-  const applications = (data ?? []) as LearnerApplication[]
+  const prospectEmails = new Set(
+    (prospectRows ?? []).map((p) => (p.email ?? '').toLowerCase()),
+  )
+
+  const applications: LearnerApplication[] = (rawApps ?? []).map((a) => ({
+    ...a,
+    signed_into_pulse: a.email ? prospectEmails.has(a.email.toLowerCase()) : false,
+  }))
 
   return (
     <div>

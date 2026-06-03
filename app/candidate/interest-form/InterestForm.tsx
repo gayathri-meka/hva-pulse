@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { IconArrowRight, IconCheck, IconChevronDown } from '@tabler/icons-react'
 import CollegeAutocomplete from './CollegeAutocomplete'
+import { submitInterestForm } from './actions'
 
 const EDUCATION_OPTIONS = [
   'Completed 12th, not in college right now',
@@ -20,21 +21,30 @@ type Errors = Partial<Record<'name' | 'phone' | 'email' | 'college' | 'education
 export default function InterestForm({
   defaultName,
   defaultEmail,
+  defaultPhone,
+  defaultCollege,
+  defaultEducation,
+  defaultEducationOther,
   firstName,
 }: {
   defaultName: string
   defaultEmail: string
+  defaultPhone: string
+  defaultCollege: string
+  defaultEducation: string
+  defaultEducationOther: string
   firstName: string | null
 }) {
   const [name, setName] = useState(defaultName)
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(defaultPhone)
   const [email, setEmail] = useState(defaultEmail)
-  const [college, setCollege] = useState('')
-  const [education, setEducation] = useState('')
-  const [educationOther, setEducationOther] = useState('')
+  const [college, setCollege] = useState(defaultCollege)
+  const [education, setEducation] = useState(defaultEducation)
+  const [educationOther, setEducationOther] = useState(defaultEducationOther)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
-  const [submitting, setSubmitting] = useState(false)
+  const [pending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   function validate(): Errors {
     const e: Errors = {}
@@ -54,15 +64,25 @@ export default function InterestForm({
     setTouched((t) => ({ ...t, [field]: true }))
   }
 
-  async function handleSubmit(event: React.FormEvent) {
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setTouched({ name: true, phone: true, email: true, college: true, education: true })
     if (!isValid) return
-    setSubmitting(true)
-    // Simulated submit — wire to a server action + DB when prospect columns exist.
-    await new Promise((r) => setTimeout(r, 700))
-    setSubmitting(false)
-    setSubmitted(true)
+    setSubmitError(null)
+    const educationValue = education === 'Other' ? educationOther.trim() : education
+    startTransition(async () => {
+      const result = await submitInterestForm({
+        name: name.trim(),
+        phone: phone.trim(),
+        college: college.trim(),
+        education_status: educationValue,
+      })
+      if (result.ok) {
+        setSubmitted(true)
+      } else {
+        setSubmitError(result.error)
+      }
+    })
   }
 
   if (submitted) {
@@ -204,13 +224,19 @@ export default function InterestForm({
         )}
       </div>
 
+      {submitError && (
+        <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[13px] font-semibold text-red-700">
+          {submitError}
+        </p>
+      )}
+
       {/* Submit */}
       <button
         type="submit"
-        disabled={submitting}
+        disabled={pending}
         className="group mt-2 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-[#0f1f0f] px-6 py-5 text-[15px] font-extrabold text-white shadow-sm transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none sm:py-6 sm:text-[16px]"
       >
-        {submitting ? (
+        {pending ? (
           'Submitting…'
         ) : (
           <>

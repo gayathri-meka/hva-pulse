@@ -4,6 +4,15 @@ import InterestForm from './InterestForm'
 
 export const dynamic = 'force-dynamic'
 
+const EDUCATION_OPTIONS = [
+  'Completed 12th, not in college right now',
+  'In college, graduating in 2026',
+  'In college, graduating in 2027',
+  'In college, graduating after 2027',
+  'Graduated and working',
+  'Graduated, not working',
+]
+
 export default async function InterestFormPage() {
   const supabase = await createServerSupabaseClient()
   const {
@@ -13,7 +22,7 @@ export default async function InterestFormPage() {
 
   const { data: prospect } = await supabase
     .from('prospects')
-    .select('name')
+    .select('name, phone, college, education_status, interest_form_submitted_at')
     .eq('email', email)
     .maybeSingle()
 
@@ -25,6 +34,14 @@ export default async function InterestFormPage() {
 
   const fullName = prospect?.name || metadataName
   const firstName = fullName?.trim().split(/\s+/)[0] || null
+
+  // Map stored education_status back to the dropdown shape: if it matches a
+  // canonical option, use it directly; otherwise treat it as an "Other" answer
+  // and pre-fill the free-text input with the stored value.
+  const stored = prospect?.education_status?.trim() ?? ''
+  const isCanonical = EDUCATION_OPTIONS.includes(stored)
+  const defaultEducation = stored ? (isCanonical ? stored : 'Other') : ''
+  const defaultEducationOther = stored && !isCanonical ? stored : ''
 
   return (
     <main className="pb-32 sm:pb-40">
@@ -68,6 +85,10 @@ export default async function InterestFormPage() {
         <InterestForm
           defaultName={fullName ?? ''}
           defaultEmail={email}
+          defaultPhone={prospect?.phone ?? ''}
+          defaultCollege={prospect?.college ?? ''}
+          defaultEducation={defaultEducation}
+          defaultEducationOther={defaultEducationOther}
           firstName={firstName}
         />
       </div>

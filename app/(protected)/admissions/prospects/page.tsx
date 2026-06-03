@@ -4,12 +4,16 @@ import ProspectsTable from './ProspectsTable'
 export const dynamic = 'force-dynamic'
 
 export type Prospect = {
-  id:            string
-  email:         string
-  name:          string | null
-  avatar_url:    string | null
-  created_at:    string
-  last_seen_at:  string
+  id:                          string
+  email:                       string
+  name:                        string | null
+  avatar_url:                  string | null
+  phone:                       string | null
+  college:                     string | null
+  education_status:            string | null
+  interest_form_submitted_at:  string | null
+  created_at:                  string
+  last_seen_at:                string
 }
 
 export default async function ProspectsPage() {
@@ -24,7 +28,9 @@ export default async function ProspectsPage() {
 
   const { data } = await supabase
     .from('prospects')
-    .select('id, email, name, avatar_url, created_at, last_seen_at')
+    .select(
+      'id, email, name, avatar_url, phone, college, education_status, interest_form_submitted_at, created_at, last_seen_at',
+    )
     .order('created_at', { ascending: false })
 
   const prospects = (data ?? []) as Prospect[]

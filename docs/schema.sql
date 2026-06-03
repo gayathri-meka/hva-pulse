@@ -6,10 +6,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict w1vm2qcebxdfsMglVRB2tbLXUgPbB7iceHz0iSoIWwjdbYwlJOBqV1oI4fGBOiC
+\restrict VZmlIrsEiejLgTQ6HCz5m7irRy8KApb86KEUTws0QdiLDzIljAzmA1FrH0bpYgQ
 
 -- Dumped from database version 17.6
--- Dumped by pg_dump version 17.7 (Homebrew)
+-- Dumped by pg_dump version 18.4
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -492,7 +492,11 @@ CREATE TABLE public.prospects (
     name text,
     avatar_url text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_seen_at timestamp with time zone DEFAULT now() NOT NULL
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    phone text,
+    college text,
+    education_status text,
+    interest_form_submitted_at timestamp with time zone
 );
 
 
@@ -1096,6 +1100,13 @@ CREATE INDEX learners_is_active_idx ON public.learners USING btree (is_active);
 --
 
 CREATE INDEX prospects_created_at_idx ON public.prospects USING btree (created_at DESC);
+
+
+--
+-- Name: prospects_submitted_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX prospects_submitted_idx ON public.prospects USING btree (interest_form_submitted_at DESC NULLS LAST);
 
 
 --
@@ -1979,5 +1990,5 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict w1vm2qcebxdfsMglVRB2tbLXUgPbB7iceHz0iSoIWwjdbYwlJOBqV1oI4fGBOiC
+\unrestrict VZmlIrsEiejLgTQ6HCz5m7irRy8KApb86KEUTws0QdiLDzIljAzmA1FrH0bpYgQ
 

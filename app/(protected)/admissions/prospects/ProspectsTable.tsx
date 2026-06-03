@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { exportToCsv } from '@/lib/exportToCsv'
 import {
   useReactTable,
@@ -29,9 +29,24 @@ function formatDate(value: string): string {
 
 const col = createColumnHelper<Prospect>()
 
+type FormFilter = 'all' | 'submitted' | 'pending'
+
 export default function ProspectsTable({ prospects }: { prospects: Prospect[] }) {
   const [sorting, setSorting]           = useState<SortingState>([])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
+  const [formFilter, setFormFilter]     = useState<FormFilter>('all')
+
+  const filteredProspects = useMemo(() => {
+    if (formFilter === 'submitted') return prospects.filter((p) => p.interest_form_submitted_at)
+    if (formFilter === 'pending')   return prospects.filter((p) => !p.interest_form_submitted_at)
+    return prospects
+  }, [prospects, formFilter])
+
+  const submittedCount = useMemo(
+    () => prospects.filter((p) => p.interest_form_submitted_at).length,
+    [prospects],
+  )
+  const pendingCount = prospects.length - submittedCount
 
   const columns = [
     col.accessor('created_at', {
@@ -41,17 +56,53 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
     }),
     col.accessor('name', {
       header: 'Name',
-      size: 220,
+      size: 200,
       cell: (info) => <span className="font-medium text-zinc-900">{info.getValue() ?? '—'}</span>,
     }),
     col.accessor('email', {
       header: 'Email',
-      size: 280,
+      size: 260,
       cell: (info) => (
         <a href={`mailto:${info.getValue()}`} className="text-zinc-600 hover:text-zinc-900 hover:underline">
           {info.getValue()}
         </a>
       ),
+    }),
+    col.accessor('phone', {
+      header: 'Phone',
+      size: 130,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+    }),
+    col.accessor('college', {
+      header: 'College',
+      size: 240,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+    }),
+    col.accessor('education_status', {
+      header: 'Education status',
+      size: 220,
+      cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+    }),
+    col.accessor('interest_form_submitted_at', {
+      header: 'Interest form',
+      size: 160,
+      cell: (info) => {
+        const submittedAt = info.getValue()
+        if (submittedAt) {
+          return (
+            <span title={formatDate(submittedAt)} className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Submitted
+            </span>
+          )
+        }
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+            Pending
+          </span>
+        )
+      },
     }),
     col.accessor('last_seen_at', {
       header: 'Last seen',
@@ -61,7 +112,7 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
   ]
 
   const table = useReactTable({
-    data: prospects,
+    data: filteredProspects,
     columns,
     state: { sorting, columnSizing },
     onSortingChange: setSorting,
@@ -88,7 +139,27 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
 
   return (
     <div>
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1">
+          <FilterPill
+            active={formFilter === 'all'}
+            onClick={() => setFormFilter('all')}
+            label="All"
+            count={prospects.length}
+          />
+          <FilterPill
+            active={formFilter === 'submitted'}
+            onClick={() => setFormFilter('submitted')}
+            label="Submitted form"
+            count={submittedCount}
+          />
+          <FilterPill
+            active={formFilter === 'pending'}
+            onClick={() => setFormFilter('pending')}
+            label="Pending"
+            count={pendingCount}
+          />
+        </div>
         <button
           onClick={() => exportToCsv(table, `prospects_${new Date().toISOString().slice(0, 10)}.csv`)}
           className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
@@ -154,5 +225,33 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
         </div>
       </div>
     </div>
+  )
+}
+
+function FilterPill({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  count: number
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+        active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+      }`}
+    >
+      {label}
+      <span className={`rounded-full px-1.5 text-[10px] ${
+        active ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-200/70 text-zinc-500'
+      }`}>
+        {count}
+      </span>
+    </button>
   )
 }
