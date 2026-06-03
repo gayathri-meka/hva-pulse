@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { IconLogout } from '@tabler/icons-react'
+import { IconCheck, IconLogout } from '@tabler/icons-react'
 import { createClient } from '@/lib/supabase'
 
 const STAGES = [
@@ -14,7 +14,11 @@ const STAGES = [
   { slug: 'selection', label: 'Selection' },
 ]
 
-export default function CandidateHeader() {
+export default function CandidateHeader({
+  completedStages = [],
+}: {
+  completedStages?: string[]
+}) {
   const pathname = usePathname()
   const currentSlug = pathname.split('/')[2] ?? 'welcome'
 
@@ -60,6 +64,7 @@ export default function CandidateHeader() {
         <div className="mx-auto flex max-w-3xl gap-3 overflow-x-auto px-4 py-4 sm:justify-center sm:gap-5 sm:px-6 sm:py-5">
           {STAGES.map((stage, i) => {
             const isCurrent = stage.slug === currentSlug
+            const isCompleted = completedStages.includes(stage.slug)
             return (
               <Link
                 key={stage.slug}
@@ -70,16 +75,20 @@ export default function CandidateHeader() {
                   className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[12px] font-extrabold transition-all ${
                     isCurrent
                       ? 'border-[#15803d] bg-[#16a34a] text-white group-hover:bg-[#22c55e] group-hover:shadow-[0_0_0_4px_rgba(34,197,94,0.25)]'
-                      : 'border-white/20 bg-white/5 text-white/50 group-hover:border-[#86efac] group-hover:bg-[#16a34a]/40 group-hover:text-white'
+                      : isCompleted
+                        ? 'border-[#15803d] bg-[#16a34a]/85 text-white group-hover:bg-[#22c55e]'
+                        : 'border-white/20 bg-white/5 text-white/50 group-hover:border-[#86efac] group-hover:bg-[#16a34a]/40 group-hover:text-white'
                   }`}
                 >
-                  {i + 1}
+                  {isCompleted ? <IconCheck size={14} stroke={3} /> : i + 1}
                 </span>
                 <span
                   className={`whitespace-nowrap text-[13px] font-bold transition-colors ${
                     isCurrent
                       ? 'text-[#bbf7d0] group-hover:text-white'
-                      : 'text-white/50 group-hover:text-[#bbf7d0]'
+                      : isCompleted
+                        ? 'text-[#bbf7d0]/80 group-hover:text-white'
+                        : 'text-white/50 group-hover:text-[#bbf7d0]'
                   }`}
                 >
                   {stage.label}

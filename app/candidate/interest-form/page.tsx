@@ -1,4 +1,5 @@
 import { IconInfoCircle } from '@tabler/icons-react'
+import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import InterestForm from './InterestForm'
 
@@ -20,7 +21,13 @@ export default async function InterestFormPage() {
   } = await supabase.auth.getUser()
   const email = user!.email!.toLowerCase()
 
-  const { data: prospect } = await supabase
+  // prospects RLS only allows admin/staff to read, so use the service-role
+  // client to fetch this prospect's own row (filtered by their authed email).
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+  const { data: prospect } = await admin
     .from('prospects')
     .select('name, phone, college, education_status, interest_form_submitted_at')
     .eq('email', email)
@@ -68,7 +75,7 @@ export default async function InterestFormPage() {
 
       {/* BODY */}
       <div className="mx-auto max-w-3xl space-y-3 px-4 pt-3 sm:space-y-4 sm:px-6 sm:pt-4">
-        {/* Explanation card */}
+        {/* Explanation card — shown above both the form view and the summary view */}
         <div className="rounded-2xl border-[0.5px] border-[#fde68a] bg-[#fffbeb] p-3.5 sm:p-5">
           <div className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold text-[#92400e] sm:text-[13px]">
             <IconInfoCircle size={16} stroke={2} />
@@ -81,7 +88,6 @@ export default async function InterestFormPage() {
           </p>
         </div>
 
-        {/* Form */}
         <InterestForm
           defaultName={fullName ?? ''}
           defaultEmail={email}
@@ -90,6 +96,7 @@ export default async function InterestFormPage() {
           defaultEducation={defaultEducation}
           defaultEducationOther={defaultEducationOther}
           firstName={firstName}
+          alreadySubmitted={!!prospect?.interest_form_submitted_at}
         />
       </div>
     </main>

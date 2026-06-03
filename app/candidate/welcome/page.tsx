@@ -3,12 +3,14 @@ import {
   IconArrowRight,
   IconBriefcase,
   IconBuildingSkyscraper,
+  IconCheck,
   IconChevronRight,
   IconDeviceMobile,
   IconTarget,
   IconUsers,
   type Icon as TablerIcon,
 } from '@tabler/icons-react'
+import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
@@ -51,9 +53,15 @@ export default async function WelcomePage() {
   } = await supabase.auth.getUser()
   const email = user!.email!.toLowerCase()
 
-  const { data: prospect } = await supabase
+  // prospects RLS only allows admin/staff to read, so use the service-role
+  // client to fetch this prospect's own row (filtered by their authed email).
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+  const { data: prospect } = await admin
     .from('prospects')
-    .select('name')
+    .select('name, interest_form_submitted_at')
     .eq('email', email)
     .maybeSingle()
 
@@ -66,6 +74,25 @@ export default async function WelcomePage() {
   const fullName = prospect?.name || metadataName
   const firstName = fullName?.trim().split(/\s+/)[0] ?? null
   const greeting = firstName ? `Welcome, ${firstName}!` : 'Welcome!'
+
+  // Stage states for the journey card. The "Current" pill follows the first
+  // unfinished stage; completed stages get a tick.
+  const interestFormSubmitted = !!prospect?.interest_form_submitted_at
+  // TODO: when SensAI sync is wired up, set this to true once the prospect has
+  // completed at least Day 1 of the 14-Day Challenge. That will move the
+  // "Current" pill from Interest Form to Challenge automatically.
+  const challengeStarted = false
+
+  type StageState = 'locked' | 'current' | 'completed' | 'completed-current'
+  const stageStates: Record<string, StageState> = {
+    welcome:         interestFormSubmitted ? 'completed' : 'current',
+    'interest-form': interestFormSubmitted
+      ? (challengeStarted ? 'completed' : 'completed-current')
+      : 'locked',
+    challenge:       challengeStarted ? 'current' : 'locked',
+    interview:       'locked',
+    selection:       'locked',
+  }
 
   return (
     <main className="pb-32 sm:pb-40">
@@ -178,7 +205,21 @@ export default async function WelcomePage() {
           </div>
           <div className="space-y-1">
             {STAGES.map(({ name, slug, description }, i) => {
-              const isCurrent = i === 0
+              const state = stageStates[slug] ?? 'locked'
+              const isCompleted = state === 'completed' || state === 'completed-current'
+              const isCurrent   = state === 'current'   || state === 'completed-current'
+
+              // Circle: solid green for current/completed, gray for locked
+              const circleClass = isCurrent
+                ? 'border-[#15803d] bg-[#16a34a] text-white group-hover:shadow-[0_0_0_3px_rgba(22,163,74,0.2)]'
+                : isCompleted
+                  ? 'border-[#15803d] bg-[#16a34a] text-white'
+                  : 'border-zinc-200 bg-zinc-100 text-zinc-400 group-hover:border-[#bbf7d0] group-hover:bg-[#dcfce7] group-hover:text-[#166534]'
+
+              const labelClass = isCurrent || isCompleted
+                ? 'text-[#166534]'
+                : 'text-zinc-700 group-hover:text-[#166534]'
+
               return (
                 <Link
                   key={slug}
@@ -187,21 +228,19 @@ export default async function WelcomePage() {
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-extrabold transition-all ${
-                        isCurrent
-                          ? 'border-[#15803d] bg-[#16a34a] text-white group-hover:shadow-[0_0_0_3px_rgba(22,163,74,0.2)]'
-                          : 'border-zinc-200 bg-zinc-100 text-zinc-400 group-hover:border-[#bbf7d0] group-hover:bg-[#dcfce7] group-hover:text-[#166534]'
-                      }`}
+                      className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-extrabold transition-all ${circleClass}`}
                     >
-                      {isCurrent ? <IconArrowRight size={12} stroke={3} /> : i + 1}
+                      {isCompleted ? (
+                        <IconCheck size={13} stroke={3} />
+                      ) : isCurrent ? (
+                        <IconArrowRight size={12} stroke={3} />
+                      ) : (
+                        i + 1
+                      )}
                     </div>
                     <div className="flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`text-[13px] font-extrabold sm:text-[14px] ${
-                            isCurrent ? 'text-[#166534]' : 'text-zinc-700 group-hover:text-[#166534]'
-                          }`}
-                        >
+                        <span className={`text-[13px] font-extrabold sm:text-[14px] ${labelClass}`}>
                           {name}
                         </span>
                         {isCurrent && (

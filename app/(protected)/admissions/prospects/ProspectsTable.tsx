@@ -90,7 +90,7 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
         const submittedAt = info.getValue()
         if (submittedAt) {
           return (
-            <span title={formatDate(submittedAt)} className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Submitted
             </span>
@@ -102,6 +102,25 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
             Pending
           </span>
         )
+      },
+    }),
+    col.accessor((row) => row.interest_form_submitted_at, {
+      id: 'form_fill_date',
+      header: 'Form fill date',
+      size: 140,
+      sortingFn: (a, b) => {
+        const av = a.original.interest_form_submitted_at
+        const bv = b.original.interest_form_submitted_at
+        if (!av && !bv) return 0
+        if (!av) return 1
+        if (!bv) return -1
+        return new Date(av).getTime() - new Date(bv).getTime()
+      },
+      cell: (info) => {
+        const v = info.getValue() as string | null
+        return v
+          ? <span className="text-zinc-500">{formatDate(v)}</span>
+          : <span className="text-zinc-300">—</span>
       },
     }),
     col.accessor('last_seen_at', {

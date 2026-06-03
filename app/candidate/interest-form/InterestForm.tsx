@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { IconArrowRight, IconCheck, IconChevronDown } from '@tabler/icons-react'
+import {
+  IconArrowRight,
+  IconCheck,
+  IconChevronDown,
+  IconPencil,
+} from '@tabler/icons-react'
 import CollegeAutocomplete from './CollegeAutocomplete'
 import { submitInterestForm } from './actions'
 
@@ -18,6 +23,15 @@ const EDUCATION_OPTIONS = [
 
 type Errors = Partial<Record<'name' | 'phone' | 'email' | 'college' | 'education', string>>
 
+type EditableField = 'name' | 'phone' | 'college' | 'education'
+type FieldSnapshot = {
+  name: string
+  phone: string
+  college: string
+  education: string
+  educationOther: string
+}
+
 export default function InterestForm({
   defaultName,
   defaultEmail,
@@ -26,6 +40,7 @@ export default function InterestForm({
   defaultEducation,
   defaultEducationOther,
   firstName,
+  alreadySubmitted,
 }: {
   defaultName: string
   defaultEmail: string
@@ -34,6 +49,7 @@ export default function InterestForm({
   defaultEducation: string
   defaultEducationOther: string
   firstName: string | null
+  alreadySubmitted: boolean
 }) {
   const [name, setName] = useState(defaultName)
   const [phone, setPhone] = useState(defaultPhone)
@@ -43,8 +59,58 @@ export default function InterestForm({
   const [educationOther, setEducationOther] = useState(defaultEducationOther)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
-  const [submitted, setSubmitted] = useState(false)
+  const [submitted, setSubmitted] = useState(alreadySubmitted)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Inline per-field edit state (used inside the summary view)
+  const [editingField, setEditingField] = useState<EditableField | null>(null)
+  const [savingField, setSavingField]   = useState(false)
+  const [fieldError, setFieldError]     = useState<string | null>(null)
+  const [editingSnapshot, setEditingSnapshot] = useState<FieldSnapshot | null>(null)
+
+  function startEdit(field: EditableField) {
+    setEditingField(field)
+    setFieldError(null)
+    setEditingSnapshot({ name, phone, college, education, educationOther })
+  }
+
+  function cancelEdit() {
+    if (editingSnapshot) {
+      setName(editingSnapshot.name)
+      setPhone(editingSnapshot.phone)
+      setCollege(editingSnapshot.college)
+      setEducation(editingSnapshot.education)
+      setEducationOther(editingSnapshot.educationOther)
+    }
+    setEditingField(null)
+    setEditingSnapshot(null)
+    setFieldError(null)
+  }
+
+  async function resubmitField() {
+    if (!editingField) return
+    setFieldError(null)
+    const allErrors = validate()
+    const err = allErrors[editingField as keyof Errors]
+    if (err) {
+      setFieldError(err)
+      return
+    }
+    setSavingField(true)
+    const educationValue = education === 'Other' ? educationOther.trim() : education
+    const result = await submitInterestForm({
+      name: name.trim(),
+      phone: phone.trim(),
+      college: college.trim(),
+      education_status: educationValue,
+    })
+    setSavingField(false)
+    if (result.ok) {
+      setEditingField(null)
+      setEditingSnapshot(null)
+    } else {
+      setFieldError(result.error)
+    }
+  }
 
   function validate(): Errors {
     const e: Errors = {}
@@ -86,25 +152,113 @@ export default function InterestForm({
   }
 
   if (submitted) {
+    const educationDisplay =
+      education === 'Other' ? educationOther : education
+    const anyEditing = editingField !== null
+    const editControls = {
+      editingField,
+      savingField,
+      fieldError,
+      anyEditing,
+      onEdit: startEdit,
+      onCancel: cancelEdit,
+      onResubmit: resubmitField,
+    }
+
     return (
-      <div className="rounded-[20px] border-[0.5px] border-zinc-200 bg-white p-8 text-center sm:p-12">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#dcfce7]">
-          <IconCheck size={28} stroke={2.5} className="text-[#16a34a]" />
+      <div className="rounded-[20px] border-[0.5px] border-zinc-200 bg-white p-6 sm:p-8">
+        {/* Banner */}
+        <div className="mb-4 flex items-start gap-2.5 rounded-xl bg-[#dcfce7] px-3.5 py-3">
+          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[#16a34a]">
+            <IconCheck size={12} stroke={3} className="text-white" />
+          </span>
+          <div>
+            <div className="text-[13px] font-extrabold text-[#166534] sm:text-[14px]">
+              {firstName ? `Thanks, ${firstName}!` : 'Thanks!'} Your interest form is submitted.
+            </div>
+            <div className="mt-0.5 text-[12px] text-[#166534]/80 sm:text-[13px]">
+              Here&apos;s what you shared. Tap edit on any item to update it.
+            </div>
+          </div>
         </div>
-        <h2
-          className="mb-2 text-[22px] font-black text-zinc-900 sm:text-[26px]"
-          style={{ fontFamily: 'var(--font-jakarta), sans-serif', lineHeight: 1.25 }}
-        >
-          {firstName ? `Thanks, ${firstName}!` : 'Thanks!'}
-        </h2>
-        <p className="mx-auto mb-6 max-w-[440px] text-[14px] leading-[1.6] text-zinc-600 sm:text-[15px]">
-          Your interest is recorded. We&apos;ll review your details and reach out within 3 working days about the next step.
-        </p>
+
+        {/* Summary list with inline editing */}
+        <div className="mb-5 space-y-2">
+          <EditableRow field="name" label="Name" value={name} {...editControls}>
+            <input
+              autoFocus
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={EDIT_INPUT_CLASS}
+              placeholder="Full name"
+            />
+          </EditableRow>
+
+          <EditableRow field="phone" label="WhatsApp number" value={phone} {...editControls}>
+            <input
+              autoFocus
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+              className={EDIT_INPUT_CLASS}
+              placeholder="9876543210"
+            />
+          </EditableRow>
+
+          <SummaryRow label="Email" value={email} />
+
+          <EditableRow field="college" label="College" value={college} {...editControls}>
+            <CollegeAutocomplete
+              id="college-edit"
+              value={college}
+              onChange={setCollege}
+              placeholder="Start typing your college name…"
+            />
+          </EditableRow>
+
+          <EditableRow field="education" label="Education status" value={educationDisplay} {...editControls}>
+            <div className="relative">
+              <select
+                autoFocus
+                value={education}
+                onChange={(e) => setEducation(e.target.value)}
+                className={`${EDIT_INPUT_CLASS} appearance-none pr-10 ${education ? 'text-zinc-900' : 'text-zinc-400'}`}
+              >
+                <option value="" disabled>Choose a status</option>
+                {EDUCATION_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt} className="text-zinc-900">{opt}</option>
+                ))}
+              </select>
+              <IconChevronDown
+                size={18}
+                stroke={2}
+                aria-hidden
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
+              />
+            </div>
+            {education === 'Other' && (
+              <input
+                type="text"
+                value={educationOther}
+                onChange={(e) => setEducationOther(e.target.value)}
+                placeholder="Tell us briefly"
+                className={`mt-2 ${EDIT_INPUT_CLASS}`}
+              />
+            )}
+          </EditableRow>
+        </div>
+
+        {/* CTA */}
         <Link
           href="/candidate/challenge"
-          className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-3.5 text-[14px] font-extrabold text-white transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99]"
+          className={`group flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-4 text-[15px] font-extrabold text-white shadow-sm transition-all sm:text-[16px] ${
+            anyEditing ? 'pointer-events-none opacity-50' : 'hover:bg-[#15301a] hover:shadow-md active:scale-[0.99]'
+          }`}
         >
-          See what&apos;s next
+          Start the 14-day Challenge
           <IconArrowRight
             size={16}
             stroke={2.5}
@@ -250,6 +404,114 @@ export default function InterestForm({
         )}
       </button>
     </form>
+  )
+}
+
+const EDIT_INPUT_CLASS =
+  'w-full rounded-xl border-2 border-zinc-300 bg-zinc-50 px-3.5 py-3 text-[15px] text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-[#16a34a] focus:bg-white focus:ring-4 focus:ring-[#16a34a]/15'
+
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+          {label}
+        </div>
+        <div className="mt-0.5 break-words text-[14px] font-semibold text-zinc-900 sm:text-[15px]">
+          {value || <span className="text-zinc-400">—</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EditableRow({
+  field,
+  label,
+  value,
+  editingField,
+  savingField,
+  fieldError,
+  anyEditing,
+  onEdit,
+  onCancel,
+  onResubmit,
+  children,
+}: {
+  field: EditableField
+  label: string
+  value: string
+  editingField: EditableField | null
+  savingField: boolean
+  fieldError: string | null
+  anyEditing: boolean
+  onEdit: (f: EditableField) => void
+  onCancel: () => void
+  onResubmit: () => void
+  children: React.ReactNode
+}) {
+  const isEditing = editingField === field
+  const showEditButton = !anyEditing
+
+  return (
+    <div
+      className={`rounded-xl border px-3.5 py-3 transition-colors ${
+        isEditing ? 'border-[#16a34a]/40 bg-white' : 'border-zinc-200 bg-zinc-50'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+          {label}
+        </div>
+        {showEditButton && (
+          <button
+            type="button"
+            onClick={() => onEdit(field)}
+            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[12px] font-bold text-zinc-600 transition-colors hover:border-[#16a34a] hover:bg-[#f0fdf4] hover:text-[#166534]"
+          >
+            <IconPencil size={13} stroke={2.2} />
+            Edit
+          </button>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="mt-2">
+          {children}
+          {fieldError && (
+            <p className="mt-1.5 text-[12px] font-semibold text-red-600">{fieldError}</p>
+          )}
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={onResubmit}
+              disabled={savingField}
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-[#0f1f0f] px-4 py-2 text-[13px] font-extrabold text-white transition-all hover:bg-[#15301a] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {savingField ? 'Saving…' : 'Resubmit'}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={savingField}
+              className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-[13px] font-bold text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-0.5 break-words text-[14px] font-semibold text-zinc-900 sm:text-[15px]">
+          {value || <span className="text-zinc-400">—</span>}
+        </div>
+      )}
+    </div>
   )
 }
 

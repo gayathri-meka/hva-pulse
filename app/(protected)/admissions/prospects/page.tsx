@@ -35,10 +35,14 @@ export default async function ProspectsPage() {
 
   const prospects = (data ?? []) as Prospect[]
 
+  const submittedCount = prospects.filter((p) => p.interest_form_submitted_at).length
+
   return (
     <div>
       <p className="mb-4 text-sm text-zinc-500">
-        {prospects.length} prospect{prospects.length !== 1 ? 's' : ''} signed in via Google
+        {prospects.length} prospect{prospects.length !== 1 ? 's' : ''}
+        <span className="mx-2 text-zinc-300">·</span>
+        {submittedCount} interest form{submittedCount !== 1 ? 's' : ''} submitted
       </p>
       <ProspectsTable prospects={prospects} />
     </div>

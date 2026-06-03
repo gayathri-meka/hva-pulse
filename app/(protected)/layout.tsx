@@ -14,7 +14,7 @@ export default async function ProtectedLayout({
 }) {
   const appUser = await getAppUser()
 
-  if (!appUser) redirect('/coming-soon')
+  if (!appUser) redirect('/candidate/welcome')
 
   // Learner has their own route group — send them there
   if (appUser.role === 'learner') redirect('/learner')
