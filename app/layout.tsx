@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
+// react-day-picker default CSS must load BEFORE globals.css so our scoped
+// .rdp-* overrides in globals.css win.
+import 'react-day-picker/style.css'
 import './globals.css'
 
 const geistSans = localFont({

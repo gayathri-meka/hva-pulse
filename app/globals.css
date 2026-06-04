@@ -75,3 +75,119 @@ body.guest-readonly::after {
   border-radius: 999px;
   z-index: 9999;
 }
+
+/* ── react-day-picker — Pulse green theme, compact ──────────────────────── */
+.rdp-root {
+  --rdp-accent-color:             #5BAE5B;
+  --rdp-accent-background-color:  rgba(91, 174, 91, 0.10);
+  --rdp-day-height:               30px;
+  --rdp-day-width:                30px;
+  --rdp-day_button-border-radius: 6px;
+  --rdp-day_button-width:         30px;
+  --rdp-day_button-height:        30px;
+  --rdp-weekday-padding:          0;
+  --rdp-months_gap:               0;
+  font-family: inherit;
+  font-size: 12px;
+}
+.rdp-root .rdp-months { padding: 0; gap: 0; }
+.rdp-root .rdp-month_grid { margin-top: 2px; }
+
+/* Caption (Month Year row + dropdowns) */
+.rdp-root .rdp-month_caption {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181b;
+  padding: 2px 0 6px 6px;
+}
+.rdp-root .rdp-dropdowns {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181b;
+}
+.rdp-root .rdp-dropdown {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181b;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  appearance: none;
+}
+.rdp-root .rdp-dropdown:hover {
+  background-color: #f4f4f5;
+}
+.rdp-root .rdp-dropdown:focus {
+  background-color: #f4f4f5;
+  border-color: #5BAE5B;
+  outline: none;
+}
+.rdp-root option { background: white; color: #18181b; }
+
+/* Weekday labels */
+.rdp-root .rdp-weekday {
+  font-size: 10px;
+  font-weight: 600;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+}
+
+/* Day cells */
+.rdp-root .rdp-day_button {
+  font-size: 12px;
+  font-weight: 400;
+  color: #3f3f46;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background-color: transparent;
+}
+.rdp-root .rdp-day:not(.rdp-disabled):not(.rdp-selected) .rdp-day_button:hover {
+  background-color: rgba(91, 174, 91, 0.10);
+  color: #166534;
+}
+.rdp-root .rdp-today:not(.rdp-selected) .rdp-day_button {
+  font-weight: 600;
+  color: #166534;
+}
+.rdp-root .rdp-selected .rdp-day_button {
+  background-color: #5BAE5B;
+  color: white;
+  font-weight: 600;
+}
+.rdp-root .rdp-selected .rdp-day_button:hover {
+  background-color: #4F9D4F;
+}
+.rdp-root .rdp-day_button:focus-visible {
+  outline: 2px solid #5BAE5B;
+  outline-offset: 1px;
+}
+.rdp-root .rdp-disabled .rdp-day_button {
+  opacity: 0.25;
+  cursor: not-allowed;
+  color: #71717a;
+}
+.rdp-root .rdp-outside { opacity: 0.4; }
+
+/* Prev/Next nav buttons */
+.rdp-root .rdp-button_previous,
+.rdp-root .rdp-button_next {
+  color: #71717a;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+.rdp-root .rdp-button_previous:hover,
+.rdp-root .rdp-button_next:hover {
+  background-color: #f4f4f5;
+  color: #18181b;
+}
+.rdp-root .rdp-chevron {
+  fill: currentColor;
+  width: 14px;
+  height: 14px;
+}

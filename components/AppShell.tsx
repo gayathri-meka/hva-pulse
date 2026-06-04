@@ -70,10 +70,12 @@ export default function AppShell({
           </button>
           <span className="text-base font-semibold lg:hidden">HVA Pulse</span>
 
-          {/* Bell — always top-right */}
-          <div className="ml-auto">
-            <NotificationBell notifications={notifications} />
-          </div>
+          {/* Bell hidden for now — pending notifications redesign. */}
+          {false && (
+            <div className="ml-auto">
+              <NotificationBell notifications={notifications} />
+            </div>
+          )}
         </header>
 
         {/* Page content — only this scrolls. When a manual navigation is in

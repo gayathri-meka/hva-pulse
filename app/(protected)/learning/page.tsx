@@ -588,6 +588,7 @@ export default async function LearningPage({ searchParams }: Props) {
         tabs={[
           { key: 'all',           label: 'Dashboard',     href: `/learning?filter=all${lf ? `&lf=${lf}` : ''}` },
           { key: 'cases', label: 'Cases', href: `/learning?filter=cases${lf ? `&lf=${lf}` : ''}` },
+          { key: 'attendance',    label: 'Attendance',    href: '/learning/attendance' },
           { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
           ...(appUser.role !== 'learner' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
         ]}

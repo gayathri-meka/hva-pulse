@@ -23,11 +23,13 @@
     "@tanstack/react-table": "^8.21.3",
     "canvas-confetti": "^1.9.4",
     "cheerio": "^1.2.0",
+    "date-fns": "^4.4.0",
     "googleapis": "^171.4.0",
     "jszip": "^3.10.1",
     "next": "^16.1.6",
     "openai": "^6.27.0",
     "react": "^18",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^18"
   },
   "devDependencies": {

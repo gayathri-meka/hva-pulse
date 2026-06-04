@@ -6,7 +6,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict VZmlIrsEiejLgTQ6HCz5m7irRy8KApb86KEUTws0QdiLDzIljAzmA1FrH0bpYgQ
+\restrict fDrJzZexrMiCNsT1Cbb3vffUGcOk4Yi1w8fsc31L91E0Ig6tmMXyv3keQk7Kht1
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -148,6 +148,55 @@ CREATE TABLE public.applications (
     hiring_decision_taken_at timestamp with time zone,
     salary_lpa numeric,
     CONSTRAINT applications_status_check CHECK ((status = ANY (ARRAY['applied'::text, 'shortlisted'::text, 'interviews_ongoing'::text, 'on_hold'::text, 'not_shortlisted'::text, 'rejected'::text, 'hired'::text])))
+);
+
+
+--
+-- Name: attendance_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.attendance_records (
+    id bigint NOT NULL,
+    meeting_code text NOT NULL,
+    participant_email text NOT NULL,
+    participant_name text,
+    call_date date NOT NULL,
+    call_time time without time zone,
+    duration_minutes numeric,
+    organizer_email text,
+    synced_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: attendance_records_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.attendance_records_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: attendance_records_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.attendance_records_id_seq OWNED BY public.attendance_records.id;
+
+
+--
+-- Name: calls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.calls (
+    meeting_code text NOT NULL,
+    name text NOT NULL,
+    type text NOT NULL,
+    batch text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -583,6 +632,13 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: attendance_records id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records ALTER COLUMN id SET DEFAULT nextval('public.attendance_records_id_seq'::regclass);
+
+
+--
 -- Name: alumni_jobs alumni_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -620,6 +676,30 @@ ALTER TABLE ONLY public.applications
 
 ALTER TABLE ONLY public.applications
     ADD CONSTRAINT applications_role_id_user_id_key UNIQUE (role_id, user_id);
+
+
+--
+-- Name: attendance_records attendance_records_meet_email_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT attendance_records_meet_email_unique UNIQUE (meeting_code, participant_email);
+
+
+--
+-- Name: attendance_records attendance_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT attendance_records_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: calls calls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calls
+    ADD CONSTRAINT calls_pkey PRIMARY KEY (meeting_code);
 
 
 --
@@ -956,6 +1036,34 @@ CREATE INDEX idx_applications_user_id ON public.applications USING btree (user_i
 
 
 --
+-- Name: idx_attendance_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_attendance_date ON public.attendance_records USING btree (call_date DESC);
+
+
+--
+-- Name: idx_attendance_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_attendance_email ON public.attendance_records USING btree (participant_email);
+
+
+--
+-- Name: idx_attendance_meet; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_attendance_meet ON public.attendance_records USING btree (meeting_code);
+
+
+--
+-- Name: idx_calls_batch; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_calls_batch ON public.calls USING btree (batch);
+
+
+--
 -- Name: idx_learners_batch_name; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1154,6 +1262,14 @@ ALTER TABLE ONLY public.applications
 
 ALTER TABLE ONLY public.applications
     ADD CONSTRAINT applications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: attendance_records attendance_records_meeting_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT attendance_records_meeting_code_fkey FOREIGN KEY (meeting_code) REFERENCES public.calls(meeting_code) ON DELETE CASCADE;
 
 
 --
@@ -1422,6 +1538,12 @@ ALTER TABLE public.alumni_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: attendance_records; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: job_opportunities authenticated read opportunities; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1448,6 +1570,12 @@ CREATE POLICY authenticated_read_companies ON public.companies FOR SELECT USING 
 
 CREATE POLICY authenticated_read_roles ON public.roles FOR SELECT USING ((auth.role() = 'authenticated'::text));
 
+
+--
+-- Name: calls; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.calls ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: case_triggers; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1842,6 +1970,20 @@ CREATE POLICY staff_all ON public.applications USING ((public.auth_role() = ANY 
 
 
 --
+-- Name: attendance_records staff_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY staff_all ON public.attendance_records USING ((public.auth_role() = ANY (ARRAY['admin'::text, 'staff'::text])));
+
+
+--
+-- Name: calls staff_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY staff_all ON public.calls USING ((public.auth_role() = ANY (ARRAY['admin'::text, 'staff'::text])));
+
+
+--
 -- Name: case_triggers staff_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1990,5 +2132,5 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict VZmlIrsEiejLgTQ6HCz5m7irRy8KApb86KEUTws0QdiLDzIljAzmA1FrH0bpYgQ
+\unrestrict fDrJzZexrMiCNsT1Cbb3vffUGcOk4Yi1w8fsc31L91E0Ig6tmMXyv3keQk7Kht1
 

@@ -38,6 +38,13 @@ const SHEETS = [
     tab:         'Master',
     apiRoute:    '/api/sync-alumni',
   },
+  {
+    key:         'attendance',
+    name:        'Attendance',
+    description: 'Call master + per-learner attendance for standups, reflections, and sessions. Auto-syncs daily at 06:00 IST.',
+    tab:         'Meet Codes + Attendance Logs',
+    apiRoute:    '/api/sync-attendance',
+  },
 ]
 
 export default async function SheetsPage() {
