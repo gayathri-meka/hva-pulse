@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import LearningTabs from '@/components/learning/LearningTabs'
+import { topLevelLearningTabs } from '@/lib/learning/tabs'
 import { getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import AttendanceClient, {
   type AttendanceData,
-  type AttendeeFlat,
   type LearnerFlat,
   type SessionFlat,
 } from './AttendanceClient'
@@ -18,13 +18,13 @@ type CallRow = {
   batch:        string | null
 }
 
+// Page-load query: keep this lean. participant_name + duration_minutes are
+// fetched on demand when a ✓ pill is clicked (see actions.ts).
 type AttendanceRow = {
   meeting_code:      string
   participant_email: string
-  participant_name:  string | null
   call_date:         string
   call_time:         string | null
-  duration_minutes:  number | null
 }
 
 type LearnerRow = {
@@ -71,7 +71,7 @@ export default async function AttendancePage() {
     fetchAll<CallRow>('calls', 'meeting_code, name, type, batch'),
     fetchAll<AttendanceRow>(
       'attendance_records',
-      'meeting_code, participant_email, participant_name, call_date, call_time, duration_minutes',
+      'meeting_code, participant_email, call_date, call_time',
     ),
     // Only count "Ongoing" learners.
     fetchAll<LearnerRow>(
@@ -91,13 +91,7 @@ export default async function AttendancePage() {
     <div className="px-4 py-6 sm:px-6 lg:px-8">
       <LearningTabs
         activeKey="attendance"
-        tabs={[
-          { key: 'all',        label: 'Dashboard',  href: '/learning?filter=all' },
-          { key: 'cases',      label: 'Cases',      href: '/learning?filter=cases' },
-          { key: 'attendance', label: 'Attendance', href: '/learning/attendance' },
-          { key: 'deep-dive',  label: 'Deep Dive',  href: '/learning/deep-dive' },
-          { key: 'settings', label: 'Settings', href: '/learning/settings' },
-        ]}
+        tabs={topLevelLearningTabs({ role: appUser.role })}
       />
 
       <h1 className="mb-6 text-2xl font-bold tracking-tight text-zinc-900">Attendance</h1>
@@ -171,37 +165,16 @@ function buildData(
     return (b.time ?? '').localeCompare(a.time ?? '')
   })
 
-  // Per-session attendee list. Keyed by `${meeting_code}::${date}`.
-  // Each entry is one attendee row (with duration). If the email matches a
-  // learner in our roster we attach their batch; otherwise we keep them
-  // anonymous (could be a mentor/external) so they still count as "attended".
-  const learnerByEmail = new Map<string, LearnerFlat>()
-  for (const l of learnerList) learnerByEmail.set(l.email, l)
-
-  const attendeesBySession: Record<string, AttendeeFlat[]> = {}
+  // Compact presence map: sessionKey -> list of attendee emails. Strips
+  // ~5k name/duration objects out of the page payload; the modal fetches
+  // those on demand via the getAttendees server action.
+  const presence: Record<string, string[]> = {}
   for (const a of attendance) {
     const sessionKey = `${a.meeting_code}::${a.call_date}`
     const email = a.participant_email.toLowerCase()
-    const matched = learnerByEmail.get(email) ?? null
-    const entry: AttendeeFlat = {
-      email,
-      name:             matched?.name ?? a.participant_name ?? email,
-      batch:            matched?.batch ?? null,
-      learnerId:        matched?.id ?? null,
-      duration_minutes: a.duration_minutes,
-    }
-    if (!attendeesBySession[sessionKey]) attendeesBySession[sessionKey] = []
-    attendeesBySession[sessionKey].push(entry)
+    if (!presence[sessionKey]) presence[sessionKey] = []
+    presence[sessionKey].push(email)
   }
 
-  // A flat set of presence keys is still handy for the per-learner stats
-  // (no need to scan attendee arrays repeatedly).
-  const presentKeys: string[] = []
-  for (const a of attendance) {
-    presentKeys.push(
-      `${a.meeting_code}::${a.call_date}::${a.participant_email.toLowerCase()}`,
-    )
-  }
-
-  return { batches, learners: learnerList, sessions, presentKeys, attendeesBySession }
+  return { batches, learners: learnerList, sessions, presence }
 }

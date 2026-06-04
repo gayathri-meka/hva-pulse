@@ -2,12 +2,11 @@
 
 import { useRouter } from 'next/navigation'
 import { useNavigationLoader } from '@/components/GlobalNavigationLoader'
+import type { LearningTab } from '@/lib/learning/tabs'
 
-export type LearningTab = {
-  key:   string
-  label: string
-  href:  string
-}
+// Re-export so existing `from '@/components/learning/LearningTabs'` imports
+// don't break, while server-safe consumers should import from the lib path.
+export type { LearningTab }
 
 // Top-level Learning tabs. Most switches are searchParam-only (?filter=all vs
 // ?filter=cases) which Next.js doesn't treat as a route segment

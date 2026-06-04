@@ -6,6 +6,8 @@ import { maskName, maskEmail } from '@/lib/pii'
 import LearnerSearchBox from '@/components/learning/LearnerSearchBox'
 import LearnerAnalysisView from '@/components/learning/LearnerAnalysisView'
 import MetricsSection, { type MetricRow } from '@/components/learning/MetricsSection'
+import LearningTabs from '@/components/learning/LearningTabs'
+import { topLevelLearningTabs } from '@/lib/learning/tabs'
 import { type RawRow, type MetricDef, topoSortMetrics, computeAllForLearner } from '@/lib/learning/compute'
 
 export const dynamic = 'force-dynamic'
@@ -133,25 +135,7 @@ export default async function DeepDivePage({ searchParams }: Props) {
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 flex items-center gap-1 border-b border-zinc-200">
-        {[
-          { key: 'all',           label: 'Dashboard',     href: '/learning?filter=all' },
-          { key: 'cases', label: 'Cases', href: '/learning?filter=cases' },
-          { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
-          ...(appUser.role !== 'learner' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
-        ].map(({ key, label, href }) => (
-          <Link
-            key={key}
-            href={href}
-            className={`relative pb-3 px-1 mr-4 text-sm font-medium transition-colors ${
-              key === 'deep-dive' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
-            }`}
-          >
-            {label}
-            {key === 'deep-dive' && <span className="absolute bottom-0 left-0 h-0.5 w-full bg-[#5BAE5B]" />}
-          </Link>
-        ))}
-      </div>
+      <LearningTabs activeKey="deep-dive" tabs={topLevelLearningTabs({ role: appUser.role })} />
 
       {/* Learner search */}
       <div className="mb-6">

@@ -15,6 +15,7 @@ import CaseHistory, { type ClosedCase } from '@/components/learning/CaseHistory'
 import ClosedCasesTable from '@/components/learning/ClosedCasesTable'
 import { type Observation } from '@/components/learning/ObservationsModal'
 import LearningTabs from '@/components/learning/LearningTabs'
+import { topLevelLearningTabs } from '@/lib/learning/tabs'
 import {
   type RawRow,
   type MetricDef,
@@ -139,23 +140,31 @@ export default async function LearningPage({ searchParams }: Props) {
     const sourceIds = [...new Set(metricDefs.map((m) => m.source_id).filter((s): s is string => !!s))]
     const metricsInOrder = topoSortMetrics(metricDefs)
 
-    // Fetch all raw rows in pages — Supabase caps single queries at db.max_rows (default 1000)
+    // Supabase caps single queries at db.max_rows (default 1000). For
+    // metric_raw_rows (20k+ rows) we used to chain 21 sequential round trips,
+    // which dominated /learning's load time. Now: one HEAD query to learn
+    // the total, then fire every page in parallel.
     const PAGE = 1000
-    const rawRowsData: { source_id: string; learner_id: string; dimensions: unknown; value: string | null }[] = []
+    let rawRowsData: { source_id: string; learner_id: string; dimensions: unknown; value: string | null }[] = []
     if (sourceIds.length > 0) {
-      let offset = 0
-      while (true) {
-        const { data: page } = await supabase
-          .from('metric_raw_rows')
-          .select('source_id, learner_id, dimensions, value')
-          .in('source_id', sourceIds)
-          .in('learner_id', emails)
-          .range(offset, offset + PAGE - 1)
-        if (!page || page.length === 0) break
-        rawRowsData.push(...page)
-        if (page.length < PAGE) break
-        offset += PAGE
-      }
+      const { count } = await supabase
+        .from('metric_raw_rows')
+        .select('*', { count: 'exact', head: true })
+        .in('source_id', sourceIds)
+        .in('learner_id', emails)
+      const total = count ?? 0
+      const pageCount = Math.max(1, Math.ceil(total / PAGE))
+      const pages = await Promise.all(
+        Array.from({ length: pageCount }, (_, i) =>
+          supabase
+            .from('metric_raw_rows')
+            .select('source_id, learner_id, dimensions, value')
+            .in('source_id', sourceIds)
+            .in('learner_id', emails)
+            .range(i * PAGE, (i + 1) * PAGE - 1),
+        ),
+      )
+      rawRowsData = pages.flatMap((p) => p.data ?? [])
     }
 
     const rawRows: RawRow[] = rawRowsData.map((r) => ({
@@ -585,13 +594,7 @@ export default async function LearningPage({ searchParams }: Props) {
       {/* Top-level tabs */}
       <LearningTabs
         activeKey={filter}
-        tabs={[
-          { key: 'all',           label: 'Dashboard',     href: `/learning?filter=all${lf ? `&lf=${lf}` : ''}` },
-          { key: 'cases', label: 'Cases', href: `/learning?filter=cases${lf ? `&lf=${lf}` : ''}` },
-          { key: 'attendance',    label: 'Attendance',    href: '/learning/attendance' },
-          { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
-          ...(appUser.role !== 'learner' ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }] : []),
-        ]}
+        tabs={topLevelLearningTabs({ role: appUser.role, lf })}
       />
 
       {filter === 'all' && (

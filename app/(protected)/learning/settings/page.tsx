@@ -5,6 +5,8 @@ import { getAppUser } from '@/lib/auth'
 import DataSourcesPanel from '@/components/learning/DataSourcesPanel'
 import MetricsPanel from '@/components/learning/MetricsPanel'
 import LearningConfigurationsPanel from '@/components/learning/LearningConfigurationsPanel'
+import LearningTabs from '@/components/learning/LearningTabs'
+import { topLevelLearningTabs } from '@/lib/learning/tabs'
 import { readSettings } from '@/lib/settings-server'
 import { DEFAULT_OBSERVATION_CATEGORIES } from '@/lib/learning/observation-vocab'
 
@@ -55,25 +57,7 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
       </div>
 
       {/* Top-level tabs */}
-      <div className="mb-6 flex items-center gap-1 border-b border-zinc-200">
-        {[
-          { key: 'all',           label: 'Dashboard',     href: '/learning?filter=all' },
-          { key: 'cases', label: 'Cases', href: '/learning?filter=cases' },
-          { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
-          { key: 'settings',      label: 'Settings',      href: '/learning/settings' },
-        ].map(({ key, label, href }) => (
-          <Link
-            key={key}
-            href={href}
-            className={`relative pb-3 px-1 mr-4 text-sm font-medium transition-colors ${
-              key === 'settings' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
-            }`}
-          >
-            {label}
-            {key === 'settings' && <span className="absolute bottom-0 left-0 h-0.5 w-full bg-[#5BAE5B]" />}
-          </Link>
-        ))}
-      </div>
+      <LearningTabs activeKey="settings" tabs={topLevelLearningTabs({ role: appUser.role })} />
 
       {/* Settings sub-tabs */}
       <div className="mb-6 border-b border-zinc-200">

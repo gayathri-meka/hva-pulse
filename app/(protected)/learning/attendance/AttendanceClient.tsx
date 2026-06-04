@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { DayPicker } from 'react-day-picker'
 import { format as fmt, parse as parseDate } from 'date-fns'
+import { getAttendees, type AttendeeDetail } from './actions'
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -23,20 +24,22 @@ export type SessionFlat = {
   time:         string | null
 }
 
+// Enriched attendee record for the modal (after merging server-action
+// response with locally-known learner batch).
 export type AttendeeFlat = {
   email:            string
   name:             string
   batch:            string | null    // null if attendee isn't in our roster
-  learnerId:        string | null
   duration_minutes: number | null
 }
 
 export type AttendanceData = {
-  batches:            string[]
-  learners:           LearnerFlat[]
-  sessions:           SessionFlat[]
-  presentKeys:        string[]   // "<meeting_code>::<date>::<email>"
-  attendeesBySession: Record<string, AttendeeFlat[]>   // key = "<meeting_code>::<date>"
+  batches:  string[]
+  learners: LearnerFlat[]
+  sessions: SessionFlat[]
+  // Compact presence map: "<meeting_code>::<date>" -> list of attendee emails.
+  // Name + duration are fetched on demand via getAttendees().
+  presence: Record<string, string[]>
 }
 
 type SessionWithStatus = {
@@ -62,7 +65,23 @@ function todayIso(): string {
 }
 
 export default function AttendanceClient({ data }: { data: AttendanceData }) {
-  const presentSet = useMemo(() => new Set(data.presentKeys), [data.presentKeys])
+  // Build a fast presence lookup from the compact map. Same shape as before
+  // ("meeting_code::date::email") but assembled in the client to keep the
+  // server payload small.
+  const presentSet = useMemo(() => {
+    const s = new Set<string>()
+    for (const [sessionKey, emails] of Object.entries(data.presence)) {
+      for (const email of emails) s.add(`${sessionKey}::${email}`)
+    }
+    return s
+  }, [data.presence])
+
+  // Fast email -> learner lookup for enriching the attendee modal.
+  const learnerByEmail = useMemo(() => {
+    const m = new Map<string, LearnerFlat>()
+    for (const l of data.learners) m.set(l.email, l)
+    return m
+  }, [data.learners])
   const router = useRouter()
   const [syncing, startSync] = useTransition()
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
@@ -149,27 +168,27 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
   }, [validDates, date])
 
   // ── Card summaries ─────────────────────────────────────────────────────────
-  // Attended  = everyone in attendees for this session (no batch filter — if
-  //             you showed up, you attended, even external folks).
-  // Absent    = expected learners NOT in the attendee email set.
+  // Attended = everyone in the attendee email list for this session (no batch
+  //            filter — if you showed up, you attended, even external folks).
+  // Absent   = expected learners NOT in the attendee email set.
   // "Expected" depends on the call's batch tag:
-  //   - batch-specific call (BE1/JS2/...): all Ongoing learners in that batch
-  //   - "All"-tagged call:                 Ongoing learners in selected batches
+  //   - batch-specific call: all Ongoing learners in that batch
+  //   - "All"-tagged call:   Ongoing learners in selected batches
   const callSummaries = useMemo(() => {
     return sessionsForCards.map((s) => {
-      const attendees = data.attendeesBySession[`${s.meeting_code}::${s.date}`] ?? []
-      const attendedEmails = new Set(attendees.map((a) => a.email))
+      const attendeeEmails = data.presence[`${s.meeting_code}::${s.date}`] ?? []
+      const attendedSet = new Set(attendeeEmails)
 
       const expected: LearnerFlat[] =
         s.batch === 'All'
           ? filteredLearners
           : data.learners.filter((l) => l.batch === s.batch)
 
-      const absent = expected.filter((l) => !attendedEmails.has(l.email))
+      const absent = expected.filter((l) => !attendedSet.has(l.email))
 
-      return { session: s, attendees, absent }
+      return { session: s, attendedCount: attendeeEmails.length, absent }
     })
-  }, [sessionsForCards, filteredLearners, data.learners, data.attendeesBySession])
+  }, [sessionsForCards, filteredLearners, data.learners, data.presence])
 
   // ── Learner stats (over sessionsForTable) ─────────────────────────────────
   const [sortKey, setSortKey] = useState<SortKey>('attendance-asc')
@@ -243,13 +262,32 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
   }, [stats, sortKey, nameQuery, batchFilter, pctFilter, missFilter])
 
   // ── Modal state for click-to-view-learners ────────────────────────────────
-  // Two flavours:
-  // - { kind: 'absent',   learners: LearnerFlat[] }  — list of expected absentees
-  // - { kind: 'attended', attendees: AttendeeFlat[] } — attendees with duration
+  // - 'absent'   list rendered straight from local state
+  // - 'attended' list fetched lazily via getAttendees() when the ✓ is clicked
   type Modal =
     | { kind: 'absent';   title: string; learners:  LearnerFlat[] }
-    | { kind: 'attended'; title: string; attendees: AttendeeFlat[] }
+    | { kind: 'attended'; title: string; loading: boolean; attendees: AttendeeFlat[] }
   const [modal, setModal] = useState<Modal | null>(null)
+
+  async function openAttendedModal(meetingCode: string, date: string, title: string) {
+    setModal({ kind: 'attended', title, loading: true, attendees: [] })
+    try {
+      const rows = await getAttendees(meetingCode, date)
+      const enriched: AttendeeFlat[] = rows.map((r: AttendeeDetail) => {
+        const matched = learnerByEmail.get(r.email.toLowerCase())
+        return {
+          email:            r.email,
+          name:             matched?.name ?? r.name ?? r.email,
+          batch:            matched?.batch ?? null,
+          duration_minutes: r.duration_minutes,
+        }
+      })
+      setModal({ kind: 'attended', title, loading: false, attendees: enriched })
+    } catch (err) {
+      setModal({ kind: 'attended', title: `${title} (failed to load)`, loading: false, attendees: [] })
+      console.error(err)
+    }
+  }
 
   // ── Modal state for last-6 sessions per learner ───────────────────────────
   const [sessionsModal, setSessionsModal] = useState<{
@@ -317,7 +355,7 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
         </div>
       ) : (
         <div className="mb-6 flex flex-wrap gap-3">
-          {callSummaries.map(({ session, attendees, absent }) => (
+          {callSummaries.map(({ session, attendedCount, absent }) => (
             <div key={`${session.meeting_code}::${session.date}`} className="min-w-[240px] rounded-xl border border-zinc-200 bg-white p-4">
               <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
                 {session.type}{session.time ? ` · ${fmtTime(session.time)}` : ''}
@@ -328,15 +366,15 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
               <div className="mt-2 flex gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setModal({
-                    kind: 'attended',
-                    title: `Attended — ${session.name} · ${formatDate(session.date)}`,
-                    attendees,
-                  })}
-                  disabled={attendees.length === 0}
+                  onClick={() => openAttendedModal(
+                    session.meeting_code,
+                    session.date,
+                    `Attended — ${session.name} · ${formatDate(session.date)}`,
+                  )}
+                  disabled={attendedCount === 0}
                   className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  ✓ {attendees.length}
+                  ✓ {attendedCount}
                 </button>
                 <button
                   type="button"
@@ -459,6 +497,7 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
         <AttendeeListModal
           title={modal.title}
           attendees={modal.attendees}
+          loading={modal.loading}
           onClose={() => setModal(null)}
         />
       )}
@@ -564,10 +603,12 @@ function MultiSelect({
 function AttendeeListModal({
   title,
   attendees,
+  loading,
   onClose,
 }: {
   title:     string
   attendees: AttendeeFlat[]
+  loading:   boolean
   onClose:   () => void
 }) {
   // Sort by duration desc (longest first)
@@ -586,7 +627,9 @@ function AttendeeListModal({
           </button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
-          {sorted.length === 0 ? (
+          {loading ? (
+            <p className="p-6 text-center text-sm text-zinc-400">Loading…</p>
+          ) : sorted.length === 0 ? (
             <p className="p-6 text-center text-sm text-zinc-400">No attendees.</p>
           ) : (
             <ul className="divide-y divide-zinc-100">
