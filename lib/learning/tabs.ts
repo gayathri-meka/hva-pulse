@@ -20,10 +20,11 @@ export function topLevelLearningTabs({
 } = {}): LearningTab[] {
   const qs = lf ? `&lf=${encodeURIComponent(lf)}` : ''
   return [
-    { key: 'attendance',  label: 'Attendance', href: '/learning/attendance' },
-    { key: 'all',         label: 'Completion', href: `/learning?filter=all${qs}` },
-    { key: 'cases',       label: 'Cases',      href: `/learning?filter=cases${qs}` },
-    { key: 'deep-dive',   label: 'Deep Dive',  href: '/learning/deep-dive' },
+    { key: 'action-center', label: 'Action Center', href: '/learning/action-center' },
+    { key: 'attendance',    label: 'Attendance',    href: '/learning/attendance' },
+    { key: 'all',           label: 'Completion',    href: `/learning?filter=all${qs}` },
+    { key: 'cases',         label: 'Cases',         href: `/learning?filter=cases${qs}` },
+    { key: 'deep-dive',     label: 'Deep Dive',     href: '/learning/deep-dive' },
     // Learners never see Settings; admins/staff/guests do.
     ...(role !== 'learner'
       ? [{ key: 'settings', label: 'Settings', href: '/learning/settings' }]

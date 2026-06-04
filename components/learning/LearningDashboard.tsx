@@ -423,6 +423,7 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     lf_name:    false,
     batch_name: false,
+    status:     false,  // hidden by default — column still drives the "Ongoing" filter
   })
   const [columnSizing,     setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnOrder,      setColumnOrder]      = useState<ColumnOrderState>([])

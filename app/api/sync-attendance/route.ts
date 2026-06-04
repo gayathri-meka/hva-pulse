@@ -1,17 +1,17 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getSheetRows } from '@/lib/google'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 // Pulls both tabs of the HVA Meet Logs spreadsheet and upserts into Postgres.
-// Auth: either (a) an admin session, OR (b) the Vercel cron with
-// `Authorization: Bearer ${CRON_SECRET}`. Daily cron is configured in vercel.json.
+// Manually triggered by the team via the "Sync now" button on the
+// Settings -> Sheets page (or the Attendance page). Admin-only.
 
 const SHEET_ID    = process.env.GOOGLE_ATTENDANCE_SHEET_ID
 const CALLS_TAB   = 'Meet Codes'
 const LOGS_TAB    = 'Attendance Logs'
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   if (!SHEET_ID) {
     return NextResponse.json(
       { error: 'GOOGLE_ATTENDANCE_SHEET_ID is not configured' },
@@ -19,23 +19,16 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Auth: cron secret OR admin session
-  const cronAuth   = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  const isCron     = !!cronSecret && cronAuth === `Bearer ${cronSecret}`
-
-  if (!isCron) {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { data: appUser } = await supabase
-      .from('users')
-      .select('role')
-      .eq('email', user.email!)
-      .single()
-    if (!appUser || appUser.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: appUser } = await supabase
+    .from('users')
+    .select('role')
+    .eq('email', user.email!)
+    .single()
+  if (!appUser || appUser.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   // Write via service-role so RLS doesn't get in the way of inserts/upserts.

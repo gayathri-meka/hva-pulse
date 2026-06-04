@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { DayPicker } from 'react-day-picker'
-import { format as fmt, parse as parseDate } from 'date-fns'
+import MultiSelect from '@/components/filters/MultiSelect'
+import DatePicker, { formatDate } from '@/components/filters/DatePicker'
+import ColumnFilter, { Th, ThLabel } from '@/components/filters/ColumnFilter'
 import { getAttendees, type AttendeeDetail } from './actions'
 
 // ── Shared types ────────────────────────────────────────────────────────────
@@ -64,7 +65,13 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function AttendanceClient({ data }: { data: AttendanceData }) {
+export default function AttendanceClient({
+  data,
+  lastSyncedAt,
+}: {
+  data:         AttendanceData
+  lastSyncedAt: string | null
+}) {
   // Build a fast presence lookup from the compact map. Same shape as before
   // ("meeting_code::date::email") but assembled in the client to keep the
   // server payload small.
@@ -334,17 +341,24 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
           selected={selectedCalls}
           onChange={setSelectedCalls}
         />
-        <DatePicker value={date} onChange={setDate} validDates={validDates} />
+        <DatePicker value={date} onChange={setDate} validDates={validDates} showAllDates />
 
-        <div className="ml-auto flex items-center gap-2">
-          {syncMsg && <span className="text-xs text-zinc-500">{syncMsg}</span>}
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {syncing ? 'Syncing…' : 'Sync now'}
-          </button>
+        <div className="ml-auto flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {syncMsg && <span className="text-xs text-zinc-500">{syncMsg}</span>}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </div>
+          {lastSyncedAt && (
+            <span className="text-[11px] text-zinc-400">
+              Last synced {timeAgo(lastSyncedAt)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -515,90 +529,6 @@ export default function AttendanceClient({ data }: { data: AttendanceData }) {
 }
 
 // ── Subcomponents ───────────────────────────────────────────────────────────
-
-function MultiSelect({
-  label,
-  options,
-  selected,
-  onChange,
-}: {
-  label:    string
-  options:  { value: string; label: string }[]
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
-
-  const allSelected = selected.size > 0 && selected.size === options.length
-  const noneSelected = selected.size === 0
-  const displayText =
-    allSelected ? 'All' :
-    noneSelected ? 'None' :
-    selected.size === 1
-      ? options.find((o) => o.value === Array.from(selected)[0])?.label ?? '1 selected'
-      : `${selected.size} selected`
-
-  function toggle(val: string) {
-    const next = new Set(selected)
-    if (next.has(val)) next.delete(val)
-    else next.add(val)
-    onChange(next)
-  }
-
-  function toggleAll() {
-    if (allSelected) onChange(new Set())
-    else onChange(new Set(options.map((o) => o.value)))
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 rounded-lg border bg-white px-3 py-1.5 text-sm font-medium focus:outline-none ${
-          allSelected || noneSelected ? 'border-zinc-300 text-zinc-700' : 'border-[#5BAE5B]/50 text-zinc-900'
-        }`}
-      >
-        <span className="text-zinc-500">{label}:</span>
-        <span className="max-w-[180px] truncate">{displayText}</span>
-        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 max-h-72 min-w-[220px] overflow-y-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
-          <label className="flex cursor-pointer items-center gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-50">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]" />
-            Select all
-          </label>
-          {options.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-zinc-400">No options</p>
-          ) : options.map((o) => (
-            <label key={o.value} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
-              <input
-                type="checkbox"
-                checked={selected.has(o.value)}
-                onChange={() => toggle(o.value)}
-                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
-              />
-              <span className="truncate">{o.label}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function AttendeeListModal({
   title,
@@ -777,104 +707,6 @@ function SessionListModal({
   )
 }
 
-// Sticky <th> cell — keeps headers + filters in view as the body scrolls.
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="sticky top-0 z-10 bg-zinc-50 px-4 py-2 align-top">
-      <div className="flex flex-col gap-1">{children}</div>
-    </th>
-  )
-}
-
-function ThLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-      {children}
-    </span>
-  )
-}
-
-// Compact multi-select for use inside a table header. Selecting nothing
-// (selected.size === 0) means no filter.
-function ColumnFilter({
-  options,
-  selected,
-  onChange,
-}: {
-  options:  { value: string; label: string }[]
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
-
-  const label =
-    selected.size === 0
-      ? 'All'
-      : selected.size === 1
-        ? (options.find((o) => o.value === Array.from(selected)[0])?.label ?? '1')
-        : `${selected.size} selected`
-
-  function toggle(val: string) {
-    const next = new Set(selected)
-    if (next.has(val)) next.delete(val)
-    else next.add(val)
-    onChange(next)
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-[11px] font-normal normal-case tracking-normal focus:outline-none ${
-          selected.size > 0 ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
-        }`}
-      >
-        <span className="truncate">{label}</span>
-        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-0.5 max-h-52 min-w-[140px] overflow-y-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
-          {selected.size > 0 && (
-            <button
-              type="button"
-              onClick={() => { onChange(new Set()); setOpen(false) }}
-              className="w-full border-b border-zinc-100 px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50"
-            >
-              Clear filter
-            </button>
-          )}
-          {options.length === 0 ? (
-            <p className="px-3 py-1 text-xs text-zinc-400">No values</p>
-          ) : options.map((opt) => (
-            <label key={opt.value} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
-              <input
-                type="checkbox"
-                checked={selected.has(opt.value)}
-                onChange={() => toggle(opt.value)}
-                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
-              />
-              <span className="truncate">{opt.label}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Bucket helpers (must match the order shown in the dropdown)
 const PCT_BUCKETS  = ['≥80%', '70–79%', '<70%', 'No data']
 const MISS_BUCKETS = ['None', '1 in a row', '2+ in a row']
@@ -965,134 +797,15 @@ function LearnerRow({ s, onLast6Click }: {
   )
 }
 
-function formatDate(iso: string): string {
-  if (!iso) return ''
-  const [y, m, d] = iso.split('-')
-  return `${d}/${m}/${y}`
-}
-
-// ── Date picker — Pulse-styled wrapper around react-day-picker ────────────────
-
-function DatePicker({
-  value,
-  onChange,
-  validDates,
-}: {
-  value:      string
-  onChange:   (iso: string) => void
-  validDates: Set<string>
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
-
-  // Parse the ISO date as a local-midnight Date so the calendar shows the same
-  // day regardless of timezone (react-day-picker uses local time). The empty
-  // string represents "all dates" — no specific date selected.
-  const isAllDates = value === ''
-  const selectedDate = !isAllDates && value ? parseDate(value, 'yyyy-MM-dd', new Date()) : undefined
-  const todayDate = new Date()
-
-  function pick(d: Date | undefined) {
-    if (!d) return
-    onChange(fmt(d, 'yyyy-MM-dd'))
-    setOpen(false)
-  }
-
-  // Greys-out dates with no sessions under the current filters.
-  const isDisabled = (d: Date) => !validDates.has(fmt(d, 'yyyy-MM-dd'))
-
-  // Open the calendar centered on the most recent valid date (or today).
-  const defaultMonth = (() => {
-    if (selectedDate) return selectedDate
-    if (validDates.size > 0) {
-      const latest = Array.from(validDates).sort().reverse()[0]
-      return parseDate(latest, 'yyyy-MM-dd', new Date())
-    }
-    return todayDate
-  })()
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm font-medium transition-colors hover:bg-zinc-50 focus:outline-none ${
-          open ? 'border-[#5BAE5B]' : 'border-zinc-300 text-zinc-700'
-        }`}
-        aria-label="Choose date"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400">
-          <path fillRule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75z" clipRule="evenodd" />
-        </svg>
-        <span>{isAllDates ? 'All dates' : formatDate(value)}</span>
-        <svg className="h-3 w-3 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-full z-40 mt-1 rounded-lg border border-zinc-200 bg-white p-2.5 shadow-lg">
-          {/* "All dates" toggle — when active, the date filter is bypassed
-              and the cards show every session matching batch+call filters. */}
-          <button
-            type="button"
-            onClick={() => { onChange(''); setOpen(false) }}
-            className={`mb-2 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-              isAllDates
-                ? 'bg-[#5BAE5B] text-white'
-                : 'text-zinc-700 hover:bg-zinc-100'
-            }`}
-          >
-            <span>All dates</span>
-            {isAllDates && (
-              <svg className="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-              </svg>
-            )}
-          </button>
-          <DayPicker
-            mode="single"
-            selected={selectedDate}
-            onSelect={pick}
-            disabled={isDisabled}
-            defaultMonth={defaultMonth}
-            weekStartsOn={1}
-            showOutsideDays
-            today={todayDate}
-            captionLayout="dropdown"
-            startMonth={new Date(2024, 0)}
-            endMonth={new Date(todayDate.getFullYear() + 1, 11)}
-          />
-          <div className="flex justify-between border-t border-zinc-100 pt-2">
-            <button
-              type="button"
-              onClick={() => pick(todayDate)}
-              disabled={!validDates.has(fmt(todayDate, 'yyyy-MM-dd'))}
-              className="rounded-md px-2 py-1 text-xs font-medium text-[#5BAE5B] hover:bg-[#5BAE5B]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-500 hover:bg-zinc-100"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+function timeAgo(iso: string): string {
+  const diff  = Date.now() - new Date(iso).getTime()
+  const mins  = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days  = Math.floor(diff / 86_400_000)
+  if (mins  < 1)  return 'just now'
+  if (mins  < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
 }
 
 function fmtTime(t: string): string {

@@ -41,7 +41,7 @@ const SHEETS = [
   {
     key:         'attendance',
     name:        'Attendance',
-    description: 'Call master + per-learner attendance for standups, reflections, and sessions. Auto-syncs daily at 06:00 IST.',
+    description: 'Call master + per-learner attendance for standups, reflections, and sessions. Manual sync.',
     tab:         'Meet Codes + Attendance Logs',
     apiRoute:    '/api/sync-attendance',
   },

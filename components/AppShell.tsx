@@ -3,18 +3,15 @@
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
-import NotificationBell, { type Notification } from './notifications/NotificationBell'
 import PageLoader from './PageLoader'
 import { useNavigationLoader } from './GlobalNavigationLoader'
 
 export default function AppShell({
   role,
-  notifications,
   children,
 }: {
-  role:          'admin' | 'staff' | 'guest'
-  notifications: Notification[]
-  children:      React.ReactNode
+  role:     'admin' | 'staff' | 'guest'
+  children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
@@ -45,12 +42,11 @@ export default function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Topbar — hamburger on mobile, bell on all sizes */}
-        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 lg:px-8">
-          {/* Hamburger (mobile only) */}
+        {/* Mobile-only top bar — desktop has no top bar (sidebar is enough). */}
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 lg:hidden">
           <button
             onClick={() => setOpen(true)}
-            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 lg:hidden"
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100"
             aria-label="Open menu"
           >
             <svg
@@ -68,14 +64,7 @@ export default function AppShell({
               />
             </svg>
           </button>
-          <span className="text-base font-semibold lg:hidden">HVA Pulse</span>
-
-          {/* Bell hidden for now — pending notifications redesign. */}
-          {false && (
-            <div className="ml-auto">
-              <NotificationBell notifications={notifications} />
-            </div>
-          )}
+          <span className="text-base font-semibold">HVA Pulse</span>
         </header>
 
         {/* Page content — only this scrolls. When a manual navigation is in

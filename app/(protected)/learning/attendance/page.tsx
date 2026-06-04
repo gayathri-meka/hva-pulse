@@ -18,14 +18,19 @@ type CallRow = {
   batch:        string | null
 }
 
-// Page-load query: keep this lean. participant_name + duration_minutes are
-// fetched on demand when a ✓ pill is clicked (see actions.ts).
+// Page-load query: keep this lean. participant_name is fetched on demand
+// when a ✓ pill is clicked. We do need duration_minutes server-side to drop
+// sessions whose longest attendance is < 5 min (treat as "didn't really
+// happen") — but we don't ship per-attendee duration to the client.
 type AttendanceRow = {
   meeting_code:      string
   participant_email: string
   call_date:         string
   call_time:         string | null
+  duration_minutes:  number | null
 }
+
+const MIN_CALL_MINUTES = 5
 
 type LearnerRow = {
   learner_id:        string
@@ -67,11 +72,11 @@ export default async function AttendancePage() {
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  const [calls, attendance, learners] = await Promise.all([
+  const [calls, attendance, learners, { data: syncLog }] = await Promise.all([
     fetchAll<CallRow>('calls', 'meeting_code, name, type, batch'),
     fetchAll<AttendanceRow>(
       'attendance_records',
-      'meeting_code, participant_email, call_date, call_time',
+      'meeting_code, participant_email, call_date, call_time, duration_minutes',
     ),
     // Only count "Ongoing" learners.
     fetchAll<LearnerRow>(
@@ -79,6 +84,11 @@ export default async function AttendancePage() {
       'learner_id, batch_name, new_batch, status, users!learners_user_id_fkey(id, email, name)',
       (q) => q.eq('is_current_cohort', true).eq('status', 'Ongoing'),
     ),
+    supabase
+      .from('sync_logs')
+      .select('last_synced_at')
+      .eq('sheet_key', 'attendance')
+      .maybeSingle(),
   ])
 
   const data = buildData(
@@ -94,9 +104,7 @@ export default async function AttendancePage() {
         tabs={topLevelLearningTabs({ role: appUser.role })}
       />
 
-      <h1 className="mb-6 text-2xl font-bold tracking-tight text-zinc-900">Attendance</h1>
-
-      <AttendanceClient data={data} />
+      <AttendanceClient data={data} lastSyncedAt={syncLog?.last_synced_at ?? null} />
     </div>
   )
 }
@@ -140,10 +148,25 @@ function buildData(
   const callMeta = new Map<string, CallRow>()
   for (const c of calls) callMeta.set(c.meeting_code, c)
 
+  // First pass — compute max attendance duration per (meeting_code, call_date).
+  // We treat sessions whose longest attendance is < 5 min as "didn't happen"
+  // (test calls, abandoned rooms) and exclude them from everything below.
+  const maxDurBySession = new Map<string, number>()
+  for (const a of attendance) {
+    const key = `${a.meeting_code}::${a.call_date}`
+    const dur = a.duration_minutes ?? 0
+    if (dur > (maxDurBySession.get(key) ?? 0)) maxDurBySession.set(key, dur)
+  }
+  const validSessionKeys = new Set<string>()
+  for (const [key, max] of maxDurBySession) {
+    if (max >= MIN_CALL_MINUTES) validSessionKeys.add(key)
+  }
+
   // Distinct sessions = (meeting_code, call_date) with the earliest time seen
   const sessionMap = new Map<string, SessionFlat>()
   for (const a of attendance) {
     const key = `${a.meeting_code}::${a.call_date}`
+    if (!validSessionKeys.has(key)) continue
     const meta = callMeta.get(a.meeting_code)
     if (!meta) continue
     const existing = sessionMap.get(key)
@@ -171,6 +194,7 @@ function buildData(
   const presence: Record<string, string[]> = {}
   for (const a of attendance) {
     const sessionKey = `${a.meeting_code}::${a.call_date}`
+    if (!validSessionKeys.has(sessionKey)) continue
     const email = a.participant_email.toLowerCase()
     if (!presence[sessionKey]) presence[sessionKey] = []
     presence[sessionKey].push(email)
