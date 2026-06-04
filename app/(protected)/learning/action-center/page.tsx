@@ -78,7 +78,7 @@ export default async function ActionCenterPage({
   const today    = dateParam || yesterdayIST()
 
   // Fetch in parallel.
-  const [{ data: learnersRaw }, { data: attendanceTodayRaw }] = await Promise.all([
+  const [{ data: learnersRaw }, { data: attendanceTodayRaw }, { data: syncLog }] = await Promise.all([
     supabase
       .from('learners')
       .select('learner_id, lf_name, batch_name, new_lf, new_batch, users!learners_user_id_fkey(id, email, name)')
@@ -88,6 +88,11 @@ export default async function ActionCenterPage({
       .from('attendance_records')
       .select('meeting_code, participant_email, duration_minutes')
       .eq('call_date', today),
+    supabase
+      .from('sync_logs')
+      .select('last_synced_at')
+      .eq('sheet_key', 'attendance')
+      .maybeSingle(),
   ])
 
   // Effective batch + LF (new_* wins when set)
@@ -161,14 +166,15 @@ export default async function ActionCenterPage({
   const firstName = (appUser.name ?? '').trim().split(/\s+/)[0] || null
 
   const data: ActionCenterData = {
-    date:       today,
-    dateLabel:  labelForDate(today),
+    date:         today,
+    dateLabel:    labelForDate(today),
     firstName,
     learners,
     callsToday,
     presenceByCall,
     lfList,
     initialLf,
+    lastSyncedAt: syncLog?.last_synced_at ?? null,
   }
 
   return (

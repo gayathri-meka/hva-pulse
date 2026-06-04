@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import MultiSelect from '@/components/filters/MultiSelect'
 import DatePicker from '@/components/filters/DatePicker'
@@ -30,6 +30,7 @@ export type ActionCenterData = {
   presenceByCall: Record<string, string[]>     // meeting_code -> attendee emails
   lfList:         string[]
   initialLf:      string                       // '' = All
+  lastSyncedAt:   string | null                // ISO timestamp from sync_logs
 }
 
 export default function ActionCenterClient({ data }: { data: ActionCenterData }) {
@@ -51,6 +52,25 @@ export default function ActionCenterClient({ data }: { data: ActionCenterData })
     const params = new URLSearchParams(searchParams.toString())
     params.set('date', iso)
     router.push(`/learning/action-center?${params.toString()}`)
+  }
+
+  // ── Attendance sync controls ──────────────────────────────────────────────
+  const [syncing, startSync]  = useTransition()
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  async function handleSync() {
+    setSyncMsg(null)
+    startSync(async () => {
+      try {
+        const res = await fetch('/api/sync-attendance', { method: 'POST' })
+        const j   = await res.json()
+        if (!res.ok) throw new Error(j.error || 'Sync failed')
+        setSyncMsg(`Synced ${j.calls} calls and ${j.attendance} attendance rows.`)
+        router.refresh()
+      } catch (err) {
+        setSyncMsg(`Sync failed: ${(err as Error).message}`)
+      }
+    })
   }
 
   // Distinct batch options derived from the (full) learner roster.
@@ -160,7 +180,7 @@ export default function ActionCenterClient({ data }: { data: ActionCenterData })
       </div>
 
       {/* Filter row */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
+      <div className="mb-6 flex flex-wrap items-start gap-2">
         <DatePicker value={data.date} onChange={handleDateChange} />
         <MultiSelect
           label="LF"
@@ -174,9 +194,27 @@ export default function ActionCenterClient({ data }: { data: ActionCenterData })
           selected={batchFilter}
           onChange={setBatchFilter}
         />
-        <span className="ml-auto text-xs text-zinc-500">
-          {inScope.length} learner{inScope.length !== 1 ? 's' : ''} in scope
-        </span>
+
+        <div className="ml-auto flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">
+              {inScope.length} learner{inScope.length !== 1 ? 's' : ''} in scope
+            </span>
+            {syncMsg && <span className="text-xs text-zinc-500">{syncMsg}</span>}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {syncing ? 'Syncing…' : 'Sync attendance'}
+            </button>
+          </div>
+          {data.lastSyncedAt && (
+            <span className="text-[11px] text-zinc-400">
+              Last synced {timeAgo(data.lastSyncedAt)}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Stat boxes */}
@@ -365,4 +403,15 @@ function formatCallList(calls: ActionCall[]): string {
   // Middle-dot separator with spaces reads better than commas when call names
   // contain their own punctuation (e.g. "Mentor Support Call (BE2)").
   return calls.map((c) => c.name).join('  ·  ')
+}
+
+function timeAgo(iso: string): string {
+  const diff  = Date.now() - new Date(iso).getTime()
+  const mins  = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days  = Math.floor(diff / 86_400_000)
+  if (mins  < 1)  return 'just now'
+  if (mins  < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
 }
