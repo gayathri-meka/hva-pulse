@@ -40,6 +40,15 @@ function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
+// One day before today (in IST). LFs open the Action Center to plan their
+// day, so the default view shows yesterday's no-shows (the people they need
+// to follow up with). Picking today via the date picker still works.
+function yesterdayIST(): string {
+  const [y, m, d] = todayIST().split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d - 1))
+  return dt.toISOString().slice(0, 10)
+}
+
 function labelForDate(iso: string): string {
   // Render YYYY-MM-DD as "Weekday, D MMM YYYY" in en-IN/IST.
   const [y, m, d] = iso.split('-').map(Number)
@@ -63,7 +72,10 @@ export default async function ActionCenterPage({
 
   const { date: dateParam, lf: lfParam } = await searchParams
   const supabase = await createServerSupabaseClient()
-  const today    = dateParam || todayIST()
+  // Default to yesterday — today's calls usually haven't happened yet when
+  // the LF opens this page in the morning. They can pick today (or any date)
+  // via the date picker.
+  const today    = dateParam || yesterdayIST()
 
   // Fetch in parallel.
   const [{ data: learnersRaw }, { data: attendanceTodayRaw }] = await Promise.all([
