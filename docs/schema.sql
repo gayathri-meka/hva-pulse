@@ -355,7 +355,11 @@ CREATE TABLE public.learner_applications (
     phone text NOT NULL,
     email text NOT NULL,
     college_name text NOT NULL,
-    educational_status text
+    educational_status text,
+    referral_source text,
+    referral_detail text,
+    signup_token text,
+    signed_up_at timestamp with time zone
 );
 
 
@@ -545,7 +549,8 @@ CREATE TABLE public.prospects (
     phone text,
     college text,
     education_status text,
-    interest_form_submitted_at timestamp with time zone
+    interest_form_submitted_at timestamp with time zone,
+    signup_token text
 );
 
 
@@ -1215,6 +1220,20 @@ CREATE INDEX prospects_created_at_idx ON public.prospects USING btree (created_a
 --
 
 CREATE INDEX prospects_submitted_idx ON public.prospects USING btree (interest_form_submitted_at DESC NULLS LAST);
+
+
+--
+-- Name: prospects_signup_token_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX prospects_signup_token_idx ON public.prospects USING btree (signup_token) WHERE (signup_token IS NOT NULL);
+
+
+--
+-- Name: learner_applications_signup_token_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX learner_applications_signup_token_idx ON public.learner_applications USING btree (signup_token) WHERE (signup_token IS NOT NULL);
 
 
 --

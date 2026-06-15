@@ -1,19 +1,44 @@
 'use client'
 
 import Image from 'next/image'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 
 export default function LoginPage() {
   const supabase = createClient()
+  // True when the visitor arrived from the apply form's tokened link — we
+  // auto-kick the OAuth redirect instead of showing the manual sign-in card.
+  const [autoRedirecting, setAutoRedirecting] = useState(false)
+  const fired = useRef(false)
 
   async function handleGoogleLogin() {
+    // Forward a marketing-form attribution token (?signup_token=<uuid>) through
+    // the OAuth round-trip. Supabase owns the `state` param, so we can't use it
+    // — but it preserves redirectTo's query string and only appends its own
+    // ?code=..., so the token arrives intact at /auth/callback. Treated as an
+    // opaque string (no format validation beyond non-empty).
+    const redirectTo = new URL('/auth/callback', window.location.origin)
+    const token = new URLSearchParams(window.location.search).get('signup_token')?.trim()
+    if (token) redirectTo.searchParams.set('signup_token', token)
+
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: redirectTo.toString(),
       },
     })
   }
+
+  // Auto-start the redirect when a signup_token is present. Guard with a ref so
+  // React Strict Mode's double-invoke (and re-renders) can't fire OAuth twice.
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('signup_token')?.trim()
+    if (!token || fired.current) return
+    fired.current = true
+    setAutoRedirecting(true)
+    void handleGoogleLogin()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
@@ -35,7 +60,17 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-          <p className="mb-5 text-center text-sm text-zinc-500">Sign in to continue</p>
+          {autoRedirecting ? (
+            <div className="mb-5 flex items-center justify-center gap-2 text-sm text-zinc-500">
+              <svg className="h-4 w-4 animate-spin text-zinc-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Redirecting to Google…
+            </div>
+          ) : (
+            <p className="mb-5 text-center text-sm text-zinc-500">Sign in to continue</p>
+          )}
 
           <button
             onClick={handleGoogleLogin}
@@ -62,6 +97,12 @@ export default function LoginPage() {
             </svg>
             Continue with Google
           </button>
+
+          {autoRedirecting && (
+            <p className="mt-3 text-center text-xs text-zinc-400">
+              Not redirected automatically? Use the button above.
+            </p>
+          )}
         </div>
 
       </div>
