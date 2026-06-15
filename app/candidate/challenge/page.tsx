@@ -11,6 +11,11 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+// Cohort-join link on SensAI (our LMS). Interim: links directly — SensAI's own
+// Google sign-in handles auth. Once the Pulse↔SensAI SSO endpoint exists, swap
+// this for the Pulse /api/sensai/start route so there's no second sign-in.
+const COHORT_JOIN_URL = 'https://sensai.hyperverge.org/school/hvacademy/join?cohortId=214'
+
 type DayStatus = 'done' | 'missed' | 'today' | 'locked'
 
 type ChallengeDay = {
@@ -68,7 +73,30 @@ export default function ChallengePage() {
 
       {/* BODY */}
       <div className="mx-auto max-w-3xl space-y-3 px-4 pt-3 sm:space-y-4 sm:px-6 sm:pt-4">
-        {/* PROGRESS CARD */}
+        {/* START THE CHALLENGE */}
+        <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5 text-center sm:p-6">
+          <a
+            href={COHORT_JOIN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-4 text-[16px] font-extrabold text-white shadow-sm transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99] sm:text-[17px]"
+          >
+            Start the challenge
+            <IconExternalLink
+              size={18}
+              stroke={2.5}
+              className="transition-transform group-hover:translate-x-0.5"
+            />
+          </a>
+          <p className="mx-auto mt-3 max-w-md text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
+            You&apos;ll do this challenge on{' '}
+            <span className="font-extrabold text-zinc-900">SensAI</span>, our learning
+            platform. Tap above to join and begin — use the same email you signed up with.
+          </p>
+        </div>
+
+        {/* PROGRESS CARD — hidden until live SensAI progress is wired (see lib/sensai.ts) */}
+        {false && (
         <div className="rounded-2xl border-[0.5px] border-[#fde68a] bg-[#fffbeb] p-4 sm:p-5">
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
@@ -103,6 +131,7 @@ export default function ChallengePage() {
             />
           </div>
         </div>
+        )}
 
         {/* WHAT WE OBSERVE */}
         <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-4 sm:p-5">
@@ -126,17 +155,18 @@ export default function ChallengePage() {
           <p className="text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
             Your daily tasks live on{' '}
             <span className="font-extrabold text-zinc-900">SensAI</span>, our
-            learning platform. Open today&apos;s task below to head over and start
-            working on it.
+            learning platform. Tap <span className="font-extrabold text-zinc-900">Start the challenge</span> above to head over and begin.
           </p>
         </div>
 
-        {/* DAYS LIST */}
+        {/* DAYS LIST — hidden until live SensAI progress is wired (see lib/sensai.ts) */}
+        {false && (
         <div className="space-y-2 pt-1">
           {DAYS.map((d) => (
             <DayRow key={d.day} {...d} />
           ))}
         </div>
+        )}
       </div>
     </main>
   )
