@@ -1,7 +1,7 @@
 import { IconInfoCircle } from '@tabler/icons-react'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { mapMarketingEducation, mapMarketingReferral, onlyDigits } from '@/lib/marketingFields'
+import { mapMarketingEducation, mapMarketingReferral } from '@/lib/marketingFields'
 import InterestForm from './InterestForm'
 
 export const dynamic = 'force-dynamic'
@@ -82,7 +82,7 @@ export default async function InterestFormPage() {
   // form), then the prospect/Google name.
   const fullName = (submitted ? prospect?.name : marketing?.name || prospect?.name) || metadataName
   const firstName = fullName?.trim().split(/\s+/)[0] || null
-  const defaultPhone = onlyDigits(submitted ? prospect?.phone : prospect?.phone || marketing?.phone)
+  const defaultPhone = (submitted ? prospect?.phone : prospect?.phone || marketing?.phone) ?? ''
   const defaultCollege =
     (submitted ? prospect?.college : prospect?.college || marketing?.college_name) ?? ''
 

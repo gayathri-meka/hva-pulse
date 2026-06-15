@@ -159,9 +159,12 @@ export default function InterestForm({
   function validate(): Errors {
     const e: Errors = {}
     if (!name.trim()) e.name = 'Please enter your name'
-    if (!/^\d{10}$/.test(phone)) e.phone = 'Enter a 10-digit number'
+    // Phone format not enforced (the marketing form doesn't validate it) — required only.
+    if (!phone.trim()) e.phone = 'Please enter your number'
+    // if (!/^\d{10}$/.test(phone)) e.phone = 'Enter a 10-digit number'
     if (!/^\S+@\S+\.\S+$/.test(email)) e.email = 'Enter a valid email'
-    if (!college.trim()) e.college = 'Please enter your college name'
+    // College/school name not required for now — re-enable later.
+    // if (!college.trim()) e.college = 'Please enter your college name'
     if (!education) e.education = 'Pick one'
     else if (education === 'Other' && !educationOther.trim()) e.education = 'Please tell us briefly'
     if (!referralSource) e.referral = 'Pick one'
@@ -179,6 +182,9 @@ export default function InterestForm({
   const isSchool = education === 'Completed 12th'
   const collegeLabel = isSchool ? 'School name' : 'College name'
   const collegeRowLabel = isSchool ? 'School' : 'College'
+  const collegePlaceholder = isSchool
+    ? 'Start typing your school name…'
+    : 'Start typing your college name…'
 
   function markTouched(field: string) {
     setTouched((t) => ({ ...t, [field]: true }))
@@ -299,7 +305,7 @@ export default function InterestForm({
               label={collegeLabel}
               value={college}
               onChange={setCollege}
-              placeholder="Start typing your college name…"
+              placeholder={collegePlaceholder}
             />
           </EditableRow>
 
@@ -440,7 +446,7 @@ export default function InterestForm({
         onBlur={() => markTouched('college')}
         error={touched.college ? errors.college : undefined}
         hint="Start typing to search. If you don't see your college, just type the full name."
-        placeholder="Start typing your college name…"
+        placeholder={collegePlaceholder}
       />
 
       {/* How did you hear about us? */}

@@ -34,9 +34,11 @@ export async function submitInterestForm(
   const referralDetail = payload.referral_detail.trim()
 
   if (!name) return { ok: false, error: 'Please enter your name.' }
-  if (!/^\d{10}$/.test(phone))
-    return { ok: false, error: 'Phone must be a 10-digit number.' }
-  if (!college) return { ok: false, error: 'Please enter your college name.' }
+  // Phone format not enforced (the marketing form doesn't validate it) — required only.
+  if (!phone) return { ok: false, error: 'Please enter your number.' }
+  // if (!/^\d{10}$/.test(phone)) return { ok: false, error: 'Phone must be a 10-digit number.' }
+  // College/school name not required for now — re-enable later.
+  // if (!college) return { ok: false, error: 'Please enter your college name.' }
   if (!educationStatus)
     return { ok: false, error: 'Please pick an education status.' }
   if (!referralSource)

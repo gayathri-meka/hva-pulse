@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
-import { mapMarketingEducation, mapMarketingReferral, onlyDigits } from '@/lib/marketingFields'
+import { mapMarketingEducation, mapMarketingReferral } from '@/lib/marketingFields'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
   // If not fully mappable (e.g. an unrecognised code), we still prefill but
   // leave it unsubmitted so they complete it — no "submitted" form with gaps.
   if (mkt && !prior?.interest_form_submitted_at) {
-    const phone = onlyDigits(mkt.phone)
+    const phone = (mkt.phone ?? '').trim()
     const education = mapMarketingEducation(mkt.educational_status)
     const referral = mapMarketingReferral(mkt.referral_source)
 
@@ -136,7 +136,10 @@ export async function GET(request: NextRequest) {
     if (referral) prospectRow.referral_source = referral
     if (mkt.referral_detail) prospectRow.referral_detail = mkt.referral_detail
 
-    const complete = !!(mkt.name && phone.length === 10 && mkt.college_name && education && referral)
+    // Auto-submit once we have the still-required fields. We don't gate on phone
+    // format (the marketing form doesn't validate it) or college (currently
+    // optional) — only that a phone is present.
+    const complete = !!(mkt.name && phone && education && referral)
     if (complete) prospectRow.interest_form_submitted_at = now
   }
 
