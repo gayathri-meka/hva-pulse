@@ -11,25 +11,46 @@ import {
 import CollegeAutocomplete from './CollegeAutocomplete'
 import { submitInterestForm } from './actions'
 
+// Must match the marketing apply form (academy.hyperverge.org/apply/learner) exactly.
 const EDUCATION_OPTIONS = [
-  'Completed 12th, not in college right now',
-  'In college, graduating in 2026',
-  'In college, graduating in 2027',
-  'In college, graduating after 2027',
-  'Graduated and working',
-  'Graduated, not working',
+  'Completed 12th',
+  'Currently pursuing degree (graduating 2026)',
+  'Currently pursuing degree (graduating 2027)',
+  'Currently pursuing degree (graduating 2028 or later)',
+  'Completed graduation',
   'Other',
 ]
 
-type Errors = Partial<Record<'name' | 'phone' | 'email' | 'college' | 'education', string>>
+// "How did you hear about us?" — mirrors the apply form. Each source reveals a
+// detail field except "college" (already captured by College Name). Social
+// media uses a fixed platform list; everything else is free text.
+type ReferralDetailKind = 'none' | 'text' | 'platforms'
+const REFERRAL_OPTIONS: { value: string; detail: ReferralDetailKind; detailLabel?: string }[] = [
+  { value: 'Through an NGO',                       detail: 'text',      detailLabel: 'Which NGO?' },
+  { value: 'Referred by a friend or peer',         detail: 'text',      detailLabel: 'Who referred you?' },
+  { value: 'Referred by an HVA alumni',            detail: 'text',      detailLabel: 'Which alumni referred you?' },
+  { value: 'Through my college or university',     detail: 'none' },
+  { value: 'Through social media',                 detail: 'platforms', detailLabel: 'Which platform?' },
+  { value: 'Found it myself (Google / other search)', detail: 'none' },
+  { value: 'Other',                                detail: 'text',      detailLabel: 'Please specify' },
+]
 
-type EditableField = 'name' | 'phone' | 'college' | 'education'
+const SOCIAL_PLATFORMS = ['LinkedIn', 'Website', 'Instagram', 'Facebook', 'WhatsApp']
+
+const referralDetailKind = (source: string): ReferralDetailKind =>
+  REFERRAL_OPTIONS.find((o) => o.value === source)?.detail ?? 'none'
+
+type Errors = Partial<Record<'name' | 'phone' | 'email' | 'college' | 'education' | 'referral', string>>
+
+type EditableField = 'name' | 'phone' | 'college' | 'education' | 'referral'
 type FieldSnapshot = {
   name: string
   phone: string
   college: string
   education: string
   educationOther: string
+  referralSource: string
+  referralDetail: string
 }
 
 export default function InterestForm({
@@ -39,6 +60,8 @@ export default function InterestForm({
   defaultCollege,
   defaultEducation,
   defaultEducationOther,
+  defaultReferralSource,
+  defaultReferralDetail,
   firstName,
   alreadySubmitted,
 }: {
@@ -48,6 +71,8 @@ export default function InterestForm({
   defaultCollege: string
   defaultEducation: string
   defaultEducationOther: string
+  defaultReferralSource: string
+  defaultReferralDetail: string
   firstName: string | null
   alreadySubmitted: boolean
 }) {
@@ -57,6 +82,8 @@ export default function InterestForm({
   const [college, setCollege] = useState(defaultCollege)
   const [education, setEducation] = useState(defaultEducation)
   const [educationOther, setEducationOther] = useState(defaultEducationOther)
+  const [referralSource, setReferralSource] = useState(defaultReferralSource)
+  const [referralDetail, setReferralDetail] = useState(defaultReferralDetail)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(alreadySubmitted)
@@ -67,10 +94,17 @@ export default function InterestForm({
   const [fieldError, setFieldError]     = useState<string | null>(null)
   const [editingSnapshot, setEditingSnapshot] = useState<FieldSnapshot | null>(null)
 
+  // Switching the referral source clears any stale detail (e.g. a platform
+  // value left over from a previous choice).
+  function changeReferralSource(value: string) {
+    setReferralSource(value)
+    setReferralDetail('')
+  }
+
   function startEdit(field: EditableField) {
     setEditingField(field)
     setFieldError(null)
-    setEditingSnapshot({ name, phone, college, education, educationOther })
+    setEditingSnapshot({ name, phone, college, education, educationOther, referralSource, referralDetail })
   }
 
   function cancelEdit() {
@@ -80,6 +114,8 @@ export default function InterestForm({
       setCollege(editingSnapshot.college)
       setEducation(editingSnapshot.education)
       setEducationOther(editingSnapshot.educationOther)
+      setReferralSource(editingSnapshot.referralSource)
+      setReferralDetail(editingSnapshot.referralDetail)
     }
     setEditingField(null)
     setEditingSnapshot(null)
@@ -96,19 +132,27 @@ export default function InterestForm({
       return
     }
     setSavingField(true)
-    const educationValue = education === 'Other' ? educationOther.trim() : education
-    const result = await submitInterestForm({
-      name: name.trim(),
-      phone: phone.trim(),
-      college: college.trim(),
-      education_status: educationValue,
-    })
+    const result = await submitInterestForm(buildPayload())
     setSavingField(false)
     if (result.ok) {
       setEditingField(null)
       setEditingSnapshot(null)
     } else {
       setFieldError(result.error)
+    }
+  }
+
+  // Builds the server payload from current state (shared by full submit and
+  // per-field resubmit). Detail is cleared for sources that don't take one.
+  function buildPayload() {
+    const kind = referralDetailKind(referralSource)
+    return {
+      name: name.trim(),
+      phone: phone.trim(),
+      college: college.trim(),
+      education_status: education === 'Other' ? educationOther.trim() : education,
+      referral_source: referralSource,
+      referral_detail: kind === 'none' ? '' : referralDetail.trim(),
     }
   }
 
@@ -120,6 +164,11 @@ export default function InterestForm({
     if (!college.trim()) e.college = 'Please enter your college name'
     if (!education) e.education = 'Pick one'
     else if (education === 'Other' && !educationOther.trim()) e.education = 'Please tell us briefly'
+    if (!referralSource) e.referral = 'Pick one'
+    else {
+      const kind = referralDetailKind(referralSource)
+      if (kind !== 'none' && !referralDetail.trim()) e.referral = 'Please add a bit more'
+    }
     return e
   }
 
@@ -132,17 +181,11 @@ export default function InterestForm({
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    setTouched({ name: true, phone: true, email: true, college: true, education: true })
+    setTouched({ name: true, phone: true, email: true, college: true, education: true, referral: true })
     if (!isValid) return
     setSubmitError(null)
-    const educationValue = education === 'Other' ? educationOther.trim() : education
     startTransition(async () => {
-      const result = await submitInterestForm({
-        name: name.trim(),
-        phone: phone.trim(),
-        college: college.trim(),
-        education_status: educationValue,
-      })
+      const result = await submitInterestForm(buildPayload())
       if (result.ok) {
         setSubmitted(true)
       } else {
@@ -154,6 +197,10 @@ export default function InterestForm({
   if (submitted) {
     const educationDisplay =
       education === 'Other' ? educationOther : education
+    const referralDisplay =
+      referralSource && referralDetailKind(referralSource) !== 'none' && referralDetail
+        ? `${referralSource} — ${referralDetail}`
+        : referralSource
     const anyEditing = editingField !== null
     const editControls = {
       editingField,
@@ -210,15 +257,6 @@ export default function InterestForm({
 
           <SummaryRow label="Email" value={email} />
 
-          <EditableRow field="college" label="College" value={college} {...editControls}>
-            <CollegeAutocomplete
-              id="college-edit"
-              value={college}
-              onChange={setCollege}
-              placeholder="Start typing your college name…"
-            />
-          </EditableRow>
-
           <EditableRow field="education" label="Education status" value={educationDisplay} {...editControls}>
             <div className="relative">
               <select
@@ -248,6 +286,26 @@ export default function InterestForm({
                 className={`mt-2 ${EDIT_INPUT_CLASS}`}
               />
             )}
+          </EditableRow>
+
+          <EditableRow field="college" label="College" value={college} {...editControls}>
+            <CollegeAutocomplete
+              id="college-edit"
+              value={college}
+              onChange={setCollege}
+              placeholder="Start typing your college name…"
+            />
+          </EditableRow>
+
+          <EditableRow field="referral" label="How you heard about us" value={referralDisplay} {...editControls}>
+            <ReferralFields
+              id="referral-edit"
+              source={referralSource}
+              detail={referralDetail}
+              onSource={changeReferralSource}
+              onDetail={setReferralDetail}
+              variant="edit"
+            />
           </EditableRow>
         </div>
 
@@ -314,17 +372,7 @@ export default function InterestForm({
         />
       </div>
 
-      <CollegeAutocomplete
-        id="college"
-        value={college}
-        onChange={setCollege}
-        onBlur={() => markTouched('college')}
-        error={touched.college ? errors.college : undefined}
-        hint="Start typing to search. If you don't see your college, just type the full name."
-        placeholder="Start typing your college name…"
-      />
-
-      {/* Education status — dropdown */}
+      {/* Education status — dropdown (before college, matching the apply form) */}
       <div className="mb-5">
         <label htmlFor="education" className="mb-1.5 block text-[13px] font-bold text-zinc-700">
           Current education status
@@ -375,6 +423,36 @@ export default function InterestForm({
         )}
         {touched.education && errors.education && (
           <p className="mt-1.5 text-[12px] font-semibold text-red-600">{errors.education}</p>
+        )}
+      </div>
+
+      <CollegeAutocomplete
+        id="college"
+        value={college}
+        onChange={setCollege}
+        onBlur={() => markTouched('college')}
+        error={touched.college ? errors.college : undefined}
+        hint="Start typing to search. If you don't see your college, just type the full name."
+        placeholder="Start typing your college name…"
+      />
+
+      {/* How did you hear about us? */}
+      <div className="mb-5">
+        <label htmlFor="referral" className="mb-1.5 block text-[13px] font-bold text-zinc-700">
+          How did you hear about us?
+          <span className="ml-0.5 text-red-600">*</span>
+        </label>
+        <ReferralFields
+          id="referral"
+          source={referralSource}
+          detail={referralDetail}
+          onSource={changeReferralSource}
+          onDetail={setReferralDetail}
+          onBlur={() => markTouched('referral')}
+          invalid={!!(touched.referral && errors.referral)}
+        />
+        {touched.referral && errors.referral && (
+          <p className="mt-1.5 text-[12px] font-semibold text-red-600">{errors.referral}</p>
         )}
       </div>
 
@@ -575,6 +653,94 @@ function Field({
         <p className="mt-1.5 text-[12px] text-zinc-500">{hint}</p>
       ) : null}
     </div>
+  )
+}
+
+function ReferralFields({
+  id,
+  source,
+  detail,
+  onSource,
+  onDetail,
+  onBlur,
+  invalid,
+  variant = 'form',
+}: {
+  id: string
+  source: string
+  detail: string
+  onSource: (v: string) => void
+  onDetail: (v: string) => void
+  onBlur?: () => void
+  invalid?: boolean
+  variant?: 'form' | 'edit'
+}) {
+  const kind = referralDetailKind(source)
+  const base =
+    variant === 'edit'
+      ? EDIT_INPUT_CLASS
+      : `w-full rounded-xl border-2 bg-zinc-50 px-3.5 py-3 text-[15px] outline-none transition-all focus:border-[#16a34a] focus:bg-white focus:ring-4 focus:ring-[#16a34a]/15 ${
+          invalid ? 'border-red-500 bg-red-50/40' : 'border-zinc-300'
+        }`
+
+  return (
+    <>
+      <div className="relative">
+        <select
+          id={id}
+          value={source}
+          onChange={(e) => onSource(e.target.value)}
+          onBlur={onBlur}
+          className={`${base} appearance-none pr-10 ${source ? 'text-zinc-900' : 'text-zinc-400'}`}
+        >
+          <option value="" disabled>Choose an option</option>
+          {REFERRAL_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value} className="text-zinc-900">{o.value}</option>
+          ))}
+        </select>
+        <IconChevronDown
+          size={18}
+          stroke={2}
+          aria-hidden
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
+        />
+      </div>
+
+      {kind === 'text' && (
+        <input
+          type="text"
+          value={detail}
+          onChange={(e) => onDetail(e.target.value)}
+          onBlur={onBlur}
+          placeholder={REFERRAL_OPTIONS.find((o) => o.value === source)?.detailLabel}
+          className={`mt-2 ${base} ${variant === 'edit' ? '' : 'text-zinc-900 placeholder:text-zinc-400'}`}
+        />
+      )}
+
+      {kind === 'platforms' && (
+        <div className="relative mt-2">
+          <select
+            value={detail}
+            onChange={(e) => onDetail(e.target.value)}
+            onBlur={onBlur}
+            className={`${base} appearance-none pr-10 ${detail ? 'text-zinc-900' : 'text-zinc-400'}`}
+          >
+            <option value="" disabled>
+              {REFERRAL_OPTIONS.find((o) => o.value === source)?.detailLabel ?? 'Choose a platform'}
+            </option>
+            {SOCIAL_PLATFORMS.map((p) => (
+              <option key={p} value={p} className="text-zinc-900">{p}</option>
+            ))}
+          </select>
+          <IconChevronDown
+            size={18}
+            stroke={2}
+            aria-hidden
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
+          />
+        </div>
+      )}
+    </>
   )
 }
 

@@ -6,13 +6,27 @@ import InterestForm from './InterestForm'
 export const dynamic = 'force-dynamic'
 
 const EDUCATION_OPTIONS = [
-  'Completed 12th, not in college right now',
-  'In college, graduating in 2026',
-  'In college, graduating in 2027',
-  'In college, graduating after 2027',
-  'Graduated and working',
-  'Graduated, not working',
+  'Completed 12th',
+  'Currently pursuing degree (graduating 2026)',
+  'Currently pursuing degree (graduating 2027)',
+  'Currently pursuing degree (graduating 2028 or later)',
+  'Completed graduation',
 ]
+
+// Maps the codes the marketing apply form stores in learner_applications.educational_status
+// to the human-readable dropdown labels above, so a submission can pre-fill this form.
+// NOTE: confirm the exact code for the "graduating 2028 or later" option with the form side.
+const MARKETING_EDU_CODE_TO_LABEL: Record<string, string> = {
+  completed_12th:        'Completed 12th',
+  college_2026:          'Currently pursuing degree (graduating 2026)',
+  college_2027:          'Currently pursuing degree (graduating 2027)',
+  college_2028:          'Currently pursuing degree (graduating 2028 or later)',
+  college_after_2027:    'Currently pursuing degree (graduating 2028 or later)',
+  completed_graduation:  'Completed graduation',
+  other:                 'Other',
+}
+
+const onlyDigits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
 
 export default async function InterestFormPage() {
   const supabase = await createServerSupabaseClient()
@@ -29,9 +43,45 @@ export default async function InterestFormPage() {
   )
   const { data: prospect } = await admin
     .from('prospects')
-    .select('name, phone, college, education_status, interest_form_submitted_at')
+    .select('name, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, signup_token')
     .eq('email', email)
     .maybeSingle()
+
+  // If this prospect came from the marketing apply form, pull their submission
+  // so we can pre-fill the form. Token-first, email-fallback (same precedence
+  // as the admissions matching). Only used until they submit the interest form
+  // once — after that, their own saved values take over.
+  let marketing:
+    | {
+        name: string | null
+        phone: string | null
+        college_name: string | null
+        educational_status: string | null
+        referral_source: string | null
+        referral_detail: string | null
+      }
+    | null = null
+  const mktCols = 'name, phone, college_name, educational_status, referral_source, referral_detail'
+  if (prospect?.signup_token) {
+    const { data } = await admin
+      .from('learner_applications')
+      .select(mktCols)
+      .eq('signup_token', prospect.signup_token)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    marketing = data
+  }
+  if (!marketing) {
+    const { data } = await admin
+      .from('learner_applications')
+      .select(mktCols)
+      .eq('email', email)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    marketing = data
+  }
 
   const metadata = (user!.user_metadata ?? {}) as Record<string, unknown>
   const metadataName =
@@ -39,16 +89,35 @@ export default async function InterestFormPage() {
     (typeof metadata.name === 'string' && metadata.name) ||
     ''
 
-  const fullName = prospect?.name || metadataName
-  const firstName = fullName?.trim().split(/\s+/)[0] || null
+  const submitted = !!prospect?.interest_form_submitted_at
 
-  // Map stored education_status back to the dropdown shape: if it matches a
-  // canonical option, use it directly; otherwise treat it as an "Other" answer
-  // and pre-fill the free-text input with the stored value.
-  const stored = prospect?.education_status?.trim() ?? ''
+  // Pre-fill source: once submitted, trust the prospect's own saved values;
+  // before that, prefer the marketing submission (what they typed on the apply
+  // form), then the prospect/Google name.
+  const fullName = (submitted ? prospect?.name : marketing?.name || prospect?.name) || metadataName
+  const firstName = fullName?.trim().split(/\s+/)[0] || null
+  const defaultPhone = onlyDigits(submitted ? prospect?.phone : prospect?.phone || marketing?.phone)
+  const defaultCollege =
+    (submitted ? prospect?.college : prospect?.college || marketing?.college_name) ?? ''
+
+  // Education: prospect stores the human label; the marketing form stores a
+  // code, so map it. Then collapse to the dropdown shape (canonical vs Other).
+  const mktEduLabel = marketing?.educational_status
+    ? MARKETING_EDU_CODE_TO_LABEL[marketing.educational_status.trim()] ?? ''
+    : ''
+  const stored = (submitted ? prospect?.education_status : prospect?.education_status || mktEduLabel)?.trim() ?? ''
   const isCanonical = EDUCATION_OPTIONS.includes(stored)
   const defaultEducation = stored ? (isCanonical ? stored : 'Other') : ''
-  const defaultEducationOther = stored && !isCanonical ? stored : ''
+  // Only a genuine free-text answer fills the "Other" box — not the literal "Other".
+  const defaultEducationOther = stored && !isCanonical && stored !== 'Other' ? stored : ''
+
+  // Referral ("How did you hear about us?"). The marketing form uses the same
+  // option labels, so we pass the stored value through directly — if it ever
+  // diverges (e.g. coded values), the form's dropdown just falls back to empty.
+  const defaultReferralSource =
+    (submitted ? prospect?.referral_source : prospect?.referral_source || marketing?.referral_source) ?? ''
+  const defaultReferralDetail =
+    (submitted ? prospect?.referral_detail : prospect?.referral_detail || marketing?.referral_detail) ?? ''
 
   return (
     <main className="pb-32 sm:pb-40">
@@ -95,6 +164,8 @@ export default async function InterestFormPage() {
           defaultCollege={prospect?.college ?? ''}
           defaultEducation={defaultEducation}
           defaultEducationOther={defaultEducationOther}
+          defaultReferralSource={defaultReferralSource}
+          defaultReferralDetail={defaultReferralDetail}
           firstName={firstName}
           alreadySubmitted={!!prospect?.interest_form_submitted_at}
         />

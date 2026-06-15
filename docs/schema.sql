@@ -550,7 +550,9 @@ CREATE TABLE public.prospects (
     college text,
     education_status text,
     interest_form_submitted_at timestamp with time zone,
-    signup_token text
+    signup_token text,
+    referral_source text,
+    referral_detail text
 );
 
 

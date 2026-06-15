@@ -9,6 +9,8 @@ export type InterestFormPayload = {
   phone: string
   college: string
   education_status: string
+  referral_source: string
+  referral_detail: string
 }
 
 export type SubmitResult = { ok: true } | { ok: false; error: string }
@@ -28,6 +30,8 @@ export async function submitInterestForm(
   const phone = payload.phone.trim()
   const college = payload.college.trim()
   const educationStatus = payload.education_status.trim()
+  const referralSource = payload.referral_source.trim()
+  const referralDetail = payload.referral_detail.trim()
 
   if (!name) return { ok: false, error: 'Please enter your name.' }
   if (!/^\d{10}$/.test(phone))
@@ -35,6 +39,8 @@ export async function submitInterestForm(
   if (!college) return { ok: false, error: 'Please enter your college name.' }
   if (!educationStatus)
     return { ok: false, error: 'Please pick an education status.' }
+  if (!referralSource)
+    return { ok: false, error: 'Please tell us how you heard about us.' }
 
   // prospects RLS allows writes only for admin/staff — the candidate flow
   // upserts via the service-role client (same pattern as /auth/callback).
@@ -53,6 +59,8 @@ export async function submitInterestForm(
         phone,
         college,
         education_status: educationStatus,
+        referral_source: referralSource,
+        referral_detail: referralDetail || null,
         interest_form_submitted_at: now,
         last_seen_at: now,
       },
