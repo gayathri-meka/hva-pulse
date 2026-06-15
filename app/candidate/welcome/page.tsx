@@ -132,12 +132,13 @@ export default async function WelcomePage() {
             labelColor="#166534"
           />
           <Stat
-            value="4.0 LPA"
+            value="4 LPA"
             label="Avg starting salary"
             bg="#eff6ff"
             valueColor="#1d4ed8"
             labelColor="#1e40af"
           />
+          {/* TODO: restore once we have real numbers — hidden until then (placeholder X+/Y+ values).
           <Stat
             value="X+"
             label="Hiring partners"
@@ -152,6 +153,7 @@ export default async function WelcomePage() {
             valueColor="#9d174d"
             labelColor="#831843"
           />
+          */}
         </div>
 
         {/* WHAT YOU GET + VIDEO */}
