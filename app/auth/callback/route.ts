@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
+import { mapMarketingEducation, mapMarketingReferral, onlyDigits } from '@/lib/marketingFields'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -75,20 +76,71 @@ export async function GET(request: NextRequest) {
 
   const now = new Date().toISOString()
 
-  // Read the prior token first so we can tell a genuine new association from a
-  // returning login (and detect mismatches) before the upsert refreshes the row.
+  // Read prior state: the token (to tell a new association from a returning
+  // login) and whether they've already completed the interest form themselves
+  // (so we never clobber their own answers).
   const { data: prior } = await admin
     .from('prospects')
-    .select('signup_token')
+    .select('signup_token, interest_form_submitted_at')
     .eq('email', email)
     .maybeSingle()
 
-  await admin
-    .from('prospects')
-    .upsert(
-      { email, name, avatar_url: avatarUrl, last_seen_at: now },
-      { onConflict: 'email' },
-    )
+  // Find the marketing submission this signup came from — token first, then the
+  // same email on the apply form — so we can pre-populate the interest form.
+  const mktCols = 'name, phone, college_name, educational_status, referral_source, referral_detail'
+  let mkt:
+    | { name: string | null; phone: string | null; college_name: string | null; educational_status: string | null; referral_source: string | null; referral_detail: string | null }
+    | null = null
+  if (signupToken) {
+    const { data } = await admin
+      .from('learner_applications')
+      .select(mktCols)
+      .eq('signup_token', signupToken)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    mkt = data
+  }
+  if (!mkt) {
+    const { data } = await admin
+      .from('learner_applications')
+      .select(mktCols)
+      .eq('email', email)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    mkt = data
+  }
+
+  const prospectRow: Record<string, unknown> = {
+    email,
+    name,
+    avatar_url: avatarUrl,
+    last_seen_at: now,
+  }
+
+  // Came from the apply form and hasn't filled the interest form themselves:
+  // copy their answers across. If everything required is present and mappable,
+  // also mark the interest form submitted so they land with it done (editable).
+  // If not fully mappable (e.g. an unrecognised code), we still prefill but
+  // leave it unsubmitted so they complete it — no "submitted" form with gaps.
+  if (mkt && !prior?.interest_form_submitted_at) {
+    const phone = onlyDigits(mkt.phone)
+    const education = mapMarketingEducation(mkt.educational_status)
+    const referral = mapMarketingReferral(mkt.referral_source)
+
+    if (mkt.name) prospectRow.name = mkt.name
+    if (phone) prospectRow.phone = phone
+    if (mkt.college_name) prospectRow.college = mkt.college_name
+    if (education) prospectRow.education_status = education
+    if (referral) prospectRow.referral_source = referral
+    if (mkt.referral_detail) prospectRow.referral_detail = mkt.referral_detail
+
+    const complete = !!(mkt.name && phone.length === 10 && mkt.college_name && education && referral)
+    if (complete) prospectRow.interest_form_submitted_at = now
+  }
+
+  await admin.from('prospects').upsert(prospectRow, { onConflict: 'email' })
 
   if (signupToken) {
     if (!prior?.signup_token) {

@@ -1,6 +1,7 @@
 import { IconInfoCircle } from '@tabler/icons-react'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { mapMarketingEducation, mapMarketingReferral, onlyDigits } from '@/lib/marketingFields'
 import InterestForm from './InterestForm'
 
 export const dynamic = 'force-dynamic'
@@ -12,21 +13,6 @@ const EDUCATION_OPTIONS = [
   'Currently pursuing degree (graduating 2028 or later)',
   'Completed graduation',
 ]
-
-// Maps the codes the marketing apply form stores in learner_applications.educational_status
-// to the human-readable dropdown labels above, so a submission can pre-fill this form.
-// NOTE: confirm the exact code for the "graduating 2028 or later" option with the form side.
-const MARKETING_EDU_CODE_TO_LABEL: Record<string, string> = {
-  completed_12th:        'Completed 12th',
-  college_2026:          'Currently pursuing degree (graduating 2026)',
-  college_2027:          'Currently pursuing degree (graduating 2027)',
-  college_2028:          'Currently pursuing degree (graduating 2028 or later)',
-  college_after_2027:    'Currently pursuing degree (graduating 2028 or later)',
-  completed_graduation:  'Completed graduation',
-  other:                 'Other',
-}
-
-const onlyDigits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
 
 export default async function InterestFormPage() {
   const supabase = await createServerSupabaseClient()
@@ -102,9 +88,7 @@ export default async function InterestFormPage() {
 
   // Education: prospect stores the human label; the marketing form stores a
   // code, so map it. Then collapse to the dropdown shape (canonical vs Other).
-  const mktEduLabel = marketing?.educational_status
-    ? MARKETING_EDU_CODE_TO_LABEL[marketing.educational_status.trim()] ?? ''
-    : ''
+  const mktEduLabel = mapMarketingEducation(marketing?.educational_status)
   const stored = (submitted ? prospect?.education_status : prospect?.education_status || mktEduLabel)?.trim() ?? ''
   const isCanonical = EDUCATION_OPTIONS.includes(stored)
   const defaultEducation = stored ? (isCanonical ? stored : 'Other') : ''
@@ -115,7 +99,9 @@ export default async function InterestFormPage() {
   // option labels, so we pass the stored value through directly — if it ever
   // diverges (e.g. coded values), the form's dropdown just falls back to empty.
   const defaultReferralSource =
-    (submitted ? prospect?.referral_source : prospect?.referral_source || marketing?.referral_source) ?? ''
+    (submitted
+      ? prospect?.referral_source
+      : prospect?.referral_source || mapMarketingReferral(marketing?.referral_source)) || ''
   const defaultReferralDetail =
     (submitted ? prospect?.referral_detail : prospect?.referral_detail || marketing?.referral_detail) ?? ''
 

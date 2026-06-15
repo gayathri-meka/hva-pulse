@@ -14,6 +14,7 @@ export default function CollegeAutocomplete({
   error,
   hint,
   placeholder,
+  label = 'College name',
 }: {
   id: string
   value: string
@@ -22,6 +23,7 @@ export default function CollegeAutocomplete({
   error?: string
   hint?: string
   placeholder?: string
+  label?: string
 }) {
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
@@ -85,7 +87,7 @@ export default function CollegeAutocomplete({
   return (
     <div className="relative mb-5" ref={containerRef}>
       <label htmlFor={id} className="mb-1.5 block text-[13px] font-bold text-zinc-700">
-        College name
+        {label}
         <span className="ml-0.5 text-red-600">*</span>
       </label>
       <div className="relative">
@@ -117,7 +119,7 @@ export default function CollegeAutocomplete({
               onChange('')
               setOpen(false)
             }}
-            aria-label="Clear college name"
+            aria-label={`Clear ${label.toLowerCase()}`}
             className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
           >
             <IconX size={14} stroke={2.5} />

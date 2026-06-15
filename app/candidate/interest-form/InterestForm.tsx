@@ -175,6 +175,11 @@ export default function InterestForm({
   const errors = validate()
   const isValid = Object.keys(errors).length === 0
 
+  // A 12th-pass applicant enters a school, not a college.
+  const isSchool = education === 'Completed 12th'
+  const collegeLabel = isSchool ? 'School name' : 'College name'
+  const collegeRowLabel = isSchool ? 'School' : 'College'
+
   function markTouched(field: string) {
     setTouched((t) => ({ ...t, [field]: true }))
   }
@@ -288,9 +293,10 @@ export default function InterestForm({
             )}
           </EditableRow>
 
-          <EditableRow field="college" label="College" value={college} {...editControls}>
+          <EditableRow field="college" label={collegeRowLabel} value={college} {...editControls}>
             <CollegeAutocomplete
               id="college-edit"
+              label={collegeLabel}
               value={college}
               onChange={setCollege}
               placeholder="Start typing your college name…"
@@ -428,6 +434,7 @@ export default function InterestForm({
 
       <CollegeAutocomplete
         id="college"
+        label={collegeLabel}
         value={college}
         onChange={setCollege}
         onBlur={() => markTouched('college')}
