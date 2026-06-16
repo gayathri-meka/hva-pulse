@@ -3,7 +3,7 @@ import ThresholdEditor from './ThresholdEditor'
 import type { PlacementThresholds } from '@/app/(protected)/placements/analytics/actions'
 
 export interface HealthData {
-  openRoles:         number
+  ongoingRoles:      number   // roles with at least one application still in an active (non-terminal) stage
   weeklyAvg:         number
   appsPerRole:       number   // raw ratio
   notInterestedRate: number   // 0–1
@@ -13,6 +13,7 @@ export interface HealthData {
   totalApps:         number
   thresholds:        PlacementThresholds
   isAdmin:           boolean
+  showFocusArea?:    boolean   // hide the focus-area / all-well callout (e.g. on the home dashboard)
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
@@ -20,22 +21,25 @@ export interface HealthData {
 // so admins can tune them as the programme scales.
 function computeScores(h: HealthData) {
   return {
-    demand:     Math.min(h.openRoles / h.thresholds.demand_target, 1),
+    demand:     Math.min(h.ongoingRoles / h.thresholds.demand_target, 1),
     engagement: Math.min(h.appsPerRole / h.thresholds.engagement_target, 1),
     conversion: Math.min(h.hireRate / h.thresholds.conversion_target, 1),
   }
 }
 
 // ── Dimension config ──────────────────────────────────────────────────────────
+// Colours are inline hex (not Tailwind classes) so they always render regardless
+// of which utility classes the JIT build happens to have generated. Triad:
+// cyan (Demand) · violet (Engagement) · orange (Conversion).
 const DIMENSIONS = [
   {
     key:         'demand',
     label:       'Demand',
-    sublabel:    'Are there enough companies posting roles?',
-    dotCls:      'bg-emerald-400',
-    labelCls:    'text-emerald-600',
-    borderCls:   'border-emerald-100',
-    bgCls:       'bg-emerald-50',
+    sublabel:    'Are we finding enough companies posting roles?',
+    dot:         '#06b6d4',  // cyan-500
+    text:        '#0e7490',  // cyan-700
+    border:      '#cffafe',  // cyan-100
+    bg:          '#ecfeff',  // cyan-50
     href:        '/placements/companies',
     linkLabel:   'Companies',
   },
@@ -43,10 +47,10 @@ const DIMENSIONS = [
     key:         'engagement',
     label:       'Engagement',
     sublabel:    'Are learners applying to enough roles?',
-    dotCls:      'bg-blue-400',
-    labelCls:    'text-blue-600',
-    borderCls:   'border-blue-100',
-    bgCls:       'bg-blue-50',
+    dot:         '#a78bfa',  // violet-400
+    text:        '#7c3aed',  // violet-600
+    border:      '#ede9fe',  // violet-100
+    bg:          '#f5f3ff',  // violet-50
     href:        '/placements/matching',
     linkLabel:   'Learners',
   },
@@ -54,10 +58,10 @@ const DIMENSIONS = [
     key:         'conversion',
     label:       'Conversion',
     sublabel:    'Are learners getting shortlisted and hired?',
-    dotCls:      'bg-amber-400',
-    labelCls:    'text-amber-600',
-    borderCls:   'border-amber-100',
-    bgCls:       'bg-amber-50',
+    dot:         '#f97316',  // orange-500
+    text:        '#c2410c',  // orange-700
+    border:      '#fed7aa',  // orange-200
+    bg:          '#fff7ed',  // orange-50
     href:        '/placements/applications',
     linkLabel:   'Applications',
   },
@@ -74,7 +78,7 @@ function focusMessage(weakest: string, h: HealthData): { title: string; body: st
   if (weakest === 'demand') return {
     title: 'Demand',
     href:  '/placements/companies',
-    body:  `Only ${h.openRoles} open role${h.openRoles !== 1 ? 's' : ''} right now`
+    body:  `Only ${h.ongoingRoles} role${h.ongoingRoles !== 1 ? 's' : ''} with an active process right now`
       + (h.weeklyAvg < 3 ? `, with ${weeklyStr} roles added per week on average` : '')
       + '. Consider sourcing more companies to give learners more opportunities to apply.',
   }
@@ -104,8 +108,8 @@ function focusMessage(weakest: string, h: HealthData): { title: string; body: st
 // ── Metric rows per dimension ─────────────────────────────────────────────────
 function metrics(key: string, h: HealthData): { primary: string; primaryUnit: string; secondary: string }  {
   if (key === 'demand') return {
-    primary:     String(h.openRoles),
-    primaryUnit: 'active roles',
+    primary:     String(h.ongoingRoles),
+    primaryUnit: 'roles in process',
     secondary:   `${h.weeklyAvg.toFixed(1)} added / week`,
   }
   if (key === 'engagement') return {
@@ -147,12 +151,13 @@ export default function PlacementHealth(h: HealthData) {
             <Link
               key={dim.key}
               href={dim.href}
-              className={`group flex flex-col justify-between rounded-xl border ${dim.borderCls} ${dim.bgCls} p-4 transition-opacity hover:opacity-75`}
+              style={{ borderColor: dim.border, backgroundColor: dim.bg }}
+              className="group flex flex-col justify-between rounded-xl border p-4 transition-opacity hover:opacity-75"
             >
               <div>
                 <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${dim.dotCls}`} />
-                  <span className={`text-[10px] font-semibold uppercase tracking-widest ${dim.labelCls}`}>
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dim.dot }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: dim.text }}>
                     {dim.label}
                   </span>
                 </div>
@@ -175,7 +180,7 @@ export default function PlacementHealth(h: HealthData) {
       </div>
 
       {/* ── Option B: weakest-link callout ── */}
-      {allWell ? (
+      {h.showFocusArea !== false && (allWell ? (
         <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-emerald-500">
             <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
@@ -205,7 +210,7 @@ export default function PlacementHealth(h: HealthData) {
             View →
           </Link>
         </div>
-      )}
+      ))}
 
     </div>
   )

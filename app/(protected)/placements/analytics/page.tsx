@@ -67,12 +67,13 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     tatQuery   = tatQuery.in('user_id',   filterUserIds)
   }
 
-  const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps, error: tatError }, { data: settingsRow }] = await Promise.all([
+  const [{ data: roles }, { data: applications }, { data: preferences }, { data: tatApps, error: tatError }, { data: settingsRow }, { data: roleProcessApps }] = await Promise.all([
     supabase.from('roles').select('id, created_at, status'), // roles are not learner-specific
     appsQuery,
     prefsQuery,
     tatQuery,
     supabase.from('settings').select('value').eq('key', 'placement_thresholds').single(),
+    supabase.from('applications').select('role_id, status'), // global — demand is not learner-scoped
   ])
 
   const DEFAULT_THRESHOLDS: PlacementThresholds = { demand_target: 10, engagement_target: 5, conversion_target: 0.5 }
@@ -234,7 +235,13 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   const interviewsOngoingAge = ageStats(allApps.filter((a) => a.status === 'interviews_ongoing'))
 
   // ── Placement Health metrics ──────────────────────────────────────────────
-  const openRoles        = roles?.filter((r) => r.status === 'open').length ?? 0
+  // Demand = roles with at least one application still in an active (non-terminal) stage.
+  const TERMINAL_APP_STATUSES = new Set(['hired', 'rejected', 'not_shortlisted'])
+  const ongoingRoles = new Set(
+    (roleProcessApps ?? [])
+      .filter((a) => a.role_id && !TERMINAL_APP_STATUSES.has(a.status))
+      .map((a) => a.role_id)
+  ).size
   const last4Weeks       = weeklyRoles.slice(0, 4)
   const weeklyAvg        = last4Weeks.length > 0
     ? last4Weeks.reduce((s, w) => s + w.count, 0) / last4Weeks.length
@@ -253,7 +260,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     </Suspense>
     <div className="mb-8">
       <PlacementHealth
-        openRoles={openRoles}
+        ongoingRoles={ongoingRoles}
         weeklyAvg={weeklyAvg}
         appsPerRole={appsPerRole}
         notInterestedRate={notInterestedRate}

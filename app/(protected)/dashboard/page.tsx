@@ -1,10 +1,13 @@
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 import PlacementHealth from '@/components/placements/PlacementHealth'
 import DashboardFilters from '@/components/dashboard/DashboardFilters'
+import { buildProspectIndex, matchSignup } from '@/lib/signupMatch'
+import { challengeFunnel, CHALLENGE_VIEW } from '@/lib/challengeFunnel'
 import type { PlacementThresholds } from '@/app/(protected)/placements/analytics/actions'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +65,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   const discontinued = count('Discontinued')
   const placedSelf = count('Placed - Self')
   const placedHVA  = count('Placed - HVA')
+  const placedTotal = placedSelf + placedHVA
   const ongoing    = count('Ongoing')
   const exited     = dropout + discontinued
   const continued  = total - exited
@@ -74,11 +78,12 @@ export default async function DashboardPage({ searchParams }: Props) {
     prefsQuery = prefsQuery.in('user_id', filterUserIds)
   }
 
-  const [{ data: roles }, { data: applications }, { data: preferences }, { data: settingsRow }] = await Promise.all([
+  const [{ data: roles }, { data: applications }, { data: preferences }, { data: settingsRow }, { data: roleProcessApps }] = await Promise.all([
     supabase.from('roles').select('id, created_at, status'),
     appsQuery,
     prefsQuery,
     supabase.from('settings').select('value').eq('key', 'placement_thresholds').single(),
+    supabase.from('applications').select('role_id, status'), // global — demand is not learner-scoped
   ])
 
   const DEFAULT_THRESHOLDS: PlacementThresholds = { demand_target: 10, engagement_target: 5, conversion_target: 0.5 }
@@ -87,7 +92,13 @@ export default async function DashboardPage({ searchParams }: Props) {
   const allApps    = applications ?? []
   const totalRoles = roles?.length ?? 0
   const totalApps  = allApps.length
-  const openRoles  = roles?.filter((r) => r.status === 'open').length ?? 0
+  // Demand = roles with at least one application still in an active (non-terminal) stage.
+  const TERMINAL_APP_STATUSES = new Set(['hired', 'rejected', 'not_shortlisted'])
+  const ongoingRoles = new Set(
+    (roleProcessApps ?? [])
+      .filter((a) => a.role_id && !TERMINAL_APP_STATUSES.has(a.status))
+      .map((a) => a.role_id)
+  ).size
 
   // Weekly role addition rate (last 4 weeks)
   const now = new Date()
@@ -124,6 +135,41 @@ export default async function DashboardPage({ searchParams }: Props) {
   const shortlistRate     = totalApps > 0 ? shortlistPassed / totalApps : 0
   const hireRate          = (hired + rejected) > 0 ? hired / (hired + rejected) : 0
 
+  // ── Admissions funnel (global — top-of-funnel, not learner-filtered) ───────
+  // learner_applications + prospects have RLS that blocks authenticated SELECTs,
+  // so read via the service-role client (same pattern as the admissions pages).
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+  const { data: challengeSrc } = await admin
+    .from('metric_sources')
+    .select('id')
+    .eq('bq_table', CHALLENGE_VIEW)
+    .maybeSingle()
+
+  const [{ data: hits }, { data: prospects }, { data: challengeRows }] = await Promise.all([
+    admin.from('learner_applications').select('email, signup_token, signed_up_at'),
+    admin.from('prospects').select('email, signup_token'),
+    challengeSrc
+      ? admin.from('metric_raw_rows').select('learner_id, dimensions').eq('source_id', challengeSrc.id).limit(20000)
+      : Promise.resolve({ data: [] as { learner_id: string | null; dimensions: Record<string, string | null> | null }[] }),
+  ])
+
+  const normEmail = (e: string | null) => (e ?? '').trim().toLowerCase()
+  const prospectIndex   = buildProspectIndex(prospects ?? [])
+  const uniqueHitEmails = new Set<string>()
+  const convertedEmails = new Set<string>()
+  for (const h of hits ?? []) {
+    const e = normEmail(h.email)
+    if (e) uniqueHitEmails.add(e)
+    const match = matchSignup(h, prospectIndex)
+    if (match.matched) convertedEmails.add(match.prospectEmail || e)
+  }
+  const uniqueHits       = uniqueHitEmails.size
+  const signedUp         = convertedEmails.size
+  const startedChallenge = challengeFunnel(challengeRows ?? []).started
+
   // Build learners URL with current lf/batch filters carried over
   function learnersUrl(status: string) {
     const params = new URLSearchParams()
@@ -145,8 +191,9 @@ export default async function DashboardPage({ searchParams }: Props) {
         </Suspense>
       </div>
 
+      <div className="mb-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
       {/* ── Learner Journey Funnel ─────────────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-zinc-400">Learner Journey</p>
 
         {/* Stage 1 — Enrolled */}
@@ -166,20 +213,24 @@ export default async function DashboardPage({ searchParams }: Props) {
             <div className="h-px w-4 bg-zinc-200" />
             <Link
               href={learnersUrl('Dropout,Discontinued')}
-              className="ml-2 flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 transition-opacity hover:opacity-75"
+              className="ml-2 flex flex-col gap-0.5 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 transition-opacity hover:opacity-75"
             >
-              <span className="text-sm font-semibold tabular-nums text-red-600">{exited}</span>
-              <span className="text-xs text-red-400">exited</span>
-              {exited > 0 && (
-                <span className="ml-1 text-[11px] text-red-300">
-                  {[dropout > 0 && `${dropout} dropout`, discontinued > 0 && `${discontinued} discontinued`]
-                    .filter(Boolean)
-                    .join(' · ')}
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold tabular-nums text-red-600">{exited}</span>
+                <span className="text-xs text-red-400">exited</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="ml-0.5 h-3 w-3 text-red-300">
+                  <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
+                </svg>
+              </div>
+              {total > 0 && (
+                <span className="text-[11px] text-red-400">
+                  {Math.round((exited / total) * 100)}% of enrolled
+                  {exited > 0 &&
+                    ` · ${[dropout > 0 && `${dropout} dropout`, discontinued > 0 && `${discontinued} discontinued`]
+                      .filter(Boolean)
+                      .join(' · ')}`}
                 </span>
               )}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="ml-1 h-3 w-3 text-red-300">
-                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
-              </svg>
             </Link>
           </div>
         </div>
@@ -199,76 +250,52 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
 
         {/* Stage 3 — Outcomes */}
-        <div className="mt-2 grid grid-cols-3 gap-3">
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          {/* Combined Placed — total prominent, self/HVA breakdown secondary */}
           <Link
-            href={learnersUrl('Placed - Self')}
-            className="flex flex-col justify-between rounded-lg border border-blue-100 bg-blue-50 p-3 transition-opacity hover:opacity-75"
+            href={learnersUrl('Placed - Self,Placed - HVA')}
+            className="flex flex-col rounded-lg border border-emerald-100 bg-emerald-50 p-4 transition-opacity hover:opacity-75"
           >
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-500">Placed — Self</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedSelf}</p>
-              <p className="mt-0.5 text-xs text-zinc-400">
-                {continued > 0 ? Math.round((placedSelf / continued) * 100) : 0}% of continued
-              </p>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-blue-300">
-                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
-              </svg>
-            </div>
-          </Link>
-          <Link
-            href={learnersUrl('Placed - HVA')}
-            className="flex flex-col justify-between rounded-lg border border-violet-100 bg-violet-50 p-3 transition-opacity hover:opacity-75"
-          >
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500">Placed — HVA</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{placedHVA}</p>
-              <p className="mt-0.5 text-xs text-zinc-400">
-                {continued > 0 ? Math.round((placedHVA / continued) * 100) : 0}% of continued
-              </p>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-violet-300">
-                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
-              </svg>
-            </div>
-          </Link>
-          <Link
-            href={learnersUrl('Ongoing')}
-            className="flex flex-col justify-between rounded-lg border border-emerald-100 bg-emerald-50 p-3 transition-opacity hover:opacity-75"
-          >
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">Ongoing</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900">{ongoing}</p>
-              <p className="mt-0.5 text-xs text-zinc-400">
-                {continued > 0 ? Math.round((ongoing / continued) * 100) : 0}% of continued
-              </p>
-            </div>
-            <div className="mt-3 flex justify-end">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">Placed</p>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-emerald-300">
                 <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
               </svg>
             </div>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{placedTotal}</p>
+            <p className="mt-0.5 text-xs text-zinc-400">
+              <span className="font-semibold text-emerald-500">{continued > 0 ? Math.round((placedTotal / continued) * 100) : 0}%</span> of continued
+              {' · '}
+              <span className="font-semibold text-emerald-500">{total > 0 ? Math.round((placedTotal / total) * 100) : 0}%</span> of total
+            </p>
+            <p className="mt-2 text-[11px] text-zinc-400">
+              <span className="font-medium text-blue-500">{placedSelf}</span> self · <span className="font-medium text-violet-500">{placedHVA}</span> HVA
+            </p>
+          </Link>
+          <Link
+            href={learnersUrl('Ongoing')}
+            className="flex flex-col rounded-lg border border-blue-100 bg-blue-50 p-4 transition-opacity hover:opacity-75"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-500">Ongoing</p>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-blue-300">
+                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{ongoing}</p>
+            <p className="mt-0.5 text-xs text-zinc-400">
+              <span className="font-semibold text-blue-500">{continued > 0 ? Math.round((ongoing / continued) * 100) : 0}%</span> of continued
+              {' · '}
+              <span className="font-semibold text-blue-500">{total > 0 ? Math.round((ongoing / total) * 100) : 0}%</span> of total
+            </p>
           </Link>
         </div>
-
-        {/* Total placed summary */}
-        {(placedSelf + placedHVA) > 0 && (
-          <p className="mt-3 text-xs text-zinc-400">
-            <span className="font-semibold text-zinc-700">{placedSelf + placedHVA}</span> placed in total
-            {' · '}
-            <span className="text-blue-500">{placedSelf} self</span>
-            {' · '}
-            <span className="text-violet-500">{placedHVA} HVA</span>
-          </p>
-        )}
       </div>
 
       {/* ── Placement Health ───────────────────────────────────────────── */}
-      <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <PlacementHealth
-          openRoles={openRoles}
+          ongoingRoles={ongoingRoles}
           weeklyAvg={weeklyAvg}
           appsPerRole={appsPerRole}
           notInterestedRate={notInterestedRate}
@@ -278,6 +305,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           totalApps={totalApps}
           thresholds={thresholds}
           isAdmin={false}
+          showFocusArea={false}
         />
         <div className="mt-3 flex justify-end">
           <Link
@@ -285,6 +313,50 @@ export default async function DashboardPage({ searchParams }: Props) {
             className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-600"
           >
             View full analytics →
+          </Link>
+        </div>
+      </div>
+      </div>
+
+      {/* ── Admissions Funnel ──────────────────────────────────────────── */}
+      <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <div className="mb-5 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Admissions</p>
+          <Link
+            href="/admissions/analytics"
+            className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-600"
+          >
+            View admissions analytics →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Link
+            href="/admissions/analytics"
+            className="flex flex-col rounded-lg border border-zinc-200 bg-zinc-50 p-4 transition-opacity hover:opacity-75"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Unique website hits</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{uniqueHits.toLocaleString()}</p>
+            <p className="mt-0.5 text-xs text-zinc-400">unique visitors by email</p>
+          </Link>
+          <Link
+            href="/admissions/analytics"
+            className="flex flex-col rounded-lg border border-zinc-200 bg-zinc-50 p-4 transition-opacity hover:opacity-75"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Signed up to Pulse</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{signedUp.toLocaleString()}</p>
+            <p className="mt-0.5 text-xs text-zinc-400">
+              <span className="font-semibold text-[#5BAE5B]">{uniqueHits > 0 ? Math.round((signedUp / uniqueHits) * 100) : 0}%</span> of unique hits
+            </p>
+          </Link>
+          <Link
+            href="/admissions/analytics"
+            className="flex flex-col rounded-lg border border-zinc-200 bg-zinc-50 p-4 transition-opacity hover:opacity-75"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Started challenge</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{startedChallenge.toLocaleString()}</p>
+            <p className="mt-0.5 text-xs text-zinc-400">
+              <span className="font-semibold text-[#5BAE5B]">{signedUp > 0 ? Math.round((startedChallenge / signedUp) * 100) : 0}%</span> of signups
+            </p>
           </Link>
         </div>
       </div>
