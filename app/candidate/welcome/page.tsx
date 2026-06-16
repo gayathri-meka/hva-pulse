@@ -22,7 +22,7 @@ const STAGES: { name: string; slug: string; description: string }[] = [
     description: 'Learn more about the programme here.',
   },
   {
-    name: 'Interest Form',
+    name: 'Personal Information',
     slug: 'interest-form',
     description:
       "Fill this form if you're interested in joining HVA. Tell us about yourself by answering a few quick questions.",
@@ -157,7 +157,7 @@ export default async function WelcomePage() {
         </div>
 
         {/* WHAT YOU GET + VIDEO */}
-        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="grid gap-3 sm:gap-4">
           <div className="rounded-[20px] border-[0.5px] border-zinc-200 bg-white p-[18px] sm:p-6">
             <div className="mb-2.5 text-[15px] font-extrabold text-zinc-900 sm:text-[16px]">
               What you get
@@ -170,6 +170,7 @@ export default async function WelcomePage() {
             </div>
           </div>
 
+          {/* VIDEO — hidden until the new video is ready; re-add the card below to restore it.
           <div className="rounded-[20px] border-[0.5px] border-zinc-200 bg-white p-[18px] sm:p-6">
             <div className="mb-2.5 text-[15px] font-extrabold text-zinc-900 sm:text-[16px]">
               Watch and learn more
@@ -187,6 +188,7 @@ export default async function WelcomePage() {
               />
             </div>
           </div>
+          */}
         </div>
 
         {/* AMBER CALLOUT */}

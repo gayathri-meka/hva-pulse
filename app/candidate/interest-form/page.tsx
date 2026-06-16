@@ -113,7 +113,7 @@ export default async function InterestFormPage() {
           <div className="mb-4">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#dcfce7] px-4 py-2 text-[15px] font-extrabold text-[#166534] sm:text-[16px]">
               <span aria-hidden>📝</span>
-              Step 2 · Interest Form
+              Step 2 · Personal Information
             </span>
           </div>
           <h1

@@ -232,7 +232,7 @@ export default function InterestForm({
           </span>
           <div>
             <div className="text-[13px] font-extrabold text-[#166534] sm:text-[14px]">
-              {firstName ? `Thanks, ${firstName}!` : 'Thanks!'} Your interest form is submitted.
+              {firstName ? `Thanks, ${firstName}!` : 'Thanks!'} Your personal information is submitted.
             </div>
             <div className="mt-0.5 text-[12px] text-[#166534]/80 sm:text-[13px]">
               Here&apos;s what you shared. Tap edit on any item to update it.

@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase'
 
 const STAGES = [
   { slug: 'welcome', label: 'Welcome' },
-  { slug: 'interest-form', label: 'Interest Form' },
+  { slug: 'interest-form', label: 'Personal Information' },
   { slug: 'challenge', label: 'Challenge' },
   { slug: 'interview', label: 'Interview' },
   { slug: 'selection', label: 'Selection' },
