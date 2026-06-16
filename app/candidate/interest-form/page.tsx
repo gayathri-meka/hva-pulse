@@ -146,8 +146,8 @@ export default async function InterestFormPage() {
         <InterestForm
           defaultName={fullName ?? ''}
           defaultEmail={email}
-          defaultPhone={prospect?.phone ?? ''}
-          defaultCollege={prospect?.college ?? ''}
+          defaultPhone={defaultPhone}
+          defaultCollege={defaultCollege}
           defaultEducation={defaultEducation}
           defaultEducationOther={defaultEducationOther}
           defaultReferralSource={defaultReferralSource}
