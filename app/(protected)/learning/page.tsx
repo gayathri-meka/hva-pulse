@@ -15,6 +15,7 @@ import CaseHistory, { type ClosedCase } from '@/components/learning/CaseHistory'
 import ClosedCasesTable from '@/components/learning/ClosedCasesTable'
 import { type Observation } from '@/components/learning/ObservationsModal'
 import LearningTabs from '@/components/learning/LearningTabs'
+import SourceSyncButton, { type SyncSource } from '@/components/learning/SourceSyncButton'
 import { topLevelLearningTabs } from '@/lib/learning/tabs'
 import {
   type RawRow,
@@ -128,6 +129,20 @@ export default async function LearningPage({ searchParams }: Props) {
 
   const learners  = learnersRaw ?? []
   const metricDefs: MetricDef[] = metricsRaw ?? []
+
+  // Data sources feeding the Completion tab — surfaced as a "Sync now" control
+  // in the tab header (admin-only, matching the syncDataSource permission).
+  let completionSources: SyncSource[] = []
+  if (filter === 'all' && appUser.role === 'admin') {
+    const srcIds = [...new Set(metricDefs.map((m) => m.source_id).filter((s): s is string => !!s))]
+    if (srcIds.length > 0) {
+      const { data } = await supabase
+        .from('metric_sources')
+        .select('id, name, last_synced_at, sync_error, row_count')
+        .in('id', srcIds)
+      completionSources = (data ?? []) as SyncSource[]
+    }
+  }
 
   // Compute metric values for every learner
   let learnerRows: LearnerRow[] = []
@@ -598,16 +613,23 @@ export default async function LearningPage({ searchParams }: Props) {
       />
 
       {filter === 'all' && (
-        <LearningDashboard
-          learners={learnerRows}
-          metrics={metricCols}
-          subCohortOptions={subCohortOptions}
-          currentUserId={appUser.id}
-          currentUserName={appUser.name ?? null}
-          isAdmin={appUser.role === 'admin'}
-          canEdit={appUser.role === 'admin' || appUser.role === 'staff'}
-          observationCategories={observationCategories}
-        />
+        <>
+          {completionSources.length > 0 && (
+            <div className="mb-4 flex items-center justify-end">
+              <SourceSyncButton sources={completionSources} />
+            </div>
+          )}
+          <LearningDashboard
+            learners={learnerRows}
+            metrics={metricCols}
+            subCohortOptions={subCohortOptions}
+            currentUserId={appUser.id}
+            currentUserName={appUser.name ?? null}
+            isAdmin={appUser.role === 'admin'}
+            canEdit={appUser.role === 'admin' || appUser.role === 'staff'}
+            observationCategories={observationCategories}
+          />
+        </>
       )}
 
       {filter === 'cases' && (

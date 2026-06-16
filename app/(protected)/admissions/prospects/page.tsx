@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import ProspectsTable from './ProspectsTable'
 
 export const dynamic = 'force-dynamic'
@@ -39,11 +40,13 @@ export default async function ProspectsPage() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-zinc-500">
-        {prospects.length} prospect{prospects.length !== 1 ? 's' : ''}
-        <span className="mx-2 text-zinc-300">·</span>
-        {submittedCount} interest form{submittedCount !== 1 ? 's' : ''} submitted
-      </p>
+      <AdmissionsSummary
+        description="Everyone who signed up on Pulse."
+        stats={[
+          { value: prospects.length, label: `prospect${prospects.length !== 1 ? 's' : ''}` },
+          { value: submittedCount, label: `interest form${submittedCount !== 1 ? 's' : ''} submitted` },
+        ]}
+      />
       <ProspectsTable prospects={prospects} />
     </div>
   )

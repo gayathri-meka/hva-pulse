@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildProspectIndex, matchSignup, type MatchMethod } from '@/lib/signupMatch'
+import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import LearnerApplicationsTable from './LearnerApplicationsTable'
 
 export const dynamic = 'force-dynamic'
@@ -58,11 +59,13 @@ export default async function LearnerApplicationsPage() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-zinc-500">
-        {applications.length} application{applications.length !== 1 ? 's' : ''} submitted via the website form
-        {' · '}
-        {uniqueCount} unique{applications.length !== uniqueCount ? ` (${applications.length - uniqueCount} duplicate${applications.length - uniqueCount !== 1 ? 's' : ''})` : ''}
-      </p>
+      <AdmissionsSummary
+        description="All the applications we received through the website."
+        stats={[
+          { value: applications.length, label: `application${applications.length !== 1 ? 's' : ''}` },
+          { value: uniqueCount, label: `unique${applications.length !== uniqueCount ? ` (${applications.length - uniqueCount} duplicate${applications.length - uniqueCount !== 1 ? 's' : ''})` : ''}` },
+        ]}
+      />
       <LearnerApplicationsTable applications={applications} />
     </div>
   )

@@ -1,15 +1,22 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { exportToCsv } from '@/lib/exportToCsv'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
+  type Column,
+  type ColumnFiltersState,
   type ColumnSizingState,
+  type FilterFn,
+  type SortingState,
 } from '@tanstack/react-table'
 import type { Prospect } from './page'
 
@@ -17,6 +24,13 @@ const SIZING_KEY = 'hva-col-prospects'
 function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
+}
+
+function formatLabel(value: string | null): string {
+  if (!value) return '—'
+  return value.includes('_')
+    ? value.split('_').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+    : value
 }
 
 function formatDate(value: string): string {
@@ -27,114 +41,120 @@ function formatDate(value: string): string {
   })
 }
 
+const multiSelectFilter: FilterFn<Prospect> = (row, colId, filterValues: string[]) =>
+  !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
+multiSelectFilter.autoRemove = (val: string[]) => !val?.length
+
 const col = createColumnHelper<Prospect>()
 
-type FormFilter = 'all' | 'submitted' | 'pending'
-
 export default function ProspectsTable({ prospects }: { prospects: Prospect[] }) {
-  const [sorting, setSorting]           = useState<SortingState>([])
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
-  const [formFilter, setFormFilter]     = useState<FormFilter>('all')
+  const [sorting, setSorting]             = useState<SortingState>([])
+  const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [search, setSearch]               = useState('')
 
-  const filteredProspects = useMemo(() => {
-    if (formFilter === 'submitted') return prospects.filter((p) => p.interest_form_submitted_at)
-    if (formFilter === 'pending')   return prospects.filter((p) => !p.interest_form_submitted_at)
-    return prospects
-  }, [prospects, formFilter])
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return prospects
+    return prospects.filter(
+      (p) => p.name?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q),
+    )
+  }, [prospects, search])
 
-  const submittedCount = useMemo(
-    () => prospects.filter((p) => p.interest_form_submitted_at).length,
-    [prospects],
-  )
-  const pendingCount = prospects.length - submittedCount
-
-  const columns = [
-    col.accessor('created_at', {
-      header: 'Signed up',
-      size: 140,
-      cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
-    }),
-    col.accessor('name', {
-      header: 'Name',
-      size: 200,
-      cell: (info) => <span className="font-medium text-zinc-900">{info.getValue() ?? '—'}</span>,
-    }),
-    col.accessor('email', {
-      header: 'Email',
-      size: 260,
-      cell: (info) => (
-        <a href={`mailto:${info.getValue()}`} className="text-zinc-600 hover:text-zinc-900 hover:underline">
-          {info.getValue()}
-        </a>
-      ),
-    }),
-    col.accessor('phone', {
-      header: 'Phone',
-      size: 130,
-      cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
-    }),
-    col.accessor('college', {
-      header: 'College',
-      size: 240,
-      cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
-    }),
-    col.accessor('education_status', {
-      header: 'Education status',
-      size: 220,
-      cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
-    }),
-    col.accessor('interest_form_submitted_at', {
-      header: 'Interest form',
-      size: 160,
-      cell: (info) => {
-        const submittedAt = info.getValue()
-        if (submittedAt) {
-          return (
+  const columns = useMemo(
+    () => [
+      col.accessor('created_at', {
+        header: 'Signed up',
+        size: 140,
+        enableColumnFilter: false,
+        cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
+      }),
+      col.accessor('name', {
+        header: 'Name',
+        size: 200,
+        enableColumnFilter: false,
+        cell: (info) => <span className="font-medium text-zinc-900">{info.getValue() ?? '—'}</span>,
+      }),
+      col.accessor('email', {
+        header: 'Email',
+        size: 260,
+        enableColumnFilter: false,
+        cell: (info) => (
+          <a href={`mailto:${info.getValue()}`} className="text-zinc-600 hover:text-zinc-900 hover:underline">
+            {info.getValue()}
+          </a>
+        ),
+      }),
+      col.accessor('phone', {
+        header: 'Phone',
+        size: 130,
+        enableColumnFilter: false,
+        cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+      }),
+      col.accessor('college', {
+        header: 'College',
+        size: 240,
+        filterFn: multiSelectFilter,
+        cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+      }),
+      col.accessor('education_status', {
+        header: 'Education status',
+        size: 220,
+        filterFn: multiSelectFilter,
+        cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
+      }),
+      col.accessor((row) => (row.interest_form_submitted_at ? 'Submitted' : 'Pending'), {
+        id: 'interest_form',
+        header: 'Interest form',
+        size: 150,
+        filterFn: multiSelectFilter,
+        cell: (info) =>
+          info.getValue() === 'Submitted' ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Submitted
             </span>
-          )
-        }
-        return (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-            Pending
-          </span>
-        )
-      },
-    }),
-    col.accessor((row) => row.interest_form_submitted_at, {
-      id: 'form_fill_date',
-      header: 'Form fill date',
-      size: 140,
-      sortingFn: (a, b) => {
-        const av = a.original.interest_form_submitted_at
-        const bv = b.original.interest_form_submitted_at
-        if (!av && !bv) return 0
-        if (!av) return 1
-        if (!bv) return -1
-        return new Date(av).getTime() - new Date(bv).getTime()
-      },
-      cell: (info) => {
-        const v = info.getValue() as string | null
-        return v
-          ? <span className="text-zinc-500">{formatDate(v)}</span>
-          : <span className="text-zinc-300">—</span>
-      },
-    }),
-    col.accessor('last_seen_at', {
-      header: 'Last seen',
-      size: 140,
-      cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
-    }),
-  ]
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+              Pending
+            </span>
+          ),
+      }),
+      col.accessor((row) => row.interest_form_submitted_at, {
+        id: 'form_fill_date',
+        header: 'Form fill date',
+        size: 140,
+        enableColumnFilter: false,
+        sortingFn: (a, b) => {
+          const av = a.original.interest_form_submitted_at
+          const bv = b.original.interest_form_submitted_at
+          if (!av && !bv) return 0
+          if (!av) return 1
+          if (!bv) return -1
+          return new Date(av).getTime() - new Date(bv).getTime()
+        },
+        cell: (info) => {
+          const v = info.getValue() as string | null
+          return v ? <span className="text-zinc-500">{formatDate(v)}</span> : <span className="text-zinc-300">—</span>
+        },
+      }),
+      col.accessor('last_seen_at', {
+        header: 'Last seen',
+        size: 140,
+        enableColumnFilter: false,
+        cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
+      }),
+    ],
+    [],
+  )
 
   const table = useReactTable({
-    data: filteredProspects,
+    data: filtered,
     columns,
-    state: { sorting, columnSizing },
+    state: { sorting, columnSizing, columnFilters, columnPinning: { left: ['created_at', 'name'] } },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater
@@ -144,6 +164,9 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     columnResizeMode: 'onChange',
     getRowId: (row) => row.id,
   })
@@ -159,24 +182,21 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1">
-          <FilterPill
-            active={formFilter === 'all'}
-            onClick={() => setFormFilter('all')}
-            label="All"
-            count={prospects.length}
-          />
-          <FilterPill
-            active={formFilter === 'submitted'}
-            onClick={() => setFormFilter('submitted')}
-            label="Submitted form"
-            count={submittedCount}
-          />
-          <FilterPill
-            active={formFilter === 'pending'}
-            onClick={() => setFormFilter('pending')}
-            label="Pending"
-            count={pendingCount}
+        <div className="relative">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+          >
+            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+          </svg>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name or email…"
+            className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 pl-8 pr-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
           />
         </div>
         <button
@@ -194,49 +214,63 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-          <table
-            className="border-collapse text-sm"
-            style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
-          >
+          <table className="border-collapse text-sm" style={{ width: '100%', minWidth: table.getCenterTotalSize() }}>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
-                {table.getFlatHeaders().map((header) => (
-                  <th
-                    key={header.id}
-                    style={{ width: header.getSize() }}
-                    className="sticky top-0 z-10 bg-zinc-50 relative select-none px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400"
-                  >
-                    <div
-                      className={header.column.getCanSort() ? 'flex cursor-pointer items-center gap-1' : ''}
-                      onClick={header.column.getToggleSortingHandler()}
+                {table.getFlatHeaders().map((header) => {
+                  const pinned       = header.column.getIsPinned() === 'left'
+                  const isLastPinned = pinned && header.column.getIsLastColumn('left')
+                  const left         = pinned ? header.column.getStart('left') : undefined
+                  return (
+                    <th
+                      key={header.id}
+                      style={{ width: header.getSize(), left }}
+                      className={`sticky top-0 select-none px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${
+                        pinned ? 'z-20 bg-zinc-50' : 'z-10 bg-zinc-50'
+                      } ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                     >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
-                      {header.column.getIsSorted() === 'desc' && <span>↓</span>}
-                    </div>
-                    {header.column.getCanResize() && (
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-zinc-300"
-                      />
-                    )}
-                  </th>
-                ))}
+                      <div className="flex flex-col gap-1">
+                        <div
+                          className={`relative flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer' : ''}`}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                          {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
+                          {header.column.getIsSorted() === 'desc' && <span>↓</span>}
+                          {header.column.getCanResize() && (
+                            <div
+                              onMouseDown={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
+                              onTouchStart={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
+                              className="absolute right-0 top-1/2 h-4 w-1.5 -translate-y-1/2 cursor-col-resize bg-transparent hover:bg-zinc-300"
+                            />
+                          )}
+                        </div>
+                        {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+                      </div>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-zinc-50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      style={{ width: cell.column.getSize() }}
-                      className="px-6 py-3.5"
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                <tr key={row.id} className="group hover:bg-zinc-50">
+                  {row.getVisibleCells().map((cell) => {
+                    const pinned       = cell.column.getIsPinned() === 'left'
+                    const isLastPinned = pinned && cell.column.getIsLastColumn('left')
+                    const left         = pinned ? cell.column.getStart('left') : undefined
+                    return (
+                      <td
+                        key={cell.id}
+                        style={{ width: cell.column.getSize(), left }}
+                        className={`px-6 py-3.5 ${
+                          pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''
+                        } ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -247,30 +281,105 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
   )
 }
 
-function FilterPill({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-  count: number
-}) {
+function FilterDropdown({ column }: { column: Column<Prospect, unknown> }) {
+  const [open, setOpen]     = useState(false)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const btnRef              = useRef<HTMLButtonElement>(null)
+  const panelRef            = useRef<HTMLDivElement>(null)
+  const selected            = (column.getFilterValue() as string[]) ?? []
+
+  function reposition() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setCoords({ top: r.bottom + 4, left: r.left })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    reposition()
+    function onOutside(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || panelRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    function onScroll(e: Event) {
+      if (panelRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    function onResize() { setOpen(false) }
+    document.addEventListener('mousedown', onOutside)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('mousedown', onOutside)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [open])
+
+  const options = useMemo(
+    () =>
+      Array.from(column.getFacetedUniqueValues().keys())
+        .filter((v) => v != null && v !== '')
+        .map(String)
+        .sort(),
+    [column],
+  )
+
+  function toggle(val: string) {
+    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
+    column.setFilterValue(next.length ? next : undefined)
+  }
+
+  const label =
+    selected.length === 0 ? 'All'
+    : selected.length === 1 ? formatLabel(selected[0])
+    : `${selected.length} selected`
+
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-        active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
-      }`}
-    >
-      {label}
-      <span className={`rounded-full px-1.5 text-[10px] ${
-        active ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-200/70 text-zinc-500'
-      }`}>
-        {count}
-      </span>
-    </button>
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-[11px] font-normal normal-case tracking-normal focus:outline-none ${
+          selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={panelRef}
+          style={{ top: coords.top, left: coords.left }}
+          className="fixed z-50 max-h-52 min-w-[180px] overflow-y-auto rounded border border-zinc-200 bg-white py-1 shadow-lg"
+        >
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { column.setFilterValue(undefined); setOpen(false) }}
+              className="w-full border-b border-zinc-100 px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50"
+            >
+              Clear filter
+            </button>
+          )}
+          {options.map((opt) => (
+            <label key={opt} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={() => toggle(opt)}
+                className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
+              />
+              <span>{formatLabel(opt)}</span>
+            </label>
+          ))}
+          {options.length === 0 && <p className="px-3 py-1 text-xs text-zinc-400">No values</p>}
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
