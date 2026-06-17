@@ -6,10 +6,12 @@ import AnalyticsClient from './AnalyticsClient'
 export const dynamic = 'force-dynamic'
 
 export type AnalyticsRow = {
-  created_at:    string
-  email:         string | null
-  signup_token?: string | null
-  signed_up_at?: string | null
+  created_at:          string
+  email:               string | null
+  signup_token?:       string | null
+  signed_up_at?:       string | null
+  referral_source?:    string | null
+  educational_status?: string | null
 }
 
 export default async function AdmissionsAnalyticsPage() {
@@ -30,11 +32,12 @@ export default async function AdmissionsAnalyticsPage() {
   const [{ data: hits }, { data: signups }, { data: challengeRows }] = await Promise.all([
     supabase
       .from('learner_applications')
-      .select('created_at, email, signup_token, signed_up_at')
+      .select('created_at, email, signup_token, signed_up_at, referral_source, educational_status')
       .order('created_at', { ascending: false }),
     supabase
       .from('prospects')
-      .select('created_at, email, signup_token')
+      // alias education_status → educational_status so both populations share AnalyticsRow
+      .select('created_at, email, signup_token, referral_source, educational_status:education_status')
       .order('created_at', { ascending: false }),
     challengeSrc
       ? supabase.from('metric_raw_rows').select('learner_id, dimensions').eq('source_id', challengeSrc.id).limit(20000)
@@ -45,13 +48,7 @@ export default async function AdmissionsAnalyticsPage() {
 
   return (
     <div>
-      <AdmissionsSummary
-        description="All the admissions data in one place — website applications and Pulse signups over time."
-        stats={[
-          { value: (hits ?? []).length, label: 'website applications' },
-          { value: (signups ?? []).length, label: 'Pulse signups' },
-        ]}
-      />
+      <AdmissionsSummary description="All the admissions data in one place — website applications and Pulse signups over time." />
       <AnalyticsClient
         hits={(hits ?? []) as AnalyticsRow[]}
         signups={(signups ?? []) as AnalyticsRow[]}

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildProspectIndex, matchSignup, type MatchMethod } from '@/lib/signupMatch'
+import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import LearnerApplicationsTable from './LearnerApplicationsTable'
 
@@ -35,15 +36,45 @@ export default async function LearnerApplicationsPage() {
       .from('learner_applications')
       .select('id, created_at, name, phone, email, college_name, educational_status, referral_source, referral_detail, signup_token, signed_up_at')
       .order('created_at', { ascending: false }),
-    supabase.from('prospects').select('email, signup_token'),
+    supabase
+      .from('prospects')
+      .select('email, signup_token, name, phone, college, education_status, referral_source, referral_detail'),
   ])
 
   // Token-first, email-fallback matching (see lib/signupMatch.ts).
   const index = buildProspectIndex(prospectRows ?? [])
 
+  // The website form is the only writer of learner_applications, so any field a
+  // learner filled out on the Pulse interest form instead lives only on their
+  // prospect row. Index prospects by normalised email so we can backfill those
+  // gaps. matchSignup() hands us the matched prospect's email (token-first), so
+  // the join here uses the exact same "signed up" definition as the table.
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase()
+  const prospectByEmail = new Map<string, any>()
+  for (const p of prospectRows ?? []) {
+    const key = norm(p.email)
+    if (key) prospectByEmail.set(key, p)
+  }
+  // First non-empty value wins — treats both null and '' as missing.
+  const firstFilled = (...vals: (string | null | undefined)[]) =>
+    vals.find((v) => v != null && v !== '') ?? null
+
   const applications: LearnerApplication[] = (rawApps ?? []).map((a) => {
     const match = matchSignup(a, index)
-    return { ...a, signed_into_pulse: match.matched, match_method: match.method }
+    const p = match.prospectEmail ? prospectByEmail.get(match.prospectEmail) : undefined
+    return {
+      ...a,
+      name:               firstFilled(a.name, p?.name),
+      phone:              firstFilled(a.phone, p?.phone),
+      college_name:       firstFilled(a.college_name, p?.college),
+      // Canonicalize to the human-readable label so the website-form's raw codes
+      // (friend, college_2027) and the prospect's labels render identically.
+      educational_status: canonicalEducation(firstFilled(a.educational_status, p?.education_status)),
+      referral_source:    canonicalReferral(firstFilled(a.referral_source, p?.referral_source)),
+      referral_detail:    firstFilled(a.referral_detail, p?.referral_detail),
+      signed_into_pulse:  match.matched,
+      match_method:       match.method,
+    }
   })
 
   // Unique count using the same rule as the table's "hide duplicates": one per

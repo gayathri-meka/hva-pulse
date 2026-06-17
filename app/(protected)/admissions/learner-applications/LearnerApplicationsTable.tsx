@@ -223,6 +223,12 @@ export default function LearnerApplicationsTable({ applications }: { application
     )
   }
 
+  const totalCount   = applications.length
+  const visibleCount = table.getRowModel().rows.length
+  const countLabel   = visibleCount === totalCount
+    ? `${totalCount} row${totalCount === 1 ? '' : 's'}`
+    : `${visibleCount} of ${totalCount}`
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -264,6 +270,7 @@ export default function LearnerApplicationsTable({ applications }: { application
             count={noCount}
           />
           </div>
+          <span className="whitespace-nowrap text-xs font-medium text-zinc-500">{countLabel}</span>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-zinc-600">
@@ -292,11 +299,11 @@ export default function LearnerApplicationsTable({ applications }: { application
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
           <table
-            className="border-collapse text-sm"
-            style={{ width: '100%', minWidth: table.getCenterTotalSize() }}
+            className="border-separate text-sm"
+            style={{ tableLayout: 'fixed', width: table.getTotalSize(), borderSpacing: 0 }}
           >
             <thead>
-              <tr className="border-b border-zinc-100 bg-zinc-50 text-left">
+              <tr className="bg-zinc-50 text-left">
                 {table.getFlatHeaders().map((header) => {
                   const pinned       = header.column.getIsPinned() === 'left'
                   const isLastPinned = pinned && header.column.getIsLastColumn('left')
@@ -305,45 +312,53 @@ export default function LearnerApplicationsTable({ applications }: { application
                     <th
                       key={header.id}
                       style={{ width: header.getSize(), left }}
-                      className={`sticky top-0 select-none px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${
-                        pinned ? 'z-20 bg-zinc-50' : 'z-10 bg-zinc-50'
+                      className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${
+                        pinned ? 'z-20' : 'z-10'
                       } ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                     >
                       <div className="flex flex-col gap-1">
                         <div
-                          className={`relative flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer' : ''}`}
+                          className={`flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer' : ''}`}
                           onClick={header.column.getToggleSortingHandler()}
                         >
-                          <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                          <span className="truncate">{flexRender(header.column.columnDef.header, header.getContext())}</span>
                           {header.column.getIsSorted() === 'asc'  && <span>↑</span>}
                           {header.column.getIsSorted() === 'desc' && <span>↓</span>}
-                          {header.column.getCanResize() && (
-                            <div
-                              onMouseDown={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
-                              onTouchStart={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
-                              className="absolute right-0 top-1/2 h-4 w-1.5 -translate-y-1/2 cursor-col-resize bg-transparent hover:bg-zinc-300"
-                            />
-                          )}
                         </div>
                         {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
                       </div>
+                      {header.column.getCanResize() && (
+                        <div
+                          onMouseDown={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
+                          onTouchStart={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ touchAction: 'none' }}
+                          title="Drag to resize"
+                          className="group/resize absolute right-0 top-0 z-20 flex h-full w-2 cursor-col-resize justify-end"
+                        >
+                          <div className={`h-full w-0.5 ${header.column.getIsResizing() ? 'bg-[#5BAE5B]' : 'bg-zinc-200 group-hover/resize:bg-[#5BAE5B]'}`} />
+                        </div>
+                      )}
                     </th>
                   )
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody>
               {table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="group hover:bg-zinc-50">
                   {row.getVisibleCells().map((cell) => {
                     const pinned       = cell.column.getIsPinned() === 'left'
                     const isLastPinned = pinned && cell.column.getIsLastColumn('left')
                     const left         = pinned ? cell.column.getStart('left') : undefined
+                    const raw          = cell.getValue()
+                    const title        = typeof raw === 'string' && raw ? raw : undefined
                     return (
                       <td
                         key={cell.id}
+                        title={title}
                         style={{ width: cell.column.getSize(), left }}
-                        className={`px-6 py-3.5 ${
+                        className={`truncate border-b border-zinc-100 px-6 py-3.5 ${
                           pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''
                         } ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                       >

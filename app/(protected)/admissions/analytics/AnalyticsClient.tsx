@@ -2,10 +2,14 @@
 
 import { useMemo, useState } from 'react'
 import { buildProspectIndex, matchSignup } from '@/lib/signupMatch'
+import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
 import type { ChallengeFunnel } from '@/lib/challengeFunnel'
 import type { AnalyticsRow } from './page'
 
 const norm = (e: string | null) => (e ?? '').trim().toLowerCase()
+// First non-empty value wins — treats null and '' as missing.
+const firstFilled = (...vals: (string | null | undefined)[]) =>
+  vals.find((v) => v != null && v !== '') ?? null
 
 // Monday-of-week (UTC) for an ISO timestamp.
 function weekKey(iso: string): string {
@@ -13,6 +17,25 @@ function weekKey(iso: string): string {
   const dow = (d.getUTCDay() + 6) % 7
   d.setUTCDate(d.getUTCDate() - dow)
   return d.toISOString().slice(0, 10)
+}
+
+// Categorical distribution: count canonical label values, blanks rolled into
+// "Not specified". Sorted by count desc, with "Not specified" pinned last.
+type Slice = { label: string; value: number }
+const NOT_SPECIFIED = 'Not specified'
+function countLabels(values: (string | null)[]): Slice[] {
+  const counts = new Map<string, number>()
+  for (const v of values) {
+    const key = (v ?? '').trim() || NOT_SPECIFIED
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => {
+      if (a.label === NOT_SPECIFIED) return 1
+      if (b.label === NOT_SPECIFIED) return -1
+      return b.value - a.value
+    })
 }
 
 // Count events per week, gap-filled from the first event week through this week
@@ -47,11 +70,27 @@ export default function AnalyticsClient({
   const m = useMemo(() => {
     const index = buildProspectIndex(signups)
 
-    // First-occurrence date per unique website email (for the "unique" series).
-    const firstSeen = new Map<string, string>()
+    // First-occurrence row per unique website email (for the "unique" series and
+    // the unique-hits distributions).
+    const firstSeen = new Map<string, AnalyticsRow>()
     for (const h of [...hits].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
       const e = norm(h.email)
-      if (e && !firstSeen.has(e)) firstSeen.set(e, h.created_at)
+      if (e && !firstSeen.has(e)) firstSeen.set(e, h)
+    }
+    const uniqueHitRows = [...firstSeen.values()]
+
+    // Index prospects by email so a website hit can borrow its matched prospect's
+    // referral/education when the website form left them blank (same backfill the
+    // Website Hits table does).
+    const prospectByEmail = new Map<string, AnalyticsRow>()
+    for (const s of signups) {
+      const e = norm(s.email)
+      if (e) prospectByEmail.set(e, s)
+    }
+    const prospectFor = (h: AnalyticsRow) => {
+      const match = matchSignup(h, index)
+      const e = match.matched ? match.prospectEmail || norm(h.email) : null
+      return e ? prospectByEmail.get(e) : undefined
     }
 
     // Which website applicants converted (token-first, email-fallback).
@@ -68,9 +107,19 @@ export default function AnalyticsClient({
       signedUp:      convertedEmails.size,
       totalSignups:  signups.length,
       hitsWeekly:    weeklySeries(hits.map((h) => h.created_at)),
-      uniqueWeekly:  weeklySeries([...firstSeen.values()]),
+      uniqueWeekly:  weeklySeries(uniqueHitRows.map((r) => r.created_at)),
       signedUpWeekly: weeklySeries(convDates),
       signupsWeekly: weeklySeries(signups.map((s) => s.created_at)),
+      // Categorical distributions. Website hits are backfilled from the matched
+      // prospect, then both populations are canonicalized to the same labels.
+      referralHits: countLabels(
+        uniqueHitRows.map((h) => canonicalReferral(firstFilled(h.referral_source, prospectFor(h)?.referral_source))),
+      ),
+      referralSignups: countLabels(signups.map((s) => canonicalReferral(s.referral_source))),
+      eduHits: countLabels(
+        uniqueHitRows.map((h) => canonicalEducation(firstFilled(h.educational_status, prospectFor(h)?.educational_status))),
+      ),
+      eduSignups: countLabels(signups.map((s) => canonicalEducation(s.educational_status))),
     }
   }, [hits, signups])
 
@@ -88,21 +137,14 @@ export default function AnalyticsClient({
         </div>
       </section>
 
-      {/* Pulse signups */}
-      <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Pulse signups</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard label="Total signups" value={m.totalSignups} sublabel="prospects" series={m.signupsWeekly} unit="signups" />
-        </div>
-      </section>
-
-      {/* 14-day challenge — current snapshot (state, not a time series) */}
+      {/* Pulse signups + 14-day challenge — one row of four boxes */}
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-          14-day challenge <span className="font-normal normal-case tracking-normal text-zinc-300">· current</span>
+          Pulse signups &amp; 14-day challenge <span className="font-normal normal-case tracking-normal text-zinc-300">· current</span>
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard label="Joined" value={challenge.joined} sublabel="in the screening cohort" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Pulse signups" value={m.totalSignups} sublabel="prospects" series={m.signupsWeekly} unit="signups" />
+          <StatCard label="Joined SensAI" value={challenge.joined} sublabel="in the screening cohort" />
           <StatCard
             label="Started"
             value={challenge.started}
@@ -112,6 +154,27 @@ export default function AnalyticsClient({
             label="Completed"
             value={challenge.completed}
             sublabel={`${challenge.joined > 0 ? Math.round((challenge.completed / challenge.joined) * 100) : 0}% of joined`}
+          />
+        </div>
+      </section>
+
+      {/* Audience breakdown — collapsible categorical distributions */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Audience breakdown</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DistributionCard
+            label="Referral source"
+            datasets={[
+              { key: 'hits', label: 'Website hits', noun: 'unique website hits', data: m.referralHits },
+              { key: 'prospects', label: 'Prospects', noun: 'prospects', data: m.referralSignups },
+            ]}
+          />
+          <DistributionCard
+            label="Educational status"
+            datasets={[
+              { key: 'hits', label: 'Website hits', noun: 'unique website hits', data: m.eduHits },
+              { key: 'prospects', label: 'Prospects', noun: 'prospects', data: m.eduSignups },
+            ]}
           />
         </div>
       </section>
@@ -156,6 +219,95 @@ function StatCard({
       <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{value.toLocaleString()}</p>
       <p className="mt-0.5 text-xs text-zinc-400">{sublabel}</p>
       {hasChart && showChart && <WeeklyChart series={series!} unit={unit} />}
+    </div>
+  )
+}
+
+// Categorical distribution card: a per-population toggle over horizontal bars.
+function DistributionCard({
+  label,
+  datasets,
+}: {
+  label: string
+  datasets: { key: string; label: string; noun: string; data: Slice[] }[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const ds = datasets[active]
+  const total = ds.data.reduce((s, d) => s + d.value, 0)
+  const max = Math.max(1, ...ds.data.map((d) => d.value))
+  // Collapsed summary: just the most common category.
+  const topSlice = ds.data.find((d) => d.label !== NOT_SPECIFIED) ?? ds.data[0]
+
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{label}</p>
+        <span className="flex items-center gap-2 text-xs text-zinc-400">
+          {!open && topSlice && (
+            <span className="hidden truncate sm:inline">top: {topSlice.label}</span>
+          )}
+          <svg
+            className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-xs text-zinc-400">{total.toLocaleString()} {ds.noun}</p>
+            <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">
+              {datasets.map((d, i) => (
+                <button
+                  key={d.key}
+                  onClick={() => setActive(i)}
+                  className={`rounded-md px-2.5 py-1 transition-colors ${
+                    active === i ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {ds.data.length === 0 ? (
+            <p className="py-6 text-center text-xs text-zinc-300">No data yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {ds.data.map((d) => {
+                const muted = d.label === NOT_SPECIFIED
+                return (
+                  <div key={d.label}>
+                    <div className="mb-1 flex items-baseline justify-between gap-2">
+                      <span className={`truncate text-xs ${muted ? 'text-zinc-400' : 'text-zinc-600'}`} title={d.label}>
+                        {d.label}
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-700">
+                        {d.value}
+                        <span className="ml-1 font-normal text-zinc-400">{total > 0 ? Math.round((d.value / total) * 100) : 0}%</span>
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${(d.value / max) * 100}%`, backgroundColor: muted ? '#d4d4d8' : '#5BAE5B' }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

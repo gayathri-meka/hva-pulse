@@ -77,4 +77,19 @@ export function mapMarketingReferral(code: string | null | undefined): string {
   return resolve(REFERRAL_INDEX, code, 'referral_source')
 }
 
+// Canonicalize a stored value to its display label for any surface that shows
+// these fields (Website hits, Prospects, Analytics). Unlike map*() above, this
+// never warns and falls back to the original trimmed value on a miss, so
+// free-text answers (e.g. "MBA", "Diploma in computer engineering") survive
+// instead of vanishing. Returns null for empty input. Accepts codes OR labels,
+// so it's idempotent on already-canonical prospect values.
+function canonicalize(index: Map<string, string>, raw: string | null | undefined): string | null {
+  const value = raw?.trim()
+  if (!value) return null
+  return index.get(fold(value)) ?? value
+}
+
+export const canonicalReferral = (v: string | null | undefined) => canonicalize(REFERRAL_INDEX, v)
+export const canonicalEducation = (v: string | null | undefined) => canonicalize(EDU_INDEX, v)
+
 export const onlyDigits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')

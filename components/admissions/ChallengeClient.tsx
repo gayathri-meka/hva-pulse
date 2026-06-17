@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 export type TaskState = 'not_started' | 'attempted' | 'completed'
 export type TaskItem = { taskId: string; title: string; type: string; ordering: number; state: TaskState }
@@ -73,10 +73,24 @@ export default function ChallengeClient({
   const [view, setView] = useState<'detail' | 'matrix'>('detail')
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+
+  const filteredMembers = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return members
+    return members.filter(
+      (m) => m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q),
+    )
+  }, [members, search])
 
   if (members.length === 0) {
     return <p className="text-sm text-zinc-400">No one has joined the challenge cohort yet.</p>
   }
+
+  const memberCountLabel =
+    filteredMembers.length === members.length
+      ? `${members.length}`
+      : `${filteredMembers.length} of ${members.length}`
 
   return (
     <div className="space-y-8">
@@ -107,10 +121,29 @@ export default function ChallengeClient({
 
       {/* ── Members ─────────────────────────────────────────────────────── */}
       <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Members ({members.length})
-          </h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Members ({memberCountLabel})
+            </h2>
+            <div className="relative">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+              >
+                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+              </svg>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name or email…"
+                className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 pl-8 pr-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
+              />
+            </div>
+          </div>
           {/* View toggle */}
           <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">
             {([
@@ -130,16 +163,20 @@ export default function ChallengeClient({
           </div>
         </div>
 
-        {view === 'detail' ? (
+        {filteredMembers.length === 0 ? (
+          <div className="rounded-xl border border-zinc-200 bg-white py-12 text-center">
+            <p className="text-sm text-zinc-400">No members match “{search}”.</p>
+          </div>
+        ) : view === 'detail' ? (
           <DetailView
-            members={members}
+            members={filteredMembers}
             openMember={openMember}
             setOpenMember={setOpenMember}
             openDay={openDay}
             setOpenDay={setOpenDay}
           />
         ) : (
-          <MatrixView members={members} cohortDays={cohortDays} />
+          <MatrixView members={filteredMembers} cohortDays={cohortDays} />
         )}
       </section>
     </div>
