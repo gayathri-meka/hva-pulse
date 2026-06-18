@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildProspectIndex, matchSignup, type MatchMethod } from '@/lib/signupMatch'
 import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
+import { fetchChallengeStatusByEmail } from '@/lib/challengeStatus'
+import type { ChallengeStatus } from '@/lib/challengeFunnel'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import LearnerApplicationsTable from './LearnerApplicationsTable'
 
@@ -20,6 +22,7 @@ export type LearnerApplication = {
   signed_up_at:       string | null
   signed_into_pulse:  boolean
   match_method:       MatchMethod
+  challenge_status:   ChallengeStatus
 }
 
 export default async function LearnerApplicationsPage() {
@@ -31,7 +34,7 @@ export default async function LearnerApplicationsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const [{ data: rawApps }, { data: prospectRows }] = await Promise.all([
+  const [{ data: rawApps }, { data: prospectRows }, challengeStatus] = await Promise.all([
     supabase
       .from('learner_applications')
       .select('id, created_at, name, phone, email, college_name, educational_status, referral_source, referral_detail, signup_token, signed_up_at')
@@ -39,6 +42,7 @@ export default async function LearnerApplicationsPage() {
     supabase
       .from('prospects')
       .select('email, signup_token, name, phone, college, education_status, referral_source, referral_detail'),
+    fetchChallengeStatusByEmail(supabase),
   ])
 
   // Token-first, email-fallback matching (see lib/signupMatch.ts).
@@ -74,6 +78,10 @@ export default async function LearnerApplicationsPage() {
       referral_detail:    firstFilled(a.referral_detail, p?.referral_detail),
       signed_into_pulse:  match.matched,
       match_method:       match.method,
+      // Join challenge status by email — prefer the matched prospect's email
+      // (token-first), falling back to the application's own email.
+      challenge_status:
+        challengeStatus.get((match.prospectEmail ?? a.email)?.trim().toLowerCase() ?? '') ?? 'Not joined',
     }
   })
 

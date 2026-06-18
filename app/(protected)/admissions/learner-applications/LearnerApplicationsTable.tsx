@@ -19,6 +19,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import type { LearnerApplication } from './page'
+import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
 
 const SIZING_KEY = 'hva-col-learner-admissions'
 function loadSizing(): ColumnSizingState {
@@ -52,11 +53,19 @@ type SignedFilter = 'all' | 'yes' | 'no'
 
 export default function LearnerApplicationsTable({ applications }: { applications: LearnerApplication[] }) {
   const [sorting, setSorting]               = useState<SortingState>([])
-  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
+  const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [signedFilter, setSignedFilter]     = useState<SignedFilter>('all')
   const [hideDuplicates, setHideDuplicates] = useState(true)
   const [search, setSearch]                 = useState('')
+
+  // Load saved column widths after mount (not during render) so SSR markup and
+  // the client's first render match — reading localStorage in a useState
+  // initializer causes a hydration mismatch on the width style attributes.
+  useEffect(() => {
+    const saved = loadSizing()
+    if (Object.keys(saved).length) setColumnSizing(saved)
+  }, [])
 
   // Base set after the dedup + search passes (before the signed-in filter).
   // Applications are sorted newest-first, so the first occurrence we keep per
@@ -161,13 +170,14 @@ export default function LearnerApplicationsTable({ applications }: { application
         enableColumnFilter: false,
         cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
       }),
-      col.accessor('signed_into_pulse', {
+      col.accessor((a) => (a.signed_into_pulse ? 'Yes' : 'No'), {
+        id: 'signed_into_pulse',
         header: 'Signed into Pulse?',
         size: 150,
-        enableColumnFilter: false,
+        filterFn: multiSelectFilter,
         cell: (info) => {
           const method = info.row.original.match_method
-          return info.getValue() ? (
+          return info.row.original.signed_into_pulse ? (
             <span
               title={method === 'token' ? 'Matched by signup token' : 'Matched by email'}
               className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
@@ -183,6 +193,12 @@ export default function LearnerApplicationsTable({ applications }: { application
             </span>
           )
         },
+      }),
+      col.accessor('challenge_status', {
+        header: 'Challenge',
+        size: 140,
+        filterFn: multiSelectFilter,
+        cell: (info) => <ChallengeStatusBadge status={info.getValue()} />,
       }),
     ],
     [],

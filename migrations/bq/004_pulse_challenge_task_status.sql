@@ -66,11 +66,19 @@ catalog AS (
   JOIN `sensai-441917.sensai_prod.tasks` t
     ON t.id = ct.task_id
   WHERE t.deleted_at IS NULL          -- course_tasks has no deleted_at in BQ
+    AND t.status = 'published'        -- see note below
     AND t.org_id = 4
     AND ct.created_at >= TIMESTAMP('2020-01-01')  -- partition filters
     AND t.created_at  >= TIMESTAMP('2020-01-01')
   GROUP BY ct.course_id, ct.task_id
 ),
+-- status = 'published' is load-bearing, NOT just cosmetic. Task deletions in SensAI
+-- do NOT reliably propagate to the BQ mirror as `deleted_at` (verified 2026-06-18:
+-- 'Test', 'New quiz', 'New learning material' placeholders were deleted before the
+-- mirror ran yet still showed deleted_at = NULL). Those leftovers are all status =
+-- 'draft', as are not-yet-published work-in-progress days. Filtering to 'published'
+-- both drops the orphaned placeholders AND scopes the denominator to what learners
+-- can actually see — the correct base for a live challenge's completion %.
 courses AS (
   SELECT id AS course_id, ANY_VALUE(name) AS course_name
   FROM `sensai-441917.sensai_prod.courses`

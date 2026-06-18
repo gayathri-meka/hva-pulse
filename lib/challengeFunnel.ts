@@ -36,3 +36,37 @@ export function challengeFunnel(rows: ChallengeRawRow[]): ChallengeFunnel {
   }
   return { joined, started, completed }
 }
+
+// Per-learner challenge status, for joining onto the Prospects / Website Hits tables.
+export type ChallengeStatus = 'Completed' | 'Started' | 'Joined' | 'Not joined'
+
+// Map of normalised email -> status for everyone present in the challenge cohort.
+// Emails absent from the map are 'Not joined'. Dedupes (email, task) so duplicate
+// synced rows can't skew the completed === total check.
+export function challengeStatusByEmail(rows: ChallengeRawRow[]): Map<string, ChallengeStatus> {
+  const byEmail = new Map<string, { total: number; completed: number; anyStarted: boolean }>()
+  const seen = new Set<string>()
+  for (const r of rows) {
+    const email = (r.learner_id ?? '').trim().toLowerCase()
+    if (!email) continue
+    const taskId = r.dimensions?.task_id ?? ''
+    const key = `${email}|${taskId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const state = r.dimensions?.state ?? 'not_started'
+    const e = byEmail.get(email) ?? { total: 0, completed: 0, anyStarted: false }
+    e.total += 1
+    if (state === 'completed') e.completed += 1
+    if (state !== 'not_started') e.anyStarted = true
+    byEmail.set(email, e)
+  }
+
+  const out = new Map<string, ChallengeStatus>()
+  for (const [email, e] of byEmail) {
+    out.set(
+      email,
+      e.total > 0 && e.completed === e.total ? 'Completed' : e.anyStarted ? 'Started' : 'Joined',
+    )
+  }
+  return out
+}

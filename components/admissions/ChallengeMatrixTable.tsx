@@ -18,44 +18,61 @@ import {
   type FilterFn,
   type SortingState,
 } from '@tanstack/react-table'
-import type { Prospect } from './page'
-import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
+import type { Member, CohortDay } from './ChallengeClient'
 
-const SIZING_KEY = 'hva-col-prospects'
+const SIZING_KEY = 'hva-col-challenge'
 function loadSizing(): ColumnSizingState {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}') } catch { return {} }
 }
 
-function formatLabel(value: string | null): string {
+const pct = (c: number, t: number) => (t ? Math.round((c / t) * 100) : 0)
+
+function fmtDate(value: string | null): string {
   if (!value) return '—'
-  return value.includes('_')
-    ? value.split('_').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
-    : value
+  return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString('en-GB', {
-    day:   '2-digit',
-    month: 'short',
-    year:  'numeric',
-  })
+// Heatmap tone for a (completed/total) day cell.
+function cellTone(completed: number, total: number) {
+  if (total === 0) return 'bg-zinc-50 text-zinc-300'
+  if (completed === 0) return 'bg-zinc-50 text-zinc-400'
+  if (completed >= total) return 'bg-emerald-100 text-emerald-800'
+  return 'bg-amber-50 text-amber-700'
 }
 
-const multiSelectFilter: FilterFn<Prospect> = (row, colId, filterValues: string[]) =>
+function dayOf(m: Member, ordering: number) {
+  return m.days.find((d) => d.ordering === ordering)
+}
+function dayFrac(m: Member, ordering: number, fallbackTotal: number) {
+  const d = dayOf(m, ordering)
+  const completed = d?.completed ?? 0
+  const total = d?.total ?? fallbackTotal
+  return { completed, total }
+}
+
+const multiSelectFilter: FilterFn<Member> = (row, colId, filterValues: string[]) =>
   !filterValues?.length || filterValues.includes(String(row.getValue(colId) ?? ''))
 multiSelectFilter.autoRemove = (val: string[]) => !val?.length
 
-const col = createColumnHelper<Prospect>()
+const col = createColumnHelper<Member>()
 
-export default function ProspectsTable({ prospects }: { prospects: Prospect[] }) {
+export default function ChallengeMatrixTable({
+  members,
+  cohortDays,
+  onOpenDay,
+}: {
+  members: Member[]
+  cohortDays: CohortDay[]
+  onOpenDay: (email: string, dayOrdering: number) => void
+}) {
   const [sorting, setSorting]             = useState<SortingState>([])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [search, setSearch]               = useState('')
 
-  // Load saved column widths after mount (not during render) so SSR markup and
-  // the client's first render match — reading localStorage in a useState
+  // Load saved column widths after mount (not during render) so the SSR markup
+  // and the client's first render match — reading localStorage in a useState
   // initializer causes a hydration mismatch on the width style attributes.
   useEffect(() => {
     const saved = loadSizing()
@@ -64,29 +81,23 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return prospects
-    return prospects.filter(
-      (p) => p.name?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q),
+    if (!q) return members
+    return members.filter(
+      (m) => m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q),
     )
-  }, [prospects, search])
+  }, [members, search])
 
   const columns = useMemo(
     () => [
-      col.accessor('created_at', {
-        header: 'Signed up',
-        size: 140,
-        enableColumnFilter: false,
-        cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
-      }),
       col.accessor('name', {
         header: 'Name',
         size: 200,
         enableColumnFilter: false,
-        cell: (info) => <span className="font-medium text-zinc-900">{info.getValue() ?? '—'}</span>,
+        cell: (info) => <span className="font-medium text-zinc-900">{info.getValue() || '—'}</span>,
       }),
       col.accessor('email', {
         header: 'Email',
-        size: 260,
+        size: 240,
         enableColumnFilter: false,
         cell: (info) => (
           <a href={`mailto:${info.getValue()}`} className="text-zinc-600 hover:text-zinc-900 hover:underline">
@@ -94,101 +105,107 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
           </a>
         ),
       }),
-      col.accessor('phone', {
-        header: 'Phone',
-        size: 130,
-        enableColumnFilter: false,
-        cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
-      }),
-      col.accessor('college', {
-        header: 'College',
-        size: 240,
-        filterFn: multiSelectFilter,
-        cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
-      }),
-      col.accessor('education_status', {
-        header: 'Education status',
-        size: 220,
-        filterFn: multiSelectFilter,
-        cell: (info) => <span className="text-zinc-600">{info.getValue() ?? '—'}</span>,
-      }),
-      col.accessor('referral_source', {
-        header: 'How did they hear?',
-        size: 180,
-        filterFn: multiSelectFilter,
-        cell: (info) => {
-          const v = info.getValue()
-          return v ? (
-            <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200">
-              {formatLabel(v)}
-            </span>
-          ) : (
-            <span className="text-zinc-400">—</span>
-          )
-        },
-      }),
-      col.accessor('referral_detail', {
-        header: 'Referral detail',
-        size: 220,
-        enableColumnFilter: false,
-        cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-      }),
-      col.accessor((row) => (row.interest_form_submitted_at ? 'Submitted' : 'Pending'), {
-        id: 'interest_form',
-        header: 'Interest form',
-        size: 150,
+      col.accessor((m) => (m.started ? 'Started' : 'Not yet'), {
+        id: 'started',
+        header: 'Started',
+        size: 120,
         filterFn: multiSelectFilter,
         cell: (info) =>
-          info.getValue() === 'Submitted' ? (
+          info.getValue() === 'Started' ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Submitted
+              Started
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-500">
               <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-              Pending
+              Not yet
             </span>
           ),
       }),
-      col.accessor('challenge_status', {
-        header: 'Challenge',
-        size: 140,
-        filterFn: multiSelectFilter,
-        cell: (info) => <ChallengeStatusBadge status={info.getValue()} />,
+      col.accessor((m) => pct(m.completedTasks, m.totalTasks), {
+        id: 'overall',
+        header: 'Overall',
+        size: 150,
+        enableColumnFilter: false,
+        cell: (info) => {
+          const v = info.getValue() as number
+          return (
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-zinc-100">
+                <div className="h-full rounded-full bg-[#5BAE5B]" style={{ width: `${v}%` }} />
+              </div>
+              <span className="text-xs font-semibold text-zinc-700">{v}%</span>
+            </div>
+          )
+        },
       }),
-      col.accessor((row) => row.interest_form_submitted_at, {
-        id: 'form_fill_date',
-        header: 'Form fill date',
-        size: 140,
+      col.accessor((m) => `${m.completedTasks}/${m.totalTasks}`, {
+        id: 'done',
+        header: 'Done',
+        size: 100,
+        enableColumnFilter: false,
+        sortingFn: (a, b) => a.original.completedTasks - b.original.completedTasks,
+        cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
+      }),
+      // One column per challenge day — heatmap X/Y cells, sortable by completion
+      // ratio, filterable by status (Completed / In progress / Not started). The
+      // accessor returns the status bucket (so the filter dropdown + CSV are clean);
+      // the cell still renders the X/Y heatmap from row.original. Clicking a cell
+      // opens the Detailed accordion for that learner + that day.
+      ...cohortDays.map((cd) =>
+        col.accessor((m) => {
+          const { completed, total } = dayFrac(m, cd.ordering, cd.totalTasks)
+          if (total === 0) return ''
+          return completed >= total ? 'Completed' : completed > 0 ? 'In progress' : 'Not started'
+        }, {
+          id: `day_${cd.ordering}`,
+          header: cd.name,
+          size: 110,
+          filterFn: multiSelectFilter,
+          sortingFn: (a, b) => {
+            const fa = dayFrac(a.original, cd.ordering, cd.totalTasks)
+            const fb = dayFrac(b.original, cd.ordering, cd.totalTasks)
+            return (fa.total ? fa.completed / fa.total : 0) - (fb.total ? fb.completed / fb.total : 0)
+          },
+          cell: (info) => {
+            const m = info.row.original
+            const { completed, total } = dayFrac(m, cd.ordering, cd.totalTasks)
+            return (
+              <button
+                type="button"
+                onClick={() => onOpenDay(m.email, cd.ordering)}
+                title={`${m.name} · ${cd.name} — view tasks`}
+                className={`mx-auto block w-full rounded-md px-2 py-1 text-center text-xs font-medium transition hover:ring-2 hover:ring-[#5BAE5B]/50 focus:outline-none focus:ring-2 focus:ring-[#5BAE5B] ${cellTone(completed, total)}`}
+              >
+                {completed}/{total}
+              </button>
+            )
+          },
+        }),
+      ),
+      col.accessor((m) => m.lastActive, {
+        id: 'last_active',
+        header: 'Last active',
+        size: 130,
         enableColumnFilter: false,
         sortingFn: (a, b) => {
-          const av = a.original.interest_form_submitted_at
-          const bv = b.original.interest_form_submitted_at
+          const av = a.original.lastActive, bv = b.original.lastActive
           if (!av && !bv) return 0
-          if (!av) return 1
-          if (!bv) return -1
+          if (!av) return -1
+          if (!bv) return 1
           return new Date(av).getTime() - new Date(bv).getTime()
         },
-        cell: (info) => {
-          const v = info.getValue() as string | null
-          return v ? <span className="text-zinc-500">{formatDate(v)}</span> : <span className="text-zinc-300">—</span>
-        },
-      }),
-      col.accessor('last_seen_at', {
-        header: 'Last seen',
-        size: 140,
-        enableColumnFilter: false,
-        cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
+        cell: (info) => <span className="text-zinc-500">{fmtDate(info.getValue() as string | null)}</span>,
       }),
     ],
-    [],
+    [cohortDays, onOpenDay],
   )
 
   const table = useReactTable({
     data: filtered,
     columns,
-    state: { sorting, columnSizing, columnFilters, columnPinning: { left: ['created_at', 'name'] } },
+    state: { sorting, columnSizing, columnFilters, columnPinning: { left: ['name', 'email'] } },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: (updater) => {
@@ -204,21 +221,17 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
     columnResizeMode: 'onChange',
-    getRowId: (row) => row.id,
+    getRowId: (row) => row.email,
   })
 
-  if (prospects.length === 0) {
-    return (
-      <div className="rounded-xl border border-zinc-200 bg-white py-16 text-center shadow-sm">
-        <p className="text-sm text-zinc-400">No prospects yet.</p>
-      </div>
-    )
+  if (members.length === 0) {
+    return <p className="text-sm text-zinc-400">No one has joined the challenge cohort yet.</p>
   }
 
-  const totalCount   = prospects.length
+  const totalCount   = members.length
   const visibleCount = table.getRowModel().rows.length
   const countLabel   = visibleCount === totalCount
-    ? `${totalCount} row${totalCount === 1 ? '' : 's'}`
+    ? `${totalCount} member${totalCount === 1 ? '' : 's'}`
     : `${visibleCount} of ${totalCount}`
 
   return (
@@ -245,7 +258,7 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
           <span className="whitespace-nowrap text-xs font-medium text-zinc-500">{countLabel}</span>
         </div>
         <button
-          onClick={() => exportToCsv(table, `prospects_${new Date().toISOString().slice(0, 10)}.csv`)}
+          onClick={() => exportToCsv(table, `challenge_members_${new Date().toISOString().slice(0, 10)}.csv`)}
           className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
           title="Download CSV"
         >
@@ -270,7 +283,7 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
                     <th
                       key={header.id}
                       style={{ width: header.getSize(), left }}
-                      className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${
+                      className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${
                         pinned ? 'z-20' : 'z-10'
                       } ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                     >
@@ -309,14 +322,11 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
                     const pinned       = cell.column.getIsPinned() === 'left'
                     const isLastPinned = pinned && cell.column.getIsLastColumn('left')
                     const left         = pinned ? cell.column.getStart('left') : undefined
-                    const raw          = cell.getValue()
-                    const title        = typeof raw === 'string' && raw ? raw : undefined
                     return (
                       <td
                         key={cell.id}
-                        title={title}
                         style={{ width: cell.column.getSize(), left }}
-                        className={`truncate border-b border-zinc-100 px-6 py-3.5 ${
+                        className={`truncate border-b border-zinc-100 px-4 py-3 ${
                           pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''
                         } ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                       >
@@ -334,7 +344,7 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
   )
 }
 
-function FilterDropdown({ column }: { column: Column<Prospect, unknown> }) {
+function FilterDropdown({ column }: { column: Column<Member, unknown> }) {
   const [open, setOpen]     = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
   const btnRef              = useRef<HTMLButtonElement>(null)
@@ -385,7 +395,7 @@ function FilterDropdown({ column }: { column: Column<Prospect, unknown> }) {
 
   const label =
     selected.length === 0 ? 'All'
-    : selected.length === 1 ? formatLabel(selected[0])
+    : selected.length === 1 ? selected[0]
     : `${selected.length} selected`
 
   return (
@@ -426,7 +436,7 @@ function FilterDropdown({ column }: { column: Column<Prospect, unknown> }) {
                 onChange={() => toggle(opt)}
                 className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
               />
-              <span>{formatLabel(opt)}</span>
+              <span>{opt}</span>
             </label>
           ))}
           {options.length === 0 && <p className="px-3 py-1 text-xs text-zinc-400">No values</p>}

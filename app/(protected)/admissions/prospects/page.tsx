@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
+import { fetchChallengeStatusByEmail } from '@/lib/challengeStatus'
+import type { ChallengeStatus } from '@/lib/challengeFunnel'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import ProspectsTable from './ProspectsTable'
 
@@ -16,6 +18,7 @@ export type Prospect = {
   referral_source:             string | null
   referral_detail:             string | null
   interest_form_submitted_at:  string | null
+  challenge_status:            ChallengeStatus
   created_at:                  string
   last_seen_at:                string
 }
@@ -30,12 +33,15 @@ export default async function ProspectsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const { data } = await supabase
-    .from('prospects')
-    .select(
-      'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at',
-    )
-    .order('created_at', { ascending: false })
+  const [{ data }, challengeStatus] = await Promise.all([
+    supabase
+      .from('prospects')
+      .select(
+        'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at',
+      )
+      .order('created_at', { ascending: false }),
+    fetchChallengeStatusByEmail(supabase),
+  ])
 
   // Canonicalize referral/education so prospects render identically to the
   // Website Hits table (no-op for already-canonical values; free-text survives).
@@ -43,6 +49,7 @@ export default async function ProspectsPage() {
     ...p,
     referral_source:  canonicalReferral(p.referral_source),
     education_status: canonicalEducation(p.education_status),
+    challenge_status: challengeStatus.get(p.email?.trim().toLowerCase()) ?? 'Not joined',
   })) as Prospect[]
 
   const submittedCount = prospects.filter((p) => p.interest_form_submitted_at).length

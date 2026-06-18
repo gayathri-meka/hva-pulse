@@ -17,6 +17,22 @@ export const dynamic = 'force-dynamic'
 type Dim = Record<string, string | null>
 const num = (v: string | null | undefined) => (v == null || v === '' ? 0 : Number(v))
 
+// BigQuery TIMESTAMPs land in metric_raw_rows as epoch-seconds strings in
+// scientific notation (e.g. "1.781682303E9"), so new Date() on them is invalid.
+// Normalise to epoch-ms; also tolerate ISO strings / {value} objects just in case.
+function activityMs(v: unknown): number | null {
+  if (v == null || v === '') return null
+  if (typeof v === 'object' && 'value' in (v as Record<string, unknown>)) v = (v as { value: unknown }).value
+  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v
+  if (typeof v === 'string') {
+    const n = Number(v)
+    if (Number.isFinite(n)) return n < 1e12 ? n * 1000 : n
+    const parsed = Date.parse(v)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+  return null
+}
+
 export default async function AdmissionsChallengePage() {
   const appUser = await getAppUser()
   const supabase = createClient(
@@ -43,14 +59,40 @@ export default async function AdmissionsChallengePage() {
     )
   }
 
-  const [{ data: rawRows }, { data: prospectRows }] = await Promise.all([
-    supabase
-      .from('metric_raw_rows')
-      .select('learner_id, dimensions')
-      .eq('source_id', src.id)
-      .limit(20000),
+  // PostgREST caps a single response at max-rows (1000 by default), so .limit()
+  // alone silently truncates — page through with .range() to load every row.
+  async function fetchAllRawRows(sourceId: string) {
+    const PAGE = 1000
+    const all: { learner_id: string | null; dimensions: Dim | null }[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('metric_raw_rows')
+        .select('learner_id, dimensions')
+        .eq('source_id', sourceId)
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      if (!data?.length) break
+      all.push(...(data as { learner_id: string | null; dimensions: Dim | null }[]))
+      if (data.length < PAGE) break
+    }
+    return all
+  }
+
+  const [fetchedRows, { data: prospectRows }] = await Promise.all([
+    fetchAllRawRows(src.id),
     supabase.from('prospects').select('email, name'),
   ])
+
+  // Defensive dedupe: syncDataSource does a non-atomic delete-then-insert, so two
+  // overlapping syncs can leave duplicate (member, task) rows — which doubles every
+  // task in the UI and breaks React keys. Collapse to one row per (learner_id, task_id).
+  const seenKey = new Set<string>()
+  const rawRows = fetchedRows.filter((r) => {
+    const key = `${(r.learner_id ?? '').trim().toLowerCase()}|${(r.dimensions as Dim)?.task_id ?? ''}`
+    if (seenKey.has(key)) return false
+    seenKey.add(key)
+    return true
+  })
 
   const prospectName = new Map(
     (prospectRows ?? []).map((p) => [p.email.trim().toLowerCase(), p.name as string | null]),
@@ -95,8 +137,8 @@ export default async function AdmissionsChallengePage() {
       const totalTasks = days.reduce((s, d) => s + d.total, 0)
       const completedTasks = days.reduce((s, d) => s + d.completed, 0)
       const started = dims.some((d) => (d.state ?? 'not_started') !== 'not_started')
-      const lastActive =
-        dims.map((d) => d.last_activity_at).filter(Boolean).sort().pop() ?? null
+      const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
+      const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
       return {
         email,
         name: prospectName.get(email) || dims[0]?.learner_name || email,

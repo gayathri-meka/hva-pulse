@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import ChallengeMatrixTable from './ChallengeMatrixTable'
 
 export type TaskState = 'not_started' | 'attempted' | 'completed'
 export type TaskItem = { taskId: string; title: string; type: string; ordering: number; state: TaskState }
@@ -29,7 +30,7 @@ const pct = (c: number, t: number) => (t ? Math.round((c / t) * 100) : 0)
 
 // Accordion row template — inline style (not a Tailwind arbitrary class) so the
 // decimal fr values reliably compile.
-const ROW_COLS = '1.6fr 1.4fr 0.7fr 0.7fr'
+const ROW_COLS = '1.8fr 2.8fr 0.7fr 0.6fr'
 
 function Bar({ value }: { value: number }) {
   return (
@@ -55,14 +56,6 @@ const STATE_LABEL: Record<TaskState, string> = {
   not_started: 'Not started',
 }
 
-// Heatmap tone for a (completed/total) day cell in the matrix view.
-function cellTone(completed: number, total: number) {
-  if (total === 0) return 'bg-zinc-50 text-zinc-300'
-  if (completed === 0) return 'bg-zinc-50 text-zinc-400'
-  if (completed >= total) return 'bg-emerald-100 text-emerald-800'
-  return 'bg-amber-50 text-amber-700'
-}
-
 export default function ChallengeClient({
   members,
   cohortDays,
@@ -70,7 +63,7 @@ export default function ChallengeClient({
   members: Member[]
   cohortDays: CohortDay[]
 }) {
-  const [view, setView] = useState<'detail' | 'matrix'>('detail')
+  const [view, setView] = useState<'detail' | 'matrix'>('matrix')
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -121,34 +114,13 @@ export default function ChallengeClient({
 
       {/* ── Members ─────────────────────────────────────────────────────── */}
       <section>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Members ({memberCountLabel})
-            </h2>
-            <div className="relative">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
-              >
-                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
-              </svg>
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name or email…"
-                className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 pl-8 pr-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
-              />
-            </div>
-          </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Members</h2>
           {/* View toggle */}
           <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">
             {([
-              ['detail', 'Detailed'],
               ['matrix', 'Day-by-day'],
+              ['detail', 'Detailed'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -163,20 +135,54 @@ export default function ChallengeClient({
           </div>
         </div>
 
-        {filteredMembers.length === 0 ? (
-          <div className="rounded-xl border border-zinc-200 bg-white py-12 text-center">
-            <p className="text-sm text-zinc-400">No members match “{search}”.</p>
-          </div>
-        ) : view === 'detail' ? (
-          <DetailView
-            members={filteredMembers}
-            openMember={openMember}
-            setOpenMember={setOpenMember}
-            openDay={openDay}
-            setOpenDay={setOpenDay}
+        {view === 'matrix' ? (
+          <ChallengeMatrixTable
+            members={members}
+            cohortDays={cohortDays}
+            onOpenDay={(email, ordering) => {
+              setSearch('')
+              setView('detail')
+              setOpenMember(email)
+              setOpenDay(`${email}:${ordering}`)
+            }}
           />
         ) : (
-          <MatrixView members={filteredMembers} cohortDays={cohortDays} />
+          <>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="relative">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+                >
+                  <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+                </svg>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search name or email…"
+                  className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 pl-8 pr-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
+                />
+              </div>
+              <span className="whitespace-nowrap text-xs font-medium text-zinc-500">{memberCountLabel}</span>
+            </div>
+
+            {filteredMembers.length === 0 ? (
+              <div className="rounded-xl border border-zinc-200 bg-white py-12 text-center">
+                <p className="text-sm text-zinc-400">No members match “{search}”.</p>
+              </div>
+            ) : (
+              <DetailView
+                members={filteredMembers}
+                openMember={openMember}
+                setOpenMember={setOpenMember}
+                openDay={openDay}
+                setOpenDay={setOpenDay}
+              />
+            )}
+          </>
         )}
       </section>
     </div>
@@ -197,16 +203,25 @@ function DetailView({
   openDay: string | null
   setOpenDay: (v: string | null) => void
 }) {
+  // When a day is opened (incl. via a matrix cell click), scroll it into view.
+  const openDayRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!openDay) return
+    const el = openDayRef.current
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }, [openDay])
+
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200">
-      {/* Header */}
+      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+      {/* Header (frozen) */}
       <div
-        className="grid items-center gap-3 border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500"
+        className="sticky top-0 z-10 grid items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500"
         style={{ gridTemplateColumns: ROW_COLS }}
       >
         <span>Member</span>
         <span>Progress</span>
-        <span>Started</span>
+        <span className="text-right">Started</span>
         <span className="text-right">Last active</span>
       </div>
 
@@ -242,7 +257,7 @@ function DetailView({
               </div>
 
               {/* Started */}
-              <div>
+              <div className="text-right">
                 {m.started ? (
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Started</span>
                 ) : (
@@ -261,7 +276,11 @@ function DetailView({
                   const dayKey = `${m.email}:${d.ordering}`
                   const dayOpen = openDay === dayKey
                   return (
-                    <div key={d.ordering} className="rounded-lg border border-zinc-200 bg-white">
+                    <div
+                      key={d.ordering}
+                      ref={dayOpen ? openDayRef : undefined}
+                      className="scroll-mt-24 rounded-lg border border-zinc-200 bg-white"
+                    >
                       <button
                         onClick={() => setOpenDay(dayOpen ? null : dayKey)}
                         className="flex w-full items-center gap-3 px-3 py-2 text-left"
@@ -298,58 +317,7 @@ function DetailView({
           </div>
         )
       })}
-    </div>
-  )
-}
-
-// ── Day-by-day matrix view ─────────────────────────────────────────────────
-function MatrixView({ members, cohortDays }: { members: Member[]; cohortDays: CohortDay[] }) {
-  return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-200">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-zinc-50 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-            <th className="sticky left-0 z-10 bg-zinc-50 px-4 py-2.5 text-left">Member</th>
-            {cohortDays.map((d) => (
-              <th key={d.ordering} className="whitespace-nowrap px-2 py-2.5 text-center font-semibold" title={`${d.totalTasks} tasks`}>
-                {d.name}
-              </th>
-            ))}
-            <th className="px-3 py-2.5 text-right">Overall</th>
-          </tr>
-        </thead>
-        <tbody>
-          {members.map((m) => {
-            const byOrdering = new Map(m.days.map((d) => [d.ordering, d]))
-            return (
-              <tr key={m.email} className="border-t border-zinc-100">
-                <td className="sticky left-0 z-10 bg-white px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-zinc-900">{m.name}</span>
-                    <SourceChip source={m.source} />
-                  </div>
-                  <div className="truncate text-xs text-zinc-400">{m.email}</div>
-                </td>
-                {cohortDays.map((cd) => {
-                  const d = byOrdering.get(cd.ordering)
-                  const completed = d?.completed ?? 0
-                  const total = d?.total ?? cd.totalTasks
-                  return (
-                    <td key={cd.ordering} className="px-1.5 py-1.5 text-center">
-                      <div className={`mx-auto rounded-md px-2 py-1.5 text-xs font-medium ${cellTone(completed, total)}`}>
-                        {completed}/{total}
-                      </div>
-                    </td>
-                  )
-                })}
-                <td className="px-3 py-2.5 text-right font-semibold text-zinc-700">
-                  {pct(m.completedTasks, m.totalTasks)}%
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      </div>
     </div>
   )
 }
