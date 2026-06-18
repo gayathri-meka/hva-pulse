@@ -33,6 +33,22 @@ function activityMs(v: unknown): number | null {
   return null
 }
 
+// Bucket epoch-ms to an IST (Asia/Kolkata, UTC+5:30) calendar date (YYYY-MM-DD).
+// Learners are in India, so an evening session must land on one local day.
+const IST_OFFSET_MS = 5.5 * 3600 * 1000
+const istDate = (ms: number) => new Date(ms + IST_OFFSET_MS).toISOString().slice(0, 10)
+// Inclusive list of YYYY-MM-DD dates from start..end.
+function dateRangeList(start: string, end: string): string[] {
+  const out: string[] = []
+  let cur = Date.parse(`${start}T00:00:00Z`)
+  const last = Date.parse(`${end}T00:00:00Z`)
+  while (cur <= last && out.length < 200) {
+    out.push(new Date(cur).toISOString().slice(0, 10))
+    cur += 86400000
+  }
+  return out
+}
+
 export default async function AdmissionsChallengePage() {
   const appUser = await getAppUser()
   const supabase = createClient(
@@ -139,6 +155,13 @@ export default async function AdmissionsChallengePage() {
       const started = dims.some((d) => (d.state ?? 'not_started') !== 'not_started')
       const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
       const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
+      // Tasks done per IST calendar day — powers the Pace view (sparkline +
+      // active/span/cramming metrics + the per-date heat columns).
+      const activityByDate: Record<string, number> = {}
+      for (const ms of activityTimes) {
+        const day = istDate(ms)
+        activityByDate[day] = (activityByDate[day] ?? 0) + 1
+      }
       return {
         email,
         name: prospectName.get(email) || dims[0]?.learner_name || email,
@@ -148,6 +171,7 @@ export default async function AdmissionsChallengePage() {
         completedTasks,
         started,
         lastActive,
+        activityByDate,
       }
     })
     .sort((a, b) => b.completedTasks - a.completedTasks || a.name.localeCompare(b.name))
@@ -180,6 +204,16 @@ export default async function AdmissionsChallengePage() {
     (rawRows ?? []) as { learner_id: string | null; dimensions: Record<string, string | null> | null }[],
   )
 
+  // Calendar axis for the Pace view: earliest activity date in the cohort → today
+  // (IST), auto-extending. Computed server-side so SSR and client hydration agree.
+  // End covers max(today, latest activity) in case the mirror is slightly ahead.
+  const allActivityDates = members.flatMap((m) => Object.keys(m.activityByDate)).sort()
+  const todayIst = istDate(Date.now())
+  const calendarStart = allActivityDates[0] ?? todayIst
+  const lastActivityDate = allActivityDates[allActivityDates.length - 1] ?? todayIst
+  const calendarEnd = lastActivityDate > todayIst ? lastActivityDate : todayIst
+  const calendarDates = dateRangeList(calendarStart, calendarEnd)
+
   const syncSource: SyncSource = {
     id: src.id,
     name: src.name,
@@ -203,7 +237,7 @@ export default async function AdmissionsChallengePage() {
           <SourceSyncButton sources={[syncSource]} />
         </div>
       )}
-      <ChallengeClient members={members} cohortDays={cohortDays} />
+      <ChallengeClient members={members} cohortDays={cohortDays} calendarDates={calendarDates} />
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ChallengeMatrixTable from './ChallengeMatrixTable'
+import ChallengePaceTable from './ChallengePaceTable'
 
 export type TaskState = 'not_started' | 'attempted' | 'completed'
 export type TaskItem = { taskId: string; title: string; type: string; ordering: number; state: TaskState }
@@ -15,6 +16,7 @@ export type Member = {
   completedTasks: number
   started: boolean
   lastActive: string | null
+  activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
 }
 export type CohortDay = {
   ordering: number
@@ -42,7 +44,8 @@ function Bar({ value }: { value: number }) {
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  // Explicit locale so server and client render identically (avoids hydration mismatch).
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
 }
 
 const STATE_DOT: Record<TaskState, string> = {
@@ -59,11 +62,13 @@ const STATE_LABEL: Record<TaskState, string> = {
 export default function ChallengeClient({
   members,
   cohortDays,
+  calendarDates,
 }: {
   members: Member[]
   cohortDays: CohortDay[]
+  calendarDates: string[]
 }) {
-  const [view, setView] = useState<'detail' | 'matrix'>('matrix')
+  const [view, setView] = useState<'detail' | 'matrix' | 'pace'>('matrix')
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -121,6 +126,7 @@ export default function ChallengeClient({
             {([
               ['matrix', 'Day-by-day'],
               ['detail', 'Detailed'],
+              ['pace', 'Pace'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -135,7 +141,9 @@ export default function ChallengeClient({
           </div>
         </div>
 
-        {view === 'matrix' ? (
+        {view === 'pace' ? (
+          <ChallengePaceTable members={members} calendarDates={calendarDates} />
+        ) : view === 'matrix' ? (
           <ChallengeMatrixTable
             members={members}
             cohortDays={cohortDays}
