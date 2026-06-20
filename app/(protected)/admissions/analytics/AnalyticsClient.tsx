@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { buildProspectIndex, matchSignup } from '@/lib/signupMatch'
 import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
-import type { ChallengeFunnel } from '@/lib/challengeFunnel'
+import type { ChallengeFunnel, ChallengeEventDates } from '@/lib/challengeFunnel'
 import type { AnalyticsRow } from './page'
 
 const norm = (e: string | null) => (e ?? '').trim().toLowerCase()
@@ -62,10 +62,12 @@ export default function AnalyticsClient({
   hits,
   signups,
   challenge,
+  challengeDates,
 }: {
-  hits:      AnalyticsRow[]
-  signups:   AnalyticsRow[]
-  challenge: ChallengeFunnel
+  hits:           AnalyticsRow[]
+  signups:        AnalyticsRow[]
+  challenge:      ChallengeFunnel
+  challengeDates: ChallengeEventDates
 }) {
   const m = useMemo(() => {
     const index = buildProspectIndex(signups)
@@ -125,6 +127,17 @@ export default function AnalyticsClient({
 
   const convPct = m.uniqueHits > 0 ? Math.round((m.signedUp / m.uniqueHits) * 100) : 0
 
+  // Weekly trends for the challenge funnel. `joined` stays empty until the BQ view
+  // exposing joined_at is re-applied + re-synced (see migrations/bq/004).
+  const challengeWeekly = useMemo(
+    () => ({
+      joined:    weeklySeries(challengeDates.joined),
+      started:   weeklySeries(challengeDates.started),
+      completed: weeklySeries(challengeDates.completed),
+    }),
+    [challengeDates],
+  )
+
   return (
     <div className="space-y-6">
       {/* Website funnel */}
@@ -144,16 +157,26 @@ export default function AnalyticsClient({
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Pulse signups" value={m.totalSignups} sublabel="prospects" series={m.signupsWeekly} unit="signups" />
-          <StatCard label="Joined SensAI" value={challenge.joined} sublabel="in the screening cohort" />
+          <StatCard
+            label="Joined SensAI"
+            value={challenge.joined}
+            sublabel="in the screening cohort"
+            series={challengeWeekly.joined}
+            unit="joined"
+          />
           <StatCard
             label="Started"
             value={challenge.started}
             sublabel={`${challenge.joined > 0 ? Math.round((challenge.started / challenge.joined) * 100) : 0}% of joined`}
+            series={challengeWeekly.started}
+            unit="started"
           />
           <StatCard
             label="Completed"
             value={challenge.completed}
             sublabel={`${challenge.joined > 0 ? Math.round((challenge.completed / challenge.joined) * 100) : 0}% of joined`}
+            series={challengeWeekly.completed}
+            unit="completed"
           />
         </div>
       </section>

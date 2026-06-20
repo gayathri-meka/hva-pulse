@@ -42,16 +42,21 @@ challenge_map AS (
   SELECT 214 AS cohort_id, 587 AS course_id   -- 14-Day Challenge (2026), HVA Screening 2026
 ),
 -- Cohort rosters paired to the challenge course: one row per (course, cohort, member).
+-- joined_at = when the learner joined the SensAI cohort (user_cohorts.joined_at);
+-- powers the "Joined SensAI per week" trend in Admissions → Analytics. MIN() collapses
+-- BQ mirror duplicates to the earliest join timestamp.
 member_course AS (
-  SELECT DISTINCT
+  SELECT
     m.course_id,
     uc.cohort_id,
-    uc.user_id
+    uc.user_id,
+    MIN(uc.joined_at) AS joined_at
   FROM challenge_map m
   JOIN `sensai-441917.sensai_prod.user_cohorts` uc
     ON uc.cohort_id = m.cohort_id
   WHERE uc.deleted_at IS NULL
     AND LOWER(uc.role) = 'learner'
+  GROUP BY m.course_id, uc.cohort_id, uc.user_id
 ),
 -- Full task catalog per course (all task types, with milestone + ordering).
 catalog AS (
@@ -169,6 +174,7 @@ SELECT
   mc.cohort_id,
   mc.course_id,
   co.course_name,
+  mc.joined_at,
   u.email,
   u.learner_name,
   cat.milestone_id,

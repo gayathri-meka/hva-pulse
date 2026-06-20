@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { challengeFunnel, CHALLENGE_VIEW } from '@/lib/challengeFunnel'
+import { challengeFunnel, challengeEventDates, CHALLENGE_VIEW } from '@/lib/challengeFunnel'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import AnalyticsClient from './AnalyticsClient'
 
@@ -29,7 +29,28 @@ export default async function AdmissionsAnalyticsPage() {
     .eq('bq_table', CHALLENGE_VIEW)
     .maybeSingle()
 
-  const [{ data: hits }, { data: signups }, { data: challengeRows }] = await Promise.all([
+  // PostgREST caps a single response at max-rows (1000), so .limit(20000) silently
+  // truncates and the funnel undercounts. Page through with .range() to load every
+  // (member, task) row — same pattern as the Admissions → Challenge tab.
+  type RawRow = { learner_id: string | null; dimensions: Record<string, string | null> | null }
+  async function fetchAllChallengeRows(sourceId: string): Promise<RawRow[]> {
+    const PAGE = 1000
+    const all: RawRow[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('metric_raw_rows')
+        .select('learner_id, dimensions')
+        .eq('source_id', sourceId)
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      if (!data?.length) break
+      all.push(...(data as RawRow[]))
+      if (data.length < PAGE) break
+    }
+    return all
+  }
+
+  const [{ data: hits }, { data: signups }, challengeRows] = await Promise.all([
     supabase
       .from('learner_applications')
       .select('created_at, email, signup_token, signed_up_at, referral_source, educational_status')
@@ -39,12 +60,11 @@ export default async function AdmissionsAnalyticsPage() {
       // alias education_status → educational_status so both populations share AnalyticsRow
       .select('created_at, email, signup_token, referral_source, educational_status:education_status')
       .order('created_at', { ascending: false }),
-    challengeSrc
-      ? supabase.from('metric_raw_rows').select('learner_id, dimensions').eq('source_id', challengeSrc.id).limit(20000)
-      : Promise.resolve({ data: [] as { learner_id: string | null; dimensions: Record<string, string | null> | null }[] }),
+    challengeSrc ? fetchAllChallengeRows(challengeSrc.id) : Promise.resolve([] as RawRow[]),
   ])
 
-  const challenge = challengeFunnel(challengeRows ?? [])
+  const challenge = challengeFunnel(challengeRows)
+  const challengeDates = challengeEventDates(challengeRows)
 
   return (
     <div>
@@ -53,6 +73,7 @@ export default async function AdmissionsAnalyticsPage() {
         hits={(hits ?? []) as AnalyticsRow[]}
         signups={(signups ?? []) as AnalyticsRow[]}
         challenge={challenge}
+        challengeDates={challengeDates}
       />
     </div>
   )
