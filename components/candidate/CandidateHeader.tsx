@@ -14,6 +14,12 @@ const STAGES = [
   { slug: 'selection', label: 'Selection' },
 ]
 
+// Quick links surfaced under the stepper so learners can always jump to the
+// places they actually work — the LMS and the community.
+const SENSAI_URL = 'https://sensai.hyperverge.org'
+const SLACK_URL =
+  'https://hypervergeacademy.slack.com/join/shared_invite/zt-38v9tch9i-yPfd4rsXkthZuuRvE1SZSw#/shared-invite/email'
+
 export default function CandidateHeader({
   completedStages = [],
 }: {
@@ -127,6 +133,69 @@ export default function CandidateHeader({
           })}
         </div>
       </nav>
+
+      {/* Quick links — jump straight to the LMS / community */}
+      <div className="border-t border-white/10">
+        <div className="mx-auto flex max-w-3xl items-center gap-2.5 overflow-x-auto px-4 py-2.5 sm:justify-center sm:gap-3 sm:px-6">
+          <span className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-widest text-white/40">
+            Quick links
+          </span>
+          <a
+            href={SENSAI_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[12px] font-bold text-white/80 transition-all hover:border-white/30 hover:bg-white/10 hover:text-white"
+          >
+            <SensaiMark />
+            SensAI
+          </a>
+          <a
+            href={SLACK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[12px] font-bold text-white/80 transition-all hover:border-white/30 hover:bg-white/10 hover:text-white"
+          >
+            <SlackMark />
+            Slack
+          </a>
+        </div>
+      </div>
     </header>
+  )
+}
+
+// SensAI mark — no official asset bundled, so a brand-green spark stands in.
+// Swap for a real logo SVG/PNG (drop it in /public) when one's available.
+function SensaiMark() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4 flex-shrink-0"
+      fill="none"
+      stroke="#5BAE5B"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
+      <path d="M19 14l.7 1.8 1.8.7-1.8.7L19 19l-.7-1.8-1.8-.7 1.8-.7z" />
+    </svg>
+  )
+}
+
+// Official Slack logo (4-colour mark).
+function SlackMark() {
+  return (
+    <svg viewBox="0 0 122.8 122.8" className="h-3.5 w-3.5 flex-shrink-0" aria-hidden>
+      <path d="M25.8 77.6c0 7.1-5.8 12.9-12.9 12.9S0 84.7 0 77.6s5.8-12.9 12.9-12.9h12.9v12.9z" fill="#E01E5A" />
+      <path d="M32.3 77.6c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9v32.3c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V77.6z" fill="#E01E5A" />
+      <path d="M45.2 25.8c-7.1 0-12.9-5.8-12.9-12.9S38.1 0 45.2 0s12.9 5.8 12.9 12.9v12.9H45.2z" fill="#36C5F0" />
+      <path d="M45.2 32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H12.9C5.8 58.1 0 52.3 0 45.2s5.8-12.9 12.9-12.9h32.3z" fill="#36C5F0" />
+      <path d="M97 45.2c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9-5.8 12.9-12.9 12.9H97V45.2z" fill="#2EB67D" />
+      <path d="M90.5 45.2c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V12.9C64.7 5.8 70.5 0 77.6 0s12.9 5.8 12.9 12.9v32.3z" fill="#2EB67D" />
+      <path d="M77.6 97c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9-12.9-5.8-12.9-12.9V97h12.9z" fill="#ECB22E" />
+      <path d="M77.6 90.5c-7.1 0-12.9-5.8-12.9-12.9s5.8-12.9 12.9-12.9h32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H77.6z" fill="#ECB22E" />
+    </svg>
   )
 }
