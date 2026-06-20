@@ -1,6 +1,6 @@
 import {
   IconAlertCircle,
-  IconBolt,
+  IconCalendarRepeat,
   IconCircleCheck,
   IconExternalLink,
   IconEye,
@@ -95,6 +95,71 @@ export default function ChallengePage() {
           </p>
         </div>
 
+        {/* HOW IT WORKS */}
+        <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="mb-2.5 flex items-center gap-1.5 text-[13px] font-extrabold text-zinc-900 sm:text-[14px]">
+            <IconCalendarRepeat size={16} stroke={2} className="text-[#16a34a]" />
+            How it works
+          </div>
+          <ol className="space-y-2.5">
+            {[
+              <>
+                It runs for <span className="font-extrabold text-zinc-900">14 days</span> — with{' '}
+                <span className="font-extrabold text-zinc-900">a few tasks each day</span>.
+              </>,
+              <>
+                Finish today&apos;s tasks, then{' '}
+                <span className="font-extrabold text-zinc-900">come back tomorrow to the same
+                link</span>.
+              </>,
+              <>
+                The next day&apos;s tasks unlock{' '}
+                <span className="font-extrabold text-zinc-900">24 hours later</span>.
+              </>,
+              <>
+                Return to{' '}
+                <span className="font-extrabold text-zinc-900">this same link every day</span> to
+                pick up where you left off — no new sign-up needed.
+              </>,
+            ].map((text, i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[#dcfce7] text-[11px] font-extrabold text-[#166534]">
+                  {i + 1}
+                </span>
+                <span className="text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
+                  {text}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p
+            className="mt-3 rounded-xl px-3 py-2 text-[12px] font-extrabold leading-[1.5] sm:text-[13px]"
+            style={{ backgroundColor: '#fee2e2', color: '#b91c1c' }}
+          >
+            Bookmark these links:{' '}
+            <a
+              href="https://sensai.hyperverge.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:opacity-80"
+            >
+              sensai.hyperverge.org
+            </a>{' '}
+            and{' '}
+            <a
+              href="https://pulse.academy.hyperverge.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:opacity-80"
+            >
+              pulse.academy.hyperverge.org
+            </a>
+          </p>
+          <p className="mt-2 rounded-xl bg-[#f0fdf4] px-3 py-2 text-[12px] font-semibold leading-[1.5] text-[#166534] sm:text-[13px]">
+            Tip: doing a little every day is the whole point — consistency is what we look for.
+          </p>
+        </div>
+
         {/* PROGRESS CARD — hidden until live SensAI progress is wired (see lib/sensai.ts) */}
         {false && (
         <div className="rounded-2xl border-[0.5px] border-[#fde68a] bg-[#fffbeb] p-4 sm:p-5">
@@ -140,22 +205,11 @@ export default function ChallengePage() {
             What we observe
           </div>
           <p className="text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
-            Consistency · Effort · Honesty · Comprehension · Problem-solving. You
-            don&apos;t need to be perfect, just show up and show your learning
-            behaviour.
-          </p>
-        </div>
-
-        {/* WHERE YOU'LL DO THIS */}
-        <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-4 sm:p-5">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-extrabold text-zinc-900 sm:text-[14px]">
-            <IconBolt size={16} stroke={2} className="text-[#16a34a]" />
-            Where you&apos;ll do this
-          </div>
-          <p className="text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
-            Your daily tasks live on{' '}
-            <span className="font-extrabold text-zinc-900">SensAI</span>, our
-            learning platform. Tap <span className="font-extrabold text-zinc-900">Start the challenge</span> above to head over and begin.
+            Consistency · Effort · Honesty · Comprehension · Problem-solving.
+            <span className="mt-1 block">
+              You don&apos;t need to be perfect, just show up and show your learning
+              behaviour.
+            </span>
           </p>
         </div>
 
