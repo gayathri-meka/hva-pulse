@@ -7,7 +7,8 @@ import { getAppUser } from '@/lib/auth'
 import PlacementHealth from '@/components/placements/PlacementHealth'
 import DashboardFilters from '@/components/dashboard/DashboardFilters'
 import { buildProspectIndex, matchSignup } from '@/lib/signupMatch'
-import { challengeFunnel, CHALLENGE_VIEW } from '@/lib/challengeFunnel'
+import { challengeFunnel } from '@/lib/challengeFunnel'
+import { fetchChallengeRawRows } from '@/lib/challengeStatus'
 import type { PlacementThresholds } from '@/app/(protected)/placements/analytics/actions'
 
 export const dynamic = 'force-dynamic'
@@ -142,18 +143,11 @@ export default async function DashboardPage({ searchParams }: Props) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
-  const { data: challengeSrc } = await admin
-    .from('metric_sources')
-    .select('id')
-    .eq('bq_table', CHALLENGE_VIEW)
-    .maybeSingle()
 
-  const [{ data: hits }, { data: prospects }, { data: challengeRows }] = await Promise.all([
+  const [{ data: hits }, { data: prospects }, challengeRows] = await Promise.all([
     admin.from('learner_applications').select('email, signup_token, signed_up_at'),
     admin.from('prospects').select('email, signup_token'),
-    challengeSrc
-      ? admin.from('metric_raw_rows').select('learner_id, dimensions').eq('source_id', challengeSrc.id).limit(20000)
-      : Promise.resolve({ data: [] as { learner_id: string | null; dimensions: Record<string, string | null> | null }[] }),
+    fetchChallengeRawRows(admin),
   ])
 
   const normEmail = (e: string | null) => (e ?? '').trim().toLowerCase()
@@ -168,7 +162,10 @@ export default async function DashboardPage({ searchParams }: Props) {
   }
   const uniqueHits       = uniqueHitEmails.size
   const signedUp         = convertedEmails.size
-  const startedChallenge = challengeFunnel(challengeRows ?? []).started
+  const startedChallenge = challengeFunnel(challengeRows).started
+  // End-to-end top-of-funnel conversion: of everyone who hit the website, how
+  // many went on to start the 14-day challenge.
+  const startedOfHitsPct = uniqueHits > 0 ? Math.round((startedChallenge / uniqueHits) * 100) : 0
 
   // Build learners URL with current lf/batch filters carried over
   function learnersUrl(status: string) {
@@ -355,6 +352,8 @@ export default async function DashboardPage({ searchParams }: Props) {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Started challenge</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900">{startedChallenge.toLocaleString()}</p>
             <p className="mt-0.5 text-xs text-zinc-400">
+              <span className="font-semibold text-[#5BAE5B]">{startedOfHitsPct}%</span> of website hits
+              {' · '}
               <span className="font-semibold text-[#5BAE5B]">{signedUp > 0 ? Math.round((startedChallenge / signedUp) * 100) : 0}%</span> of signups
             </p>
           </Link>
