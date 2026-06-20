@@ -19,6 +19,30 @@ function weekKey(iso: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+// Canonical referral labels that carry a free-text/dropdown detail worth
+// breaking down further (which platform / which NGO).
+const SOCIAL = 'Through social media'
+const NGO = 'Through an NGO'
+const SOCIAL_PLATFORMS = ['LinkedIn', 'Website', 'Instagram', 'Facebook', 'WhatsApp']
+const isBlankDetail = (s: string) => /^(na|n\/a|none|nil|-)$/i.test(s)
+
+// Normalise a social platform to its canonical dropdown spelling (so "linkedin"
+// and "LinkedIn" merge); unknown free-text values are kept as typed.
+function normPlatform(s: string | null | undefined): string | null {
+  const t = (s ?? '').trim()
+  if (!t || isBlankDetail(t)) return null
+  return SOCIAL_PLATFORMS.find((p) => p.toLowerCase() === t.toLowerCase()) ?? t
+}
+
+// Normalise an NGO name: collapse whitespace + Title Case so "navgurukul" and
+// "NavGurukul" merge. Won't reconcile genuine spelling variants (e.g. singular
+// vs plural), but folds the common casing drift.
+function normNgo(s: string | null | undefined): string | null {
+  const t = (s ?? '').trim()
+  if (!t || isBlankDetail(t)) return null
+  return t.replace(/\s+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 // Categorical distribution: count canonical label values, blanks rolled into
 // "Not specified". Sorted by count desc, with "Not specified" pinned last.
 type Slice = { label: string; value: number }
@@ -36,6 +60,19 @@ function countLabels(values: (string | null)[]): Slice[] {
       if (b.label === NOT_SPECIFIED) return -1
       return b.value - a.value
     })
+}
+
+// Per-slice sub-breakdown for the referral card: given (canonical source,
+// raw detail) pairs, bucket the platform/NGO detail under SOCIAL and NGO.
+type SubMap = Record<string, Slice[]>
+function detailBreakdown(pairs: { source: string | null; detail: string | null | undefined }[]): SubMap {
+  const social: (string | null)[] = []
+  const ngo: (string | null)[] = []
+  for (const { source, detail } of pairs) {
+    if (source === SOCIAL) social.push(normPlatform(detail))
+    else if (source === NGO) ngo.push(normNgo(detail))
+  }
+  return { [SOCIAL]: countLabels(social), [NGO]: countLabels(ngo) }
 }
 
 // Count events per week, gap-filled from the first event week through this week
@@ -118,6 +155,19 @@ export default function AnalyticsClient({
         uniqueHitRows.map((h) => canonicalReferral(firstFilled(h.referral_source, prospectFor(h)?.referral_source))),
       ),
       referralSignups: countLabels(signups.map((s) => canonicalReferral(s.referral_source))),
+      // Platform/NGO sub-breakdown. Source + detail are taken from the same row:
+      // a website hit's own answer if present, otherwise its matched prospect's.
+      referralHitsSub: detailBreakdown(
+        uniqueHitRows.map((h) => {
+          const own = canonicalReferral(h.referral_source)
+          if (own) return { source: own, detail: h.referral_detail }
+          const p = prospectFor(h)
+          return { source: canonicalReferral(p?.referral_source), detail: p?.referral_detail }
+        }),
+      ),
+      referralSignupsSub: detailBreakdown(
+        signups.map((s) => ({ source: canonicalReferral(s.referral_source), detail: s.referral_detail })),
+      ),
       eduHits: countLabels(
         uniqueHitRows.map((h) => canonicalEducation(firstFilled(h.educational_status, prospectFor(h)?.educational_status))),
       ),
@@ -188,8 +238,8 @@ export default function AnalyticsClient({
           <DistributionCard
             label="Referral source"
             datasets={[
-              { key: 'hits', label: 'Website hits', noun: 'unique website hits', data: m.referralHits },
-              { key: 'prospects', label: 'Prospects', noun: 'prospects', data: m.referralSignups },
+              { key: 'hits', label: 'Website hits', noun: 'unique website hits', data: m.referralHits, sub: m.referralHitsSub },
+              { key: 'prospects', label: 'Prospects', noun: 'prospects', data: m.referralSignups, sub: m.referralSignupsSub },
             ]}
           />
           <DistributionCard
@@ -247,15 +297,18 @@ function StatCard({
 }
 
 // Categorical distribution card: a per-population toggle over horizontal bars.
+// Slices that carry a sub-breakdown (via `sub`) expand inline (accordion) to
+// show their detail — e.g. which platform under "Through social media".
 function DistributionCard({
   label,
   datasets,
 }: {
   label: string
-  datasets: { key: string; label: string; noun: string; data: Slice[] }[]
+  datasets: { key: string; label: string; noun: string; data: Slice[]; sub?: SubMap }[]
 }) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
+  const [expanded, setExpanded] = useState<string | null>(null)
   const ds = datasets[active]
   const total = ds.data.reduce((s, d) => s + d.value, 0)
   const max = Math.max(1, ...ds.data.map((d) => d.value))
@@ -291,7 +344,7 @@ function DistributionCard({
               {datasets.map((d, i) => (
                 <button
                   key={d.key}
-                  onClick={() => setActive(i)}
+                  onClick={() => { setActive(i); setExpanded(null) }}
                   className={`rounded-md px-2.5 py-1 transition-colors ${
                     active === i ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'
                   }`}
@@ -307,23 +360,52 @@ function DistributionCard({
             <div className="space-y-2.5">
               {ds.data.map((d) => {
                 const muted = d.label === NOT_SPECIFIED
+                const subData = ds.sub?.[d.label] ?? []
+                const hasSub = subData.length > 0
+                const isExpanded = expanded === d.label
+                const pct = total > 0 ? Math.round((d.value / total) * 100) : 0
+                const valueCell = (
+                  <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-700">
+                    {d.value}
+                    <span className="ml-1 font-normal text-zinc-400">{pct}%</span>
+                  </span>
+                )
                 return (
                   <div key={d.label}>
-                    <div className="mb-1 flex items-baseline justify-between gap-2">
-                      <span className={`truncate text-xs ${muted ? 'text-zinc-400' : 'text-zinc-600'}`} title={d.label}>
-                        {d.label}
-                      </span>
-                      <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-700">
-                        {d.value}
-                        <span className="ml-1 font-normal text-zinc-400">{total > 0 ? Math.round((d.value / total) * 100) : 0}%</span>
-                      </span>
-                    </div>
+                    {hasSub ? (
+                      <button
+                        onClick={() => setExpanded((e) => (e === d.label ? null : d.label))}
+                        className="mb-1 flex w-full items-baseline justify-between gap-2 text-left"
+                        aria-expanded={isExpanded}
+                        title={`${isExpanded ? 'Hide' : 'Show'} breakdown`}
+                      >
+                        <span className="flex min-w-0 items-center gap-1 text-xs text-zinc-600">
+                          <svg
+                            className={`h-3 w-3 shrink-0 text-zinc-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                          <span className="truncate font-medium" title={d.label}>{d.label}</span>
+                        </span>
+                        {valueCell}
+                      </button>
+                    ) : (
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <span className={`truncate text-xs ${muted ? 'text-zinc-400' : 'text-zinc-600'}`} title={d.label}>
+                          {d.label}
+                        </span>
+                        {valueCell}
+                      </div>
+                    )}
                     <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
                       <div
                         className="h-full rounded-full"
                         style={{ width: `${(d.value / max) * 100}%`, backgroundColor: muted ? '#d4d4d8' : '#5BAE5B' }}
                       />
                     </div>
+                    {hasSub && isExpanded && <SubBreakdown data={subData} parentTotal={d.value} />}
                   </div>
                 )
               })}
@@ -331,6 +413,40 @@ function DistributionCard({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Nested detail bars shown when a referral slice is expanded (which platform /
+// which NGO). Indented under the parent slice; percentages are of the parent.
+function SubBreakdown({ data, parentTotal }: { data: Slice[]; parentTotal: number }) {
+  const max = Math.max(1, ...data.map((d) => d.value))
+  return (
+    <div className="mb-1 mt-2 space-y-2 border-l-2 border-zinc-100 pl-3">
+      {data.map((d) => {
+        const muted = d.label === NOT_SPECIFIED
+        return (
+          <div key={d.label}>
+            <div className="mb-0.5 flex items-baseline justify-between gap-2">
+              <span className={`truncate text-[11px] ${muted ? 'text-zinc-400' : 'text-zinc-500'}`} title={d.label}>
+                {d.label}
+              </span>
+              <span className="shrink-0 text-[11px] font-semibold tabular-nums text-zinc-600">
+                {d.value}
+                <span className="ml-1 font-normal text-zinc-400">
+                  {parentTotal > 0 ? Math.round((d.value / parentTotal) * 100) : 0}%
+                </span>
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(d.value / max) * 100}%`, backgroundColor: muted ? '#d4d4d8' : '#8ec98e' }}
+              />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
