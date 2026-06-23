@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
 import { fetchChallengeStatusByEmail } from '@/lib/challengeStatus'
 import type { ChallengeStatus } from '@/lib/challengeFunnel'
+import { getAppUser } from '@/lib/auth'
+import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectComments'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import ProspectsTable from './ProspectsTable'
 
@@ -33,7 +35,7 @@ export default async function ProspectsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const [{ data }, challengeStatus] = await Promise.all([
+  const [{ data }, challengeStatus, { data: commentRows }, appUser] = await Promise.all([
     supabase
       .from('prospects')
       .select(
@@ -41,7 +43,13 @@ export default async function ProspectsPage() {
       )
       .order('created_at', { ascending: false }),
     fetchChallengeStatusByEmail(supabase),
+    supabase
+      .from('prospect_comments')
+      .select('id, email, body, author_id, author_name, created_at'),
+    getAppUser(),
   ])
+
+  const commentsByEmail = groupCommentsByEmail((commentRows ?? []) as ProspectComment[])
 
   // Canonicalize referral/education so prospects render identically to the
   // Website Hits table (no-op for already-canonical values; free-text survives).
@@ -63,7 +71,12 @@ export default async function ProspectsPage() {
           { value: submittedCount, label: `interest form${submittedCount !== 1 ? 's' : ''} submitted` },
         ]}
       />
-      <ProspectsTable prospects={prospects} />
+      <ProspectsTable
+        prospects={prospects}
+        commentsByEmail={commentsByEmail}
+        currentUserId={appUser?.id ?? ''}
+        isAdmin={appUser?.role === 'admin'}
+      />
     </div>
   )
 }

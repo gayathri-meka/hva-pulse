@@ -15,6 +15,12 @@ npx tsx ask-pulse-evals/run-evals.ts   # Ask Pulse eval suite (needs OPENAI_API_
 
 Tests live in `__tests__/` mirroring the source tree. Mock `next/navigation`'s `redirect` to throw so execution stops as in real Next.js: `vi.fn().mockImplementation((url) => { throw new Error(\`NEXT_REDIRECT:\${url}\`) })`.
 
+**Testing is mandatory, not optional.** Every change that adds or modifies logic MUST ship with tests that cover it in the same PR — there is no "I'll add tests later". Specifically:
+- **Pure functions / helpers** (anything in `lib/`): unit-test the happy path AND the edge cases (null/empty/invalid input, boundary values, duplicates, sort order). These are cheap and high-value — aim to cover every branch.
+- **Server actions**: test auth gating (non-staff/non-admin is rejected), input validation, the success path (assert the DB call args), and error surfacing. Mock `@/lib/auth`, the Supabase client, and `next/cache` (see `__tests__/actions/` for the pattern).
+- **Components**: test the rendered states that matter (empty, populated, interaction) where practical.
+- Run `npm run test:run` before considering work done; the suite must be green. When you touch existing logic, update or add the tests that cover it.
+
 ## Environment Variables
 
 ```
@@ -310,7 +316,7 @@ Full schema dump is at `docs/schema.sql`. Always refer to this for column names 
 
 Existing indexes are in `migrations/007_performance_indexes.sql` and `migrations/020_missing_indexes.sql`. Add new ones in a new migration file.
 
-**After any schema change**, regenerate the dump and commit it alongside the migration:
+**`docs/schema.sql` must ALWAYS be kept in sync — this is a hard rule.** Any time you add or change a migration, regenerate the dump and commit it in the same PR as the migration. Never leave the dump stale. Regenerate it only *after* the migration has actually been applied to the linked database (a dump reflects the live DB, not the migration files), so the sequence is: write migration → apply it → regenerate dump → commit both together. If you cannot apply the migration yourself (no DB access), say so explicitly and flag that the dump regen is still owed.
 
 ```bash
 supabase db dump --linked --schema public -f docs/schema.sql

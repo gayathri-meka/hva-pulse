@@ -3,6 +3,8 @@ import { buildProspectIndex, matchSignup, type MatchMethod } from '@/lib/signupM
 import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
 import { fetchChallengeStatusByEmail } from '@/lib/challengeStatus'
 import type { ChallengeStatus } from '@/lib/challengeFunnel'
+import { getAppUser } from '@/lib/auth'
+import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectComments'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import LearnerApplicationsTable from './LearnerApplicationsTable'
 
@@ -34,7 +36,7 @@ export default async function LearnerApplicationsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const [{ data: rawApps }, { data: prospectRows }, challengeStatus] = await Promise.all([
+  const [{ data: rawApps }, { data: prospectRows }, challengeStatus, { data: commentRows }, appUser] = await Promise.all([
     supabase
       .from('learner_applications')
       .select('id, created_at, name, phone, email, college_name, educational_status, referral_source, referral_detail, signup_token, signed_up_at')
@@ -43,7 +45,13 @@ export default async function LearnerApplicationsPage() {
       .from('prospects')
       .select('email, signup_token, name, phone, college, education_status, referral_source, referral_detail'),
     fetchChallengeStatusByEmail(supabase),
+    supabase
+      .from('prospect_comments')
+      .select('id, email, body, author_id, author_name, created_at'),
+    getAppUser(),
   ])
+
+  const commentsByEmail = groupCommentsByEmail((commentRows ?? []) as ProspectComment[])
 
   // Token-first, email-fallback matching (see lib/signupMatch.ts).
   const index = buildProspectIndex(prospectRows ?? [])
@@ -105,7 +113,12 @@ export default async function LearnerApplicationsPage() {
           { value: uniqueCount, label: `unique${applications.length !== uniqueCount ? ` (${applications.length - uniqueCount} duplicate${applications.length - uniqueCount !== 1 ? 's' : ''})` : ''}` },
         ]}
       />
-      <LearnerApplicationsTable applications={applications} />
+      <LearnerApplicationsTable
+        applications={applications}
+        commentsByEmail={commentsByEmail}
+        currentUserId={appUser?.id ?? ''}
+        isAdmin={appUser?.role === 'admin'}
+      />
     </div>
   )
 }

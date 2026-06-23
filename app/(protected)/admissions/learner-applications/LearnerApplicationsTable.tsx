@@ -20,6 +20,8 @@ import {
 } from '@tanstack/react-table'
 import type { LearnerApplication } from './page'
 import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
+import CommentsCell from '@/components/admissions/CommentsCell'
+import { normEmail, type ProspectComment } from '@/lib/prospectComments'
 
 const SIZING_KEY = 'hva-col-learner-admissions'
 function loadSizing(): ColumnSizingState {
@@ -51,7 +53,17 @@ const col = createColumnHelper<LearnerApplication>()
 
 type SignedFilter = 'all' | 'yes' | 'no'
 
-export default function LearnerApplicationsTable({ applications }: { applications: LearnerApplication[] }) {
+export default function LearnerApplicationsTable({
+  applications,
+  commentsByEmail,
+  currentUserId,
+  isAdmin,
+}: {
+  applications: LearnerApplication[]
+  commentsByEmail: Record<string, ProspectComment[]>
+  currentUserId: string
+  isAdmin: boolean
+}) {
   const [sorting, setSorting]               = useState<SortingState>([])
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
@@ -200,8 +212,22 @@ export default function LearnerApplicationsTable({ applications }: { application
         filterFn: multiSelectFilter,
         cell: (info) => <ChallengeStatusBadge status={info.getValue()} />,
       }),
+      col.display({
+        id: 'comments',
+        // Function header (not a plain string) so exportToCsv skips this column.
+        header: () => <>Comments</>,
+        size: 120,
+        cell: (info) => (
+          <CommentsCell
+            email={info.row.original.email}
+            comments={commentsByEmail[normEmail(info.row.original.email)] ?? []}
+            currentUserId={currentUserId}
+            isAdmin={isAdmin}
+          />
+        ),
+      }),
     ],
-    [],
+    [commentsByEmail, currentUserId, isAdmin],
   )
 
   const table = useReactTable({

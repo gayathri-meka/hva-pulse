@@ -20,6 +20,8 @@ import {
 } from '@tanstack/react-table'
 import type { Prospect } from './page'
 import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
+import CommentsCell from '@/components/admissions/CommentsCell'
+import { normEmail, type ProspectComment } from '@/lib/prospectComments'
 
 const SIZING_KEY = 'hva-col-prospects'
 function loadSizing(): ColumnSizingState {
@@ -48,7 +50,17 @@ multiSelectFilter.autoRemove = (val: string[]) => !val?.length
 
 const col = createColumnHelper<Prospect>()
 
-export default function ProspectsTable({ prospects }: { prospects: Prospect[] }) {
+export default function ProspectsTable({
+  prospects,
+  commentsByEmail,
+  currentUserId,
+  isAdmin,
+}: {
+  prospects: Prospect[]
+  commentsByEmail: Record<string, ProspectComment[]>
+  currentUserId: string
+  isAdmin: boolean
+}) {
   const [sorting, setSorting]             = useState<SortingState>([])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -181,8 +193,22 @@ export default function ProspectsTable({ prospects }: { prospects: Prospect[] })
         enableColumnFilter: false,
         cell: (info) => <span className="text-zinc-500">{formatDate(info.getValue())}</span>,
       }),
+      col.display({
+        id: 'comments',
+        // Function header (not a plain string) so exportToCsv skips this column.
+        header: () => <>Comments</>,
+        size: 120,
+        cell: (info) => (
+          <CommentsCell
+            email={info.row.original.email}
+            comments={commentsByEmail[normEmail(info.row.original.email)] ?? []}
+            currentUserId={currentUserId}
+            isAdmin={isAdmin}
+          />
+        ),
+      }),
     ],
-    [],
+    [commentsByEmail, currentUserId, isAdmin],
   )
 
   const table = useReactTable({

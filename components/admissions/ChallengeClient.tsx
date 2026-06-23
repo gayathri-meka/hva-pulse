@@ -134,22 +134,30 @@ export default function ChallengeClient({
           Cohort progress by day
         </h2>
         <div className="flex gap-3 overflow-x-auto pb-1">
-          {cohortDays.map((d) => (
-            <div key={d.ordering} className="min-w-[150px] flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-3">
-              <div className="text-sm font-semibold text-zinc-900">{d.name}</div>
-              <div className="mt-0.5 text-[11px] text-zinc-400">{d.totalTasks} tasks</div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-xl font-bold text-zinc-900">{d.avgPct}%</span>
-                <span className="text-[11px] text-zinc-400">avg done</span>
+          {cohortDays.map((d) => {
+            // Headline = people completion rate: what share of members finished
+            // every task in the day. This is the "are they clearing it?" signal.
+            const completedPct = d.memberCount ? Math.round((d.fullyCompleted / d.memberCount) * 100) : 0
+            return (
+              <div key={d.ordering} className="min-w-[150px] flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-3">
+                <div className="text-sm font-semibold text-zinc-900">{d.name}</div>
+                <div className="mt-0.5 text-[11px] text-zinc-400">{d.totalTasks} tasks</div>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-xl font-bold text-zinc-900">{completedPct}%</span>
+                  <span className="text-[11px] text-zinc-400">completed</span>
+                </div>
+                <div className="mt-1.5">
+                  <Bar value={completedPct} />
+                </div>
+                <div className="mt-2 text-[11px] text-zinc-500">
+                  {d.fullyCompleted}/{d.memberCount} people · {d.started} started
+                </div>
+                <div className="mt-0.5 text-[11px] text-zinc-400">
+                  {d.avgPct}% avg task progress
+                </div>
               </div>
-              <div className="mt-1.5">
-                <Bar value={d.avgPct} />
-              </div>
-              <div className="mt-2 text-[11px] text-zinc-500">
-                {d.fullyCompleted}/{d.memberCount} completed · {d.started} started
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
 
