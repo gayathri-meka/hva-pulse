@@ -536,6 +536,20 @@ CREATE TABLE public.notifications (
 
 
 --
+-- Name: prospect_comments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.prospect_comments (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email text NOT NULL,
+    body text NOT NULL,
+    author_id uuid,
+    author_name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: prospects; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -878,6 +892,14 @@ ALTER TABLE ONLY public.notifications
 
 
 --
+-- Name: prospect_comments prospect_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prospect_comments
+    ADD CONSTRAINT prospect_comments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: prospects prospects_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1211,6 +1233,13 @@ CREATE INDEX learners_is_active_idx ON public.learners USING btree (is_active);
 
 
 --
+-- Name: prospect_comments_email_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX prospect_comments_email_idx ON public.prospect_comments USING btree (email);
+
+
+--
 -- Name: prospects_created_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1427,6 +1456,14 @@ ALTER TABLE ONLY public.metric_source_columns
 
 ALTER TABLE ONLY public.metrics
     ADD CONSTRAINT metrics_source_fkey FOREIGN KEY (source_id) REFERENCES public.metric_sources(id);
+
+
+--
+-- Name: prospect_comments prospect_comments_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prospect_comments
+    ADD CONSTRAINT prospect_comments_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -1933,6 +1970,12 @@ ALTER TABLE public.metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: prospect_comments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.prospect_comments ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: prospects; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2086,6 +2129,13 @@ CREATE POLICY staff_all ON public.metric_sources USING ((public.auth_role() = AN
 --
 
 CREATE POLICY staff_all ON public.metrics USING ((public.auth_role() = ANY (ARRAY['admin'::text, 'staff'::text])));
+
+
+--
+-- Name: prospect_comments staff_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY staff_all ON public.prospect_comments USING ((public.auth_role() = ANY (ARRAY['admin'::text, 'staff'::text])));
 
 
 --
