@@ -22,6 +22,8 @@ import type { LearnerApplication } from './page'
 import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
 import CommentsCell from '@/components/admissions/CommentsCell'
 import { normEmail, type ProspectComment } from '@/lib/prospectComments'
+import SyncToSheetButton from '@/components/SyncToSheetButton'
+import type { SyncToSheetResult } from '@/lib/sheetSync'
 
 const SIZING_KEY = 'hva-col-learner-admissions'
 function loadSizing(): ColumnSizingState {
@@ -58,11 +60,15 @@ export default function LearnerApplicationsTable({
   commentsByEmail,
   currentUserId,
   isAdmin,
+  syncAction,
+  serviceAccountEmail,
 }: {
   applications: LearnerApplication[]
   commentsByEmail: Record<string, ProspectComment[]>
   currentUserId: string
   isAdmin: boolean
+  syncAction: (sheetUrl: string, tab: string) => Promise<SyncToSheetResult>
+  serviceAccountEmail: string
 }) {
   const [sorting, setSorting]               = useState<SortingState>([])
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
@@ -335,6 +341,12 @@ export default function LearnerApplicationsTable({
             </svg>
             CSV
           </button>
+          <SyncToSheetButton
+            action={syncAction}
+            serviceAccountEmail={serviceAccountEmail}
+            label="Sync to Sheets"
+            title="Sync Website hits to Google Sheets"
+          />
         </div>
       </div>
 
