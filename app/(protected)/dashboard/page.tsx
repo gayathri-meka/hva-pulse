@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
 import PlacementHealth from '@/components/placements/PlacementHealth'
+import { uniqueHiredLearnerCount } from '@/lib/placementMetrics'
 import DashboardFilters from '@/components/dashboard/DashboardFilters'
 import { buildProspectIndex, matchSignup } from '@/lib/signupMatch'
 import { challengeFunnel } from '@/lib/challengeFunnel'
@@ -72,7 +73,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   const continued  = total - exited
 
   // ── Placement health queries ──────────────────────────────────────────────
-  let appsQuery  = supabase.from('applications').select('status')
+  let appsQuery  = supabase.from('applications').select('user_id, status')
   let prefsQuery = supabase.from('role_preferences').select('id').eq('preference', 'not_interested')
   if (filterUserIds) {
     appsQuery  = appsQuery.in('user_id',  filterUserIds)
@@ -125,6 +126,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const hired           = allApps.filter((a) => a.status === 'hired').length
   const rejected        = allApps.filter((a) => a.status === 'rejected').length
+  const hiredCount      = uniqueHiredLearnerCount(allApps)  // distinct learners placed
   const yetToStart      = allApps.filter((a) => a.status === 'shortlisted').length
   const interviewsOngoing = allApps.filter((a) => a.status === 'interviews_ongoing').length
   const onHold          = allApps.filter((a) => a.status === 'on_hold').length
@@ -298,6 +300,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           notInterestedRate={notInterestedRate}
           shortlistRate={shortlistRate}
           hireRate={hireRate}
+          hiredCount={hiredCount}
           totalRoles={totalRoles}
           totalApps={totalApps}
           thresholds={thresholds}

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser, canSeePII } from '@/lib/auth'
 import { maskName, maskEmail, maskPhone, maskMentor } from '@/lib/pii'
+import { learnersCohortFilter } from '@/lib/learnersCohortFilter'
 import LearnersTable from '@/components/learners/LearnersTable'
 import SnapshotControls from '@/components/learners/SnapshotControls'
 import LearnerSnapshot, {
@@ -40,11 +41,12 @@ export default async function LearnersPage({ searchParams }: Props) {
   if (lf)              query = query.eq('lf_name', lf)
   if (subCohorts.length) query = query.in('sub_cohort', subCohorts)
 
-  // FY year filter — default to '2025-26' unless explicitly set to 'all'.
-  // 'all' means: no cohort_fy filter, but limit to learners marked as part of the active programme.
-  const activeFy = fy !== 'all' ? (fy ?? '2025-26') : null
-  if (activeFy) query = query.eq('cohort_fy', activeFy)
-  else          query = query.eq('is_current_cohort', true)
+  // FY cohort filter. A specific year filters by cohort_fy; the default
+  // ("All Cohorts" / no fy param) scopes to the active programme via
+  // is_current_cohort=true — which INCLUDES carryover learners whose cohort_fy
+  // is an earlier year but who are still active this year. See learnersCohortFilter.
+  const cohortFilter = learnersCohortFilter(fy)
+  query = query.eq(cohortFilter.column, cohortFilter.value)
 
   const { data: rawLearners } = await query
 

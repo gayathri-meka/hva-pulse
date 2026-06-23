@@ -46,3 +46,6 @@ ask-pulse-evals/scores/*.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Supabase CLI local cache
+supabase/.temp/

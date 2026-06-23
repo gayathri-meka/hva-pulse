@@ -9,6 +9,7 @@ export interface HealthData {
   notInterestedRate: number   // 0–1
   shortlistRate:     number   // 0–1
   hireRate:          number   // 0–1
+  hiredCount:        number   // absolute count of distinct learners placed (hired)
   totalRoles:        number
   totalApps:         number
   thresholds:        PlacementThresholds
@@ -106,7 +107,7 @@ function focusMessage(weakest: string, h: HealthData): { title: string; body: st
 }
 
 // ── Metric rows per dimension ─────────────────────────────────────────────────
-function metrics(key: string, h: HealthData): { primary: string; primaryUnit: string; secondary: string }  {
+function metrics(key: string, h: HealthData): { primary: string; primaryUnit: string; secondary: string; tertiary?: string }  {
   if (key === 'demand') return {
     primary:     String(h.ongoingRoles),
     primaryUnit: 'roles in process',
@@ -121,6 +122,7 @@ function metrics(key: string, h: HealthData): { primary: string; primaryUnit: st
     primary:     `${Math.round(h.hireRate * 100)}%`,
     primaryUnit: 'hired (completed)',
     secondary:   `${Math.round(h.shortlistRate * 100)}% shortlist rate`,
+    tertiary:    `${h.hiredCount} learner${h.hiredCount === 1 ? '' : 's'} placed`,
   }
 }
 
@@ -167,6 +169,9 @@ export default function PlacementHealth(h: HealthData) {
                   <span className="text-xs text-zinc-500">{m.primaryUnit}</span>
                 </div>
                 <p className="mt-0.5 text-xs text-zinc-400">{m.secondary}</p>
+                {m.tertiary && (
+                  <p className="mt-2 text-xs font-semibold tabular-nums" style={{ color: dim.text }}>{m.tertiary}</p>
+                )}
               </div>
               <div className="mt-3 flex items-center justify-end gap-1 text-[10px] font-medium text-zinc-400 group-hover:text-zinc-600">
                 {dim.linkLabel}

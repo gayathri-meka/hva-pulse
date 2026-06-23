@@ -8,6 +8,7 @@ import ActionCentre from '@/components/placements/ActionCentre'
 import TatDeepDive from '@/components/placements/TatDeepDive'
 import AnalyticsFilters from '@/components/placements/AnalyticsFilters'
 import PlacementHealth from '@/components/placements/PlacementHealth'
+import { uniqueHiredLearnerCount } from '@/lib/placementMetrics'
 import type { PlacementThresholds } from './actions'
 
 // TAT cutoff date is now configurable via Placements → Settings.
@@ -54,7 +55,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   const TAT_CUTOFF_DATE = (tatCutoffRow?.value as string) ?? DEFAULT_TAT_CUTOFF
 
   // ── Main data queries (filtered when applicable) ───────────────────────────
-  let appsQuery = supabase.from('applications').select('status, not_shortlisted_reasons, rejection_reasons, created_at')
+  let appsQuery = supabase.from('applications').select('user_id, status, not_shortlisted_reasons, rejection_reasons, created_at')
   let prefsQuery = supabase.from('role_preferences').select('reasons').eq('preference', 'not_interested')
   let tatQuery  = supabase
     .from('applications')
@@ -208,6 +209,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   const stillApplied      = allApps.filter((a) => a.status === 'applied').length
   const hired             = allApps.filter((a) => a.status === 'hired').length
   const rejected          = allApps.filter((a) => a.status === 'rejected').length
+  const hiredCount        = uniqueHiredLearnerCount(allApps)  // distinct learners placed
 
   // Everyone who passed the shortlisting gate (used as stage-3 denominator)
   const shortlistPassed = yetToStart + interviewsOngoing + onHold + hired + rejected
@@ -266,6 +268,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
         notInterestedRate={notInterestedRate}
         shortlistRate={shortlistRate}
         hireRate={hireRate}
+        hiredCount={hiredCount}
         totalRoles={totalRoles}
         totalApps={totalApps}
         thresholds={thresholds}
