@@ -6,7 +6,9 @@ import type { ChallengeStatus } from '@/lib/challengeFunnel'
 import { getAppUser } from '@/lib/auth'
 import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectComments'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
+import SyncToSheetButton from '@/components/SyncToSheetButton'
 import LearnerApplicationsTable from './LearnerApplicationsTable'
+import { syncWebsiteHitsToSheet } from '../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -113,6 +115,14 @@ export default async function LearnerApplicationsPage() {
           { value: uniqueCount, label: `unique${applications.length !== uniqueCount ? ` (${applications.length - uniqueCount} duplicate${applications.length - uniqueCount !== 1 ? 's' : ''})` : ''}` },
         ]}
       />
+      <div className="mb-3 flex justify-end">
+        <SyncToSheetButton
+          action={syncWebsiteHitsToSheet}
+          serviceAccountEmail={process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? ''}
+          label="Sync to Sheets"
+          title="Sync Website hits to Google Sheets"
+        />
+      </div>
       <LearnerApplicationsTable
         applications={applications}
         commentsByEmail={commentsByEmail}
