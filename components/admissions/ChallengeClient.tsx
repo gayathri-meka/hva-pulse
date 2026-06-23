@@ -3,6 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ChallengeMatrixTable from './ChallengeMatrixTable'
 import ChallengePaceTable from './ChallengePaceTable'
+import ChallengeQuestionsView, { type TaskCatalogDay } from './ChallengeQuestionsView'
+import LearnerTaskQuestions from './LearnerTaskQuestions'
+import ConversationThreadModal from '@/components/sensai/ConversationThreadModal'
+import type { ChatMessage, ScorecardCategory } from '@/lib/sensaiChat'
+
+export type ThreadView = {
+  title: string
+  subtitle?: string
+  messages: ChatMessage[]
+  description?: string
+  scorecard?: ScorecardCategory[]
+}
 
 export type TaskState = 'not_started' | 'attempted' | 'completed'
 export type TaskItem = { taskId: string; title: string; type: string; ordering: number; state: TaskState }
@@ -48,10 +60,10 @@ function fmtDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
 }
 
-const STATE_DOT: Record<TaskState, string> = {
-  completed: 'bg-[#5BAE5B]',
-  attempted: 'bg-amber-400',
-  not_started: 'bg-zinc-200',
+const STATE_TEXT: Record<TaskState, string> = {
+  completed: 'text-[#5BAE5B]',
+  attempted: 'text-amber-600',
+  not_started: 'text-zinc-400',
 }
 const STATE_LABEL: Record<TaskState, string> = {
   completed: 'Done',
@@ -68,10 +80,34 @@ export default function ChallengeClient({
   cohortDays: CohortDay[]
   calendarDates: string[]
 }) {
-  const [view, setView] = useState<'detail' | 'matrix' | 'pace'>('matrix')
+  const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions'>('matrix')
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [thread, setThread] = useState<ThreadView | null>(null)
+
+  // Day → tasks catalog (union across members), powering the By-question tree.
+  const taskCatalog = useMemo<TaskCatalogDay[]>(() => {
+    const days = new Map<number, { name: string; tasks: Map<string, { title: string; type: string; ordering: number }> }>()
+    for (const m of members) {
+      for (const d of m.days) {
+        if (!days.has(d.ordering)) days.set(d.ordering, { name: d.name, tasks: new Map() })
+        const day = days.get(d.ordering)!
+        for (const t of d.tasks) {
+          if (!day.tasks.has(t.taskId)) day.tasks.set(t.taskId, { title: t.title, type: t.type, ordering: t.ordering })
+        }
+      }
+    }
+    return [...days.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([ordering, d]) => ({
+        ordering,
+        name: d.name,
+        tasks: [...d.tasks.entries()]
+          .map(([taskId, t]) => ({ taskId, ...t }))
+          .sort((a, b) => a.ordering - b.ordering),
+      }))
+  }, [members])
 
   const filteredMembers = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -127,6 +163,7 @@ export default function ChallengeClient({
               ['matrix', 'Day-by-day'],
               ['detail', 'Detailed'],
               ['pace', 'Pace'],
+              ['questions', 'By question'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -141,7 +178,9 @@ export default function ChallengeClient({
           </div>
         </div>
 
-        {view === 'pace' ? (
+        {view === 'questions' ? (
+          <ChallengeQuestionsView days={taskCatalog} />
+        ) : view === 'pace' ? (
           <ChallengePaceTable members={members} calendarDates={calendarDates} />
         ) : view === 'matrix' ? (
           <ChallengeMatrixTable
@@ -188,11 +227,23 @@ export default function ChallengeClient({
                 setOpenMember={setOpenMember}
                 openDay={openDay}
                 setOpenDay={setOpenDay}
+                onOpenThread={setThread}
               />
             )}
           </>
         )}
       </section>
+
+      {thread && (
+        <ConversationThreadModal
+          title={thread.title}
+          subtitle={thread.subtitle}
+          messages={thread.messages}
+          description={thread.description}
+          scorecard={thread.scorecard}
+          onClose={() => setThread(null)}
+        />
+      )}
     </div>
   )
 }
@@ -204,15 +255,19 @@ function DetailView({
   setOpenMember,
   openDay,
   setOpenDay,
+  onOpenThread,
 }: {
   members: Member[]
   openMember: string | null
   setOpenMember: (v: string | null) => void
   openDay: string | null
   setOpenDay: (v: string | null) => void
+  onOpenThread: (t: ThreadView) => void
 }) {
   // When a day is opened (incl. via a matrix cell click), scroll it into view.
   const openDayRef = useRef<HTMLDivElement | null>(null)
+  // Currently-expanded task within the open member, keyed `${email}:${taskId}`.
+  const [openTask, setOpenTask] = useState<string | null>(null)
   useEffect(() => {
     if (!openDay) return
     const el = openDayRef.current
@@ -302,20 +357,48 @@ function DetailView({
                       </button>
 
                       {dayOpen && (
-                        <ul className="border-t border-zinc-100 px-3 py-2">
-                          {d.tasks.map((t) => (
-                            <li key={t.taskId} className="flex items-center gap-2.5 py-1">
-                              <span className={`h-2 w-2 shrink-0 rounded-full ${STATE_DOT[t.state]}`} />
-                              <span className={`flex-1 truncate text-sm ${t.state === 'completed' ? 'text-zinc-700' : 'text-zinc-500'}`}>
-                                {t.title}
-                              </span>
-                              {t.type === 'quiz' && (
-                                <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-400">quiz</span>
-                              )}
-                              <span className="w-20 shrink-0 text-right text-[11px] text-zinc-400">{STATE_LABEL[t.state]}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="border-t border-zinc-100 px-3 py-2">
+                          {d.tasks.map((t) => {
+                            const isQuiz = t.type === 'quiz'
+                            const taskKey = `${m.email}:${t.taskId}`
+                            const taskOpen = isQuiz && openTask === taskKey
+                            return (
+                              <div key={t.taskId}>
+                                <button
+                                  type="button"
+                                  disabled={!isQuiz}
+                                  onClick={() => isQuiz && setOpenTask(taskOpen ? null : taskKey)}
+                                  className={`flex w-full items-center gap-2.5 py-1 text-left ${isQuiz ? 'cursor-pointer hover:bg-zinc-50' : 'cursor-default'}`}
+                                >
+                                  {isQuiz ? (
+                                    <Chevron open={taskOpen} />
+                                  ) : (
+                                    <span className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                  )}
+                                  <span className={`flex-1 truncate text-sm ${t.state === 'completed' ? 'text-zinc-700' : 'text-zinc-500'}`}>
+                                    {t.title}
+                                  </span>
+                                  {isQuiz && (
+                                    <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-400">quiz</span>
+                                  )}
+                                  <span className={`w-20 shrink-0 text-right text-[11px] font-medium ${STATE_TEXT[t.state]}`}>{STATE_LABEL[t.state]}</span>
+                                </button>
+
+                                {taskOpen && (
+                                  <div className="mb-2 ml-6 mt-1 rounded-lg border border-zinc-200 bg-zinc-50/70 p-2">
+                                    <LearnerTaskQuestions
+                                      email={m.email}
+                                      taskId={t.taskId}
+                                      learnerName={m.name}
+                                      taskTitle={t.title}
+                                      onOpenThread={onOpenThread}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
                   )

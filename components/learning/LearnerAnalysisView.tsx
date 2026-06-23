@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { fetchQuestionThread, type ChatMessage } from '@/app/(protected)/learning/deep-dive/actions'
+import { fetchQuestionThread } from '@/app/(protected)/learning/deep-dive/actions'
+import type { ChatMessage } from '@/lib/sensaiChat'
+import ConversationThreadModal from '@/components/sensai/ConversationThreadModal'
 
 interface Props {
   learner: {
@@ -86,63 +88,12 @@ export default function LearnerAnalysisView({ learner, analysisText, rawData, co
 
       {/* Chat thread modal */}
       {thread && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
-              <div>
-                <h2 className="text-base font-semibold text-zinc-900">{thread.title}</h2>
-                <p className="text-xs text-zinc-400">{thread.course} · {thread.messages.length} messages</p>
-              </div>
-              <button onClick={() => setThread(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                </svg>
-              </button>
-            </div>
-            <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: 'calc(90vh - 70px)' }}>
-              {thread.messages.map((msg, i) => (
-                <div key={i} className={`rounded-xl p-4 ${msg.role === 'user' ? 'bg-zinc-50 border border-zinc-200' : 'bg-blue-50 border border-blue-100'}`}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className={`text-xs font-semibold uppercase tracking-wide ${msg.role === 'user' ? 'text-zinc-500' : 'text-blue-600'}`}>
-                      {msg.role === 'user' ? 'Learner' : 'AI Feedback'}
-                    </span>
-                    {msg.score && (
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                        msg.score.startsWith('4/4') ? 'bg-emerald-100 text-emerald-700'
-                        : msg.score.startsWith('3/') ? 'bg-amber-100 text-amber-700'
-                        : msg.score.startsWith('1/') ? 'bg-red-100 text-red-700'
-                        : 'bg-zinc-100 text-zinc-600'
-                      }`}>
-                        {msg.score}
-                      </span>
-                    )}
-                  </div>
-
-                  {msg.role === 'user' ? (
-                    <pre className="whitespace-pre-wrap text-xs font-mono text-zinc-700 leading-relaxed">{msg.content}</pre>
-                  ) : (
-                    <div className="space-y-2 text-sm text-zinc-700">
-                      <p>{msg.content}</p>
-                      {msg.feedback_correct && (
-                        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                          <span className="font-semibold">Correct: </span>{msg.feedback_correct}
-                        </div>
-                      )}
-                      {msg.feedback_wrong && (
-                        <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
-                          <span className="font-semibold">Wrong: </span>{msg.feedback_wrong}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {thread.messages.length === 0 && (
-                <p className="text-center text-sm text-zinc-400 py-8">No conversation data found for this question.</p>
-              )}
-            </div>
-          </div>
-        </div>
+        <ConversationThreadModal
+          title={thread.title}
+          subtitle={thread.course}
+          messages={thread.messages}
+          onClose={() => setThread(null)}
+        />
       )}
 
       {threadLoading && !thread && (
