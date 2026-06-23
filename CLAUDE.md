@@ -114,6 +114,21 @@ Active nav state: `bg-zinc-800 text-white` with a left green (`#5BAE5B`) bar ind
 
 `app/api/sync/route.ts` (POST, admin-only) reads a Google Sheet via service account, upserts learners into Supabase, and deletes rows no longer present in the sheet. LF name-to-user_id mapping is resolved at sync time.
 
+### Sheet Sync (table → Google Sheet) — `lib/sheetSync.ts`
+
+The **reverse** direction: push an in-app table OUT to a Google Sheet where the **table is the source of truth**, while preserving columns the team maintains manually in that sheet. Reusable anywhere via `syncTableToSheet({ spreadsheetId, sheetName, rows, keyHeader, key, columns })`.
+
+**How it behaves (important — read before relying on it):**
+- Rows are matched between table and sheet by a **key column** (`keyHeader` + `key`).
+- For a matched row it writes **only the managed cells** (the `columns` you declare), one cell at a time — never the whole row. So unmanaged columns (Notes, Owner, etc.) are left exactly as the team left them.
+- A table row with **no matching key is appended**; its unmanaged columns are left blank.
+- **Deletes are intentionally NOT propagated.** A row deleted from the source table is **left untouched in the sheet** (it goes stale, it is not removed or cleared). This is by design — silently deleting/blanking a row would destroy the manual columns on it. The sheet can therefore drift; if you need deletions *reflected*, add a managed status column and set it to `removed` for orphans (mark, don't delete). Hard deletes are deliberately unsupported.
+- If a managed column's header is missing, it's appended to the header automatically. An empty tab is initialised with the header + all rows.
+
+The pure diff lives in `computeSheetSync` (unit-tested in `__tests__/lib/sheetSync.test.ts`); the I/O wrapper uses the read+write `spreadsheets` scope (the read sync's scope is read-only). **Prerequisite: the target sheet must be shared with `GOOGLE_SERVICE_ACCOUNT_EMAIL` as Editor.**
+
+Productised UI: `components/SyncToSheetButton.tsx` (reusable button + modal) takes a per-table sync server action as a prop. First use is the Admissions **Website hits** tab → `syncWebsiteHitsToSheet` in `app/(protected)/admissions/actions.ts` (source of truth `learner_applications`, matched by application `id`).
+
 ### Alumni Data Ownership — Important
 
 Two separate data sources feed the `alumni` table. Do NOT mix them up:
