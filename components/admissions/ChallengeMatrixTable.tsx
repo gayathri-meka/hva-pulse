@@ -19,6 +19,8 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import type { Member, CohortDay } from './ChallengeClient'
+import SyncToSheetButton from '@/components/SyncToSheetButton'
+import type { SyncToSheetResult } from '@/lib/sheetSync'
 
 const SIZING_KEY = 'hva-col-challenge'
 function loadSizing(): ColumnSizingState {
@@ -61,10 +63,14 @@ export default function ChallengeMatrixTable({
   members,
   cohortDays,
   onOpenDay,
+  syncAction,
+  serviceAccountEmail,
 }: {
   members: Member[]
   cohortDays: CohortDay[]
   onOpenDay: (email: string, dayOrdering: number) => void
+  syncAction: (sheetUrl: string, tab: string) => Promise<SyncToSheetResult>
+  serviceAccountEmail: string
 }) {
   const [sorting, setSorting]             = useState<SortingState>([])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>({})
@@ -257,17 +263,25 @@ export default function ChallengeMatrixTable({
           </div>
           <span className="whitespace-nowrap text-xs font-medium text-zinc-500">{countLabel}</span>
         </div>
-        <button
-          onClick={() => exportToCsv(table, `challenge_members_${new Date().toISOString().slice(0, 10)}.csv`)}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
-          title="Download CSV"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
-            <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
-            <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
-          </svg>
-          CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportToCsv(table, `challenge_members_${new Date().toISOString().slice(0, 10)}.csv`)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
+            title="Download CSV"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+              <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+              <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+            </svg>
+            CSV
+          </button>
+          <SyncToSheetButton
+            action={syncAction}
+            serviceAccountEmail={serviceAccountEmail}
+            label="Sync to Sheets"
+            title="Sync challenge members to Google Sheets"
+          />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">

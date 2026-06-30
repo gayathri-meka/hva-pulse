@@ -152,7 +152,9 @@ export default async function AdmissionsChallengePage() {
         })
       const totalTasks = days.reduce((s, d) => s + d.total, 0)
       const completedTasks = days.reduce((s, d) => s + d.completed, 0)
-      const started = dims.some((d) => (d.state ?? 'not_started') !== 'not_started')
+      // Task-level (matches the Day-by-day tab) — attempted = any activity.
+      const attemptedTasks = dims.filter((d) => (d.state ?? 'not_started') !== 'not_started').length
+      const started = attemptedTasks > 0
       const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
       const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
       // Tasks done per IST calendar day — powers the Pace view (sparkline +
@@ -169,6 +171,7 @@ export default async function AdmissionsChallengePage() {
         days,
         totalTasks,
         completedTasks,
+        attemptedTasks,
         started,
         lastActive,
         activityByDate,
@@ -237,7 +240,7 @@ export default async function AdmissionsChallengePage() {
           <SourceSyncButton sources={[syncSource]} />
         </div>
       )}
-      <ChallengeClient members={members} cohortDays={cohortDays} calendarDates={calendarDates} />
+      <ChallengeClient members={members} cohortDays={cohortDays} calendarDates={calendarDates} serviceAccountEmail={process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? ''} />
     </div>
   )
 }

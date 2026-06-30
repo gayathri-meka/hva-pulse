@@ -7,13 +7,20 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
+  type ColumnFiltersState,
   type ColumnSizingState,
   type SortingState,
 } from '@tanstack/react-table'
 import { paceMetrics, type PaceMetrics } from '@/lib/challengePace'
 import type { Member } from './ChallengeClient'
+import { multiSelectFilter } from '@/lib/tableFilters'
+import ColumnFilterDropdown from '@/components/ui/ColumnFilterDropdown'
+import SyncToSheetButton from '@/components/SyncToSheetButton'
+import type { SyncToSheetResult } from '@/lib/sheetSync'
 
 const SIZING_KEY = 'hva-col-challenge-pace'
 function loadSizing(): ColumnSizingState {
@@ -56,9 +63,11 @@ function Sparkline({ metrics }: { metrics: PaceMetrics }) {
 
 // One-line descriptions shown under the summary-column headers.
 const COL_DESC: Record<string, string> = {
-  active:   'days with activity',
-  span:     'first → last (days)',
-  cramming: 'busiest day ÷ total tasks',
+  completed: 'tasks completed',
+  attempted: 'tasks attempted',
+  active:    'days with activity',
+  span:      'first → last (days)',
+  cramming:  'busiest day ÷ total tasks',
 }
 
 const col = createColumnHelper<Row>()
@@ -66,12 +75,17 @@ const col = createColumnHelper<Row>()
 export default function ChallengePaceTable({
   members,
   calendarDates,
+  syncAction,
+  serviceAccountEmail,
 }: {
   members: Member[]
   calendarDates: string[]
+  syncAction: (sheetUrl: string, tab: string) => Promise<SyncToSheetResult>
+  serviceAccountEmail: string
 }) {
   const [sorting, setSorting]           = useState<SortingState>([{ id: 'active', desc: true }])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [search, setSearch]             = useState('')
 
   useEffect(() => {
@@ -95,12 +109,31 @@ export default function ChallengePaceTable({
       col.accessor('name', {
         header: 'Member',
         size: 190,
+        enableColumnFilter: false,
         cell: (info) => (
           <div className="min-w-0">
             <div className="truncate font-medium text-zinc-900">{info.getValue() || '—'}</div>
             <div className="truncate text-xs text-zinc-400">{info.row.original.email}</div>
           </div>
         ),
+      }),
+      col.accessor((r) => r.completedTasks, {
+        id: 'completed',
+        header: 'Completed',
+        size: 116,
+        cell: (info) => {
+          const r = info.row.original
+          return <span className="font-medium text-zinc-800">{r.totalTasks ? `${r.completedTasks}/${r.totalTasks}` : '—'}</span>
+        },
+      }),
+      col.accessor((r) => r.attemptedTasks, {
+        id: 'attempted',
+        header: 'Attempted',
+        size: 116,
+        cell: (info) => {
+          const r = info.row.original
+          return <span className="text-zinc-700">{r.totalTasks ? `${r.attemptedTasks}/${r.totalTasks}` : '—'}</span>
+        },
       }),
       col.accessor((r) => r.metrics.activeDays, {
         id: 'active',
@@ -146,6 +179,7 @@ export default function ChallengePaceTable({
           size: 40,
           enableSorting: false,
           enableResizing: false,
+          enableColumnFilter: false,
           cell: (info) => {
             const v = info.getValue() as number
             return (
@@ -163,8 +197,10 @@ export default function ChallengePaceTable({
   const table = useReactTable({
     data: filtered,
     columns,
-    state: { sorting, columnSizing, columnPinning: { left: ['name', 'active', 'span', 'cramming', 'spark'] } },
+    defaultColumn: { filterFn: multiSelectFilter },
+    state: { sorting, columnSizing, columnFilters, columnPinning: { left: ['name'] } },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater
@@ -175,6 +211,8 @@ export default function ChallengePaceTable({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     columnResizeMode: 'onChange',
     getRowId: (row) => row.email,
   })
@@ -215,17 +253,25 @@ export default function ChallengePaceTable({
             Sparkline = tasks per their own day · heat columns = tasks per calendar date (IST)
           </span>
         </div>
-        <button
-          onClick={() => exportToCsv(table, `challenge_pace_${new Date().toISOString().slice(0, 10)}.csv`)}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
-          title="Download CSV"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
-            <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
-            <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
-          </svg>
-          CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportToCsv(table, `challenge_score_${new Date().toISOString().slice(0, 10)}.csv`)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50"
+            title="Download CSV"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-zinc-400">
+              <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+              <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+            </svg>
+            CSV
+          </button>
+          <SyncToSheetButton
+            action={syncAction}
+            serviceAccountEmail={serviceAccountEmail}
+            label="Sync to Sheets"
+            title="Sync challenge scores to Google Sheets"
+          />
+        </div>
       </div>
 
       <div className="w-fit max-w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -275,6 +321,7 @@ export default function ChallengePaceTable({
                               {COL_DESC[header.column.id]}
                             </span>
                           )}
+                          {header.column.getCanFilter() && <ColumnFilterDropdown column={header.column} />}
                         </div>
                       )}
                       {header.column.getCanResize() && (

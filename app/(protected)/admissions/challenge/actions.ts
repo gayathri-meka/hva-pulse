@@ -9,6 +9,51 @@ import {
   type ChatMessage,
   type ScorecardCategory,
 } from '@/lib/sensaiChat'
+import {
+  syncTableToSheet,
+  getFirstTabName,
+  parseSpreadsheetId,
+  type SyncToSheetResult,
+} from '@/lib/sheetSync'
+
+// Generic "sync these rows to a sheet" — the client passes the rows + a
+// serialisable column spec (header → field). Reusable by any surface.
+export type SyncColumn = { header: string; field: string }
+
+export async function syncRowsToSheet(params: {
+  sheetUrl: string
+  tab: string
+  keyHeader: string
+  keyField: string
+  columns: SyncColumn[]
+  rows: Record<string, unknown>[]
+}): Promise<SyncToSheetResult> {
+  await requireStaff()
+  const id = parseSpreadsheetId(params.sheetUrl)
+  if (!id) return { ok: false, error: 'Could not read a Google Sheet ID from that link.' }
+  try {
+    const tab = params.tab.trim() || (await getFirstTabName(id))
+    const stats = await syncTableToSheet({
+      spreadsheetId: id,
+      sheetName: tab,
+      rows: params.rows,
+      keyHeader: params.keyHeader,
+      key: (r) => String((r as Record<string, unknown>)[params.keyField] ?? ''),
+      columns: params.columns.map((c) => ({
+        header: c.header,
+        value: (r: Record<string, unknown>) => { const v = r[c.field]; return v == null ? '' : String(v) },
+      })),
+    })
+    return { ok: true, stats }
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e)
+    if (/permission|PERMISSION_DENIED|403|does not have/i.test(msg))
+      return { ok: false, error: 'Sync failed — make sure you shared the sheet with the service account as Editor.' }
+    if (/parse range|not found|Requested entity/i.test(msg))
+      return { ok: false, error: "Couldn't find that tab. Check the tab name, or leave it blank to use the first tab." }
+    return { ok: false, error: msg }
+  }
+}
 
 const BQ_BILLING = 'hyperverge-chabtbot'
 const BQ_DATA = 'sensai-441917'

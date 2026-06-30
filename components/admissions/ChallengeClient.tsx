@@ -7,6 +7,17 @@ import ChallengeQuestionsView, { type TaskCatalogDay } from './ChallengeQuestion
 import LearnerTaskQuestions from './LearnerTaskQuestions'
 import ConversationThreadModal from '@/components/sensai/ConversationThreadModal'
 import type { ChatMessage, ScorecardCategory } from '@/lib/sensaiChat'
+import { syncRowsToSheet, type SyncColumn } from '@/app/(protected)/admissions/challenge/actions'
+
+const SYNC_COLUMNS: SyncColumn[] = [
+  { header: 'Name', field: 'name' },
+  { header: 'Source', field: 'source' },
+  { header: 'Tasks completed', field: 'completedTasks' },
+  { header: 'Total tasks', field: 'totalTasks' },
+  { header: 'Tasks attempted', field: 'attemptedTasks' },
+  { header: 'Active days', field: 'activeDays' },
+  { header: 'Last active', field: 'lastActive' },
+]
 
 export type ThreadView = {
   title: string
@@ -26,6 +37,7 @@ export type Member = {
   days: DayProgress[]
   totalTasks: number
   completedTasks: number
+  attemptedTasks: number  // tasks with any activity (attempted or completed)
   started: boolean
   lastActive: string | null
   activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
@@ -75,12 +87,39 @@ export default function ChallengeClient({
   members,
   cohortDays,
   calendarDates,
+  serviceAccountEmail,
 }: {
   members: Member[]
   cohortDays: CohortDay[]
   calendarDates: string[]
+  serviceAccountEmail: string
 }) {
   const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions'>('matrix')
+
+  // Per-member summary + a sync action shared by the Day-by-day and Score tables.
+  const syncRows = useMemo(
+    () =>
+      members.map((m) => ({
+        email: m.email,
+        name: m.name,
+        source: m.source === 'pulse' ? 'Pulse' : 'SensAI',
+        completedTasks: m.completedTasks,
+        totalTasks: m.totalTasks,
+        attemptedTasks: m.attemptedTasks,
+        activeDays: Object.keys(m.activityByDate).length,
+        lastActive: m.lastActive ? m.lastActive.slice(0, 10) : '',
+      })),
+    [members],
+  )
+  const syncAction = (url: string, tab: string) =>
+    syncRowsToSheet({
+      sheetUrl: url,
+      tab,
+      keyHeader: 'Email',
+      keyField: 'email',
+      columns: SYNC_COLUMNS,
+      rows: syncRows,
+    })
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -170,7 +209,7 @@ export default function ChallengeClient({
             {([
               ['matrix', 'Day-by-day'],
               ['detail', 'Detailed'],
-              ['pace', 'Pace'],
+              ['pace', 'Score'],
               ['questions', 'By question'],
             ] as const).map(([key, label]) => (
               <button
@@ -189,11 +228,13 @@ export default function ChallengeClient({
         {view === 'questions' ? (
           <ChallengeQuestionsView days={taskCatalog} />
         ) : view === 'pace' ? (
-          <ChallengePaceTable members={members} calendarDates={calendarDates} />
+          <ChallengePaceTable members={members} calendarDates={calendarDates} syncAction={syncAction} serviceAccountEmail={serviceAccountEmail} />
         ) : view === 'matrix' ? (
           <ChallengeMatrixTable
             members={members}
             cohortDays={cohortDays}
+            syncAction={syncAction}
+            serviceAccountEmail={serviceAccountEmail}
             onOpenDay={(email, ordering) => {
               setSearch('')
               setView('detail')
