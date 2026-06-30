@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,15 +9,16 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   flexRender,
-  type Column,
   type ColumnDef,
   type ColumnFiltersState,
   type ColumnSizingState,
+  type RowSelectionState,
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table'
 import { exportToCsv } from '@/lib/exportToCsv'
 import { multiSelectFilter, rowMatchesSearch } from '@/lib/tableFilters'
+import ColumnFilterDropdown from './ColumnFilterDropdown'
 
 // ── Shared, standardised data table ─────────────────────────────────────────
 // Every Pulse table should use this so they all look and behave identically:
@@ -26,12 +26,18 @@ import { multiSelectFilter, rowMatchesSearch } from '@/lib/tableFilters'
 // show/hide menu, persisted sizing + visibility, CSV export, and — crucially —
 // pinning that turns OFF on mobile so frozen columns don't make tables unreadable.
 
+/** Passed to toolbar slots so actions (e.g. email) can target the right rows. */
+export type ToolbarCtx<T> = { selectedRows: T[]; filteredRows: T[]; clearSelection: () => void }
+type Slot<T> = React.ReactNode | ((ctx: ToolbarCtx<T>) => React.ReactNode)
+
 export type DataTableProps<T> = {
   data: T[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   columns: ColumnDef<T, any>[]
   /** Unique namespace for persisting column sizing + visibility to localStorage. */
   storageKey: string
+  /** Adds a checkbox column for picking rows; toolbar slots receive the selection. */
+  enableRowSelection?: boolean
   getRowId?: (row: T, index: number) => string
   /** Columns pinned to the left ON DESKTOP ONLY (auto-unpinned on mobile). */
   pinnedLeft?: string[]
@@ -42,9 +48,10 @@ export type DataTableProps<T> = {
   /** Enables the CSV button with this filename prefix. */
   csvFilename?: string
   enableColumnVisibility?: boolean
-  /** Extra toolbar controls (left = after search, right = before CSV). */
-  toolbarLeft?: React.ReactNode
-  toolbarRight?: React.ReactNode
+  /** Extra toolbar controls (left = after search, right = before CSV). May be a
+   *  render function receiving { selectedRows, filteredRows, clearSelection }. */
+  toolbarLeft?: Slot<T>
+  toolbarRight?: Slot<T>
   emptyMessage?: string
   rowClassName?: (row: T) => string
 }
@@ -72,6 +79,7 @@ export default function DataTable<T>({
   data,
   columns,
   storageKey,
+  enableRowSelection = false,
   getRowId,
   pinnedLeft = [],
   initialSorting = [],
@@ -92,9 +100,34 @@ export default function DataTable<T>({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [search, setSearch] = useState('')
   const [showColMenu, setShowColMenu] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
+
+  // Prepend a checkbox column when selection is enabled.
+  const allColumns = useMemo<typeof columns>(() => {
+    if (!enableRowSelection) return columns
+    const selectCol: ColumnDef<T> = {
+      id: '__select',
+      size: 40,
+      enableSorting: false,
+      enableResizing: false,
+      enableHiding: false,
+      enableColumnFilter: false,
+      header: ({ table }) => (
+        <CheckboxCell
+          checked={table.getIsAllRowsSelected()}
+          indeterminate={table.getIsSomeRowsSelected()}
+          onChange={table.getToggleAllRowsSelectedHandler()}
+        />
+      ),
+      cell: ({ row }) => (
+        <CheckboxCell checked={row.getIsSelected()} onChange={row.getToggleSelectedHandler()} />
+      ),
+    }
+    return [selectCol, ...columns]
+  }, [columns, enableRowSelection])
 
   // Restore persisted sizing/visibility after mount (avoids hydration mismatch).
   useEffect(() => {
@@ -119,15 +152,23 @@ export default function DataTable<T>({
 
   const table = useReactTable({
     data: filtered,
-    columns,
+    columns: allColumns,
     defaultColumn: { filterFn: multiSelectFilter, minSize: 60 },
+    enableRowSelection,
     state: {
       sorting,
       columnFilters,
       columnSizing,
       columnVisibility,
-      columnPinning: { left: isDesktop ? pinnedLeft : [] },
+      rowSelection,
+      columnPinning: {
+        left: [
+          ...(enableRowSelection && isDesktop ? ['__select'] : []),
+          ...(isDesktop ? pinnedLeft : []),
+        ],
+      },
     },
+    onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (u) => {
@@ -158,6 +199,11 @@ export default function DataTable<T>({
   const countLabel = visible === total ? `${total} row${total === 1 ? '' : 's'}` : `${visible} of ${total}`
   const hideable = table.getAllLeafColumns().filter((c) => c.getCanHide())
 
+  const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original)
+  const filteredRows = table.getFilteredRowModel().rows.map((r) => r.original)
+  const ctx: ToolbarCtx<T> = { selectedRows, filteredRows, clearSelection: () => table.resetRowSelection() }
+  const renderSlot = (slot?: Slot<T>) => (typeof slot === 'function' ? slot(ctx) : slot)
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -178,7 +224,13 @@ export default function DataTable<T>({
             </div>
           ) : null}
           <span className="whitespace-nowrap text-xs font-medium text-zinc-500">{countLabel}</span>
-          {toolbarLeft}
+          {selectedRows.length > 0 && (
+            <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#E1F5EE] px-2 py-0.5 text-xs font-medium text-[#085041]">
+              {selectedRows.length} selected
+              <button onClick={() => table.resetRowSelection()} className="text-[#085041]/60 hover:text-[#085041]" title="Clear selection">✕</button>
+            </span>
+          )}
+          {renderSlot(toolbarLeft)}
           {columnFilters.length > 0 && (
             <button onClick={() => setColumnFilters([])} className="text-xs font-medium text-blue-500 hover:text-blue-700">
               Clear filters
@@ -188,7 +240,7 @@ export default function DataTable<T>({
 
         {/* Right: extra controls + CSV + columns menu */}
         <div className="flex items-center gap-2" ref={colMenuRef}>
-          {toolbarRight}
+          {renderSlot(toolbarRight)}
           {csvFilename && (
             <button
               onClick={() => exportToCsv(table, `${csvFilename}_${new Date().toISOString().slice(0, 10)}.csv`)}
@@ -250,12 +302,16 @@ export default function DataTable<T>({
                     const pinned = header.column.getIsPinned() === 'left'
                     const isLastPinned = pinned && header.column.getIsLastColumn('left')
                     const left = pinned ? header.column.getStart('left') : undefined
+                    const isSelect = header.column.id === '__select'
                     return (
                       <th
                         key={header.id}
                         style={{ width: header.getSize(), left }}
-                        className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${pinned ? 'z-20' : 'z-10'} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                        className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${isSelect ? 'px-3 text-center' : 'px-6'} ${pinned ? 'z-20' : 'z-10'} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                       >
+                        {isSelect ? (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        ) : (
                         <div className="flex flex-col gap-1">
                           <div
                             className={`flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer' : ''}`}
@@ -265,8 +321,9 @@ export default function DataTable<T>({
                             {header.column.getIsSorted() === 'asc' && <span>↑</span>}
                             {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                           </div>
-                          {header.column.getCanFilter() && <FilterDropdown column={header.column} />}
+                          {header.column.getCanFilter() && <ColumnFilterDropdown column={header.column} />}
                         </div>
+                        )}
                         {header.column.getCanResize() && (
                           <div
                             onMouseDown={(e) => { e.stopPropagation(); header.getResizeHandler()(e) }}
@@ -291,14 +348,15 @@ export default function DataTable<T>({
                       const pinned = cell.column.getIsPinned() === 'left'
                       const isLastPinned = pinned && cell.column.getIsLastColumn('left')
                       const left = pinned ? cell.column.getStart('left') : undefined
+                      const isSelect = cell.column.id === '__select'
                       const raw = cell.getValue()
-                      const title = typeof raw === 'string' && raw ? raw : undefined
+                      const title = !isSelect && typeof raw === 'string' && raw ? raw : undefined
                       return (
                         <td
                           key={cell.id}
                           title={title}
                           style={{ width: cell.column.getSize(), left }}
-                          className={`truncate border-b border-zinc-100 px-6 py-3.5 ${pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                          className={`border-b border-zinc-100 py-3.5 ${isSelect ? 'px-3 text-center' : 'truncate px-6'} ${pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
@@ -315,122 +373,28 @@ export default function DataTable<T>({
   )
 }
 
-// ── Per-column filter dropdown (multi-select + search-within) ────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function FilterDropdown({ column }: { column: Column<any, unknown> }) {
-  const [open, setOpen] = useState(false)
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
-  const [q, setQ] = useState('')
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
-  const selected = (column.getFilterValue() as string[]) ?? []
-
-  function reposition() {
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setCoords({ top: r.bottom + 4, left: r.left })
-  }
-
+function CheckboxCell({
+  checked,
+  indeterminate,
+  onChange,
+}: {
+  checked: boolean
+  indeterminate?: boolean
+  onChange: (e: unknown) => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    if (!open) return
-    reposition()
-    function onOutside(e: MouseEvent) {
-      const t = e.target as Node
-      if (btnRef.current?.contains(t) || panelRef.current?.contains(t)) return
-      setOpen(false)
-    }
-    function onScroll(e: Event) {
-      if (panelRef.current?.contains(e.target as Node)) return
-      setOpen(false)
-    }
-    document.addEventListener('mousedown', onOutside)
-    window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', () => setOpen(false))
-    return () => {
-      document.removeEventListener('mousedown', onOutside)
-      window.removeEventListener('scroll', onScroll, true)
-    }
-  }, [open])
-
-  // Columns whose value is an array (e.g. tags) can't be faceted automatically —
-  // they supply their explicit option list via columnDef.meta.facetOptions.
-  const metaOptions = (column.columnDef.meta as { facetOptions?: string[] } | undefined)?.facetOptions
-  const options = useMemo<readonly (readonly [string, number | undefined])[]>(
-    () =>
-      metaOptions
-        ? metaOptions.filter((v) => v != null && v !== '').map((v) => [String(v), undefined] as const).sort((a, b) => a[0].localeCompare(b[0]))
-        : Array.from(column.getFacetedUniqueValues().entries())
-            .filter(([v]) => v != null && v !== '')
-            .map(([v, count]) => [String(v), count as number] as const)
-            .sort((a, b) => a[0].localeCompare(b[0])),
-    [column, open, metaOptions],
-  )
-  const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    return needle ? options.filter(([o]) => o.toLowerCase().includes(needle)) : options
-  }, [options, q])
-
-  function toggle(val: string) {
-    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
-    column.setFilterValue(next.length ? next : undefined)
-  }
-
-  const label = selected.length === 0 ? 'All' : selected.length === 1 ? selected[0] : `${selected.length} selected`
-
+    if (ref.current) ref.current.indeterminate = !!indeterminate && !checked
+  }, [indeterminate, checked])
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`flex w-full items-center justify-between gap-1 rounded border bg-white px-2 py-0.5 text-left text-[11px] font-normal normal-case tracking-normal focus:outline-none ${selected.length ? 'border-[#5BAE5B] text-zinc-900' : 'border-zinc-200 text-zinc-500'}`}
-      >
-        <span className="truncate">{label}</span>
-        <svg className="h-3 w-3 shrink-0 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-      {open && coords && createPortal(
-        <div
-          ref={panelRef}
-          style={{ top: coords.top, left: coords.left }}
-          className="fixed z-50 w-56 rounded border border-zinc-200 bg-white py-1 shadow-lg"
-        >
-          <div className="px-2 pb-1 pt-1">
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search…"
-              className="w-full rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
-            />
-          </div>
-          {selected.length > 0 && (
-            <button
-              type="button"
-              onClick={() => { column.setFilterValue(undefined); setOpen(false) }}
-              className="w-full border-b border-zinc-100 px-3 py-1 text-left text-xs text-blue-500 hover:bg-zinc-50"
-            >
-              Clear filter
-            </button>
-          )}
-          <div className="max-h-52 overflow-y-auto">
-            {shown.map(([opt, count]) => (
-              <label key={opt} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(opt)}
-                  onChange={() => toggle(opt)}
-                  className="h-3 w-3 rounded border-zinc-300 accent-[#5BAE5B]"
-                />
-                <span className="flex-1 truncate">{opt}</span>
-                <span className="shrink-0 text-[10px] text-zinc-400">{count}</span>
-              </label>
-            ))}
-            {shown.length === 0 && <p className="px-3 py-1.5 text-xs text-zinc-400">No matches</p>}
-          </div>
-        </div>,
-        document.body,
-      )}
-    </>
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      className="h-3.5 w-3.5 rounded border-zinc-300 accent-[#5BAE5B]"
+    />
   )
 }
+

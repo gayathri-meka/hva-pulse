@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
-import { requireStaff } from '@/lib/auth'
+import { requireStaff, getAppUser } from '@/lib/auth'
 import { normEmail, type ProspectComment } from '@/lib/prospectComments'
+import { renderTemplate } from '@/lib/emailTemplate'
+import { sendEmail, sendTemplatedEmails } from '@/lib/email'
 import { buildProspectIndex, matchSignup } from '@/lib/signupMatch'
 import {
   syncTableToSheet,
@@ -117,4 +119,81 @@ export async function syncWebsiteHitsToSheet(sheetUrl: string, sheetTab: string)
       return { ok: false, error: "Couldn't find that tab. Check the tab name, or leave it blank to use the first tab." }
     return { ok: false, error: msg }
   }
+}
+
+// ── Templated email campaigns (mail-merge) ──────────────────────────────────
+
+async function requireAdmin() {
+  const user = await getAppUser()
+  if (!user || user.role !== 'admin') throw new Error('Admin only')
+  return user
+}
+
+export type CampaignPayload = {
+  subject: string
+  body: string
+  recipientField: string
+  rows: Record<string, unknown>[]
+  /** When present, send a single test email here (using the first row as sample). */
+  test?: { to: string }
+  /** Optional label stored on each email_log row. */
+  campaign?: string
+}
+
+export type CampaignResult =
+  | { ok: true; sent: number; failed: number; skipped: number; error?: string }
+  | { ok: false; error: string }
+
+/**
+ * Generic mail-merge send. Admin-only. Reusable by any surface: pass the rows
+ * (source of truth), which field holds the recipient, and the <<placeholder>>
+ * subject/body templates. Dedupes + validates recipients, sends via Resend, and
+ * logs every outcome to email_log.
+ */
+export async function sendEmailCampaign(payload: CampaignPayload): Promise<CampaignResult> {
+  const user = await requireAdmin()
+  const subject = payload.subject.trim()
+  const body = payload.body.trim()
+  if (!subject || !body) return { ok: false, error: 'Subject and body are required.' }
+  if (!payload.recipientField) return { ok: false, error: 'Choose which column holds the recipient email.' }
+
+  // Test send: one email to the tester, rendered from the first row.
+  if (payload.test?.to) {
+    const sample = payload.rows[0] ?? {}
+    const r = await sendEmail({
+      to: payload.test.to,
+      subject: `[TEST] ${renderTemplate(subject, sample)}`,
+      text: renderTemplate(body, sample),
+    })
+    return r.ok ? { ok: true, sent: 1, failed: 0, skipped: 0 } : { ok: false, error: r.error ?? 'Send failed.' }
+  }
+
+  if (!payload.rows.length) return { ok: false, error: 'No rows to email.' }
+
+  const { results, skipped } = await sendTemplatedEmails({
+    rows: payload.rows,
+    recipientField: payload.recipientField,
+    subject,
+    body,
+  })
+
+  if (results.length) {
+    await adminClient()
+      .from('email_log')
+      .insert(
+        results.map((r) => ({
+          recipient: r.to,
+          subject, // store the template subject; per-row rendering varies
+          campaign: payload.campaign ?? null,
+          status: r.ok ? 'sent' : 'failed',
+          error: r.ok ? null : r.error ?? null,
+          provider_id: r.id ?? null,
+          sent_by: user.id,
+        })),
+      )
+  }
+
+  const sent = results.filter((r) => r.ok).length
+  const failed = results.length - sent
+  return { ok: true, sent, failed, skipped, error: failed ? results.find((r) => !r.ok)?.error : undefined }
 }

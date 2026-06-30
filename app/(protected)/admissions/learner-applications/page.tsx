@@ -7,7 +7,7 @@ import { getAppUser } from '@/lib/auth'
 import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectComments'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import LearnerApplicationsTable from './LearnerApplicationsTable'
-import { syncWebsiteHitsToSheet } from '../actions'
+import { syncWebsiteHitsToSheet, sendEmailCampaign } from '../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,6 +121,8 @@ export default async function LearnerApplicationsPage() {
         isAdmin={appUser?.role === 'admin'}
         syncAction={syncWebsiteHitsToSheet}
         serviceAccountEmail={process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? ''}
+        currentUserEmail={appUser?.email ?? ''}
+        emailAction={sendEmailCampaign}
       />
     </div>
   )

@@ -5,6 +5,7 @@ import type { ChallengeStatus } from '@/lib/challengeFunnel'
 import { getAppUser } from '@/lib/auth'
 import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectComments'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
+import { sendEmailCampaign } from '../actions'
 import ProspectsTable from './ProspectsTable'
 
 export const dynamic = 'force-dynamic'
@@ -76,6 +77,8 @@ export default async function ProspectsPage() {
         commentsByEmail={commentsByEmail}
         currentUserId={appUser?.id ?? ''}
         isAdmin={appUser?.role === 'admin'}
+        currentUserEmail={appUser?.email ?? ''}
+        emailAction={sendEmailCampaign}
       />
     </div>
   )

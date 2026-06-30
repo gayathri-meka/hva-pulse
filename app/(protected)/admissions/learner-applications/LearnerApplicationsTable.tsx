@@ -9,6 +9,9 @@ import { normEmail, type ProspectComment } from '@/lib/prospectComments'
 import SyncToSheetButton from '@/components/SyncToSheetButton'
 import type { SyncToSheetResult } from '@/lib/sheetSync'
 import DataTable from '@/components/ui/DataTable'
+import EmailCampaignButton, { type EmailCampaignAction } from '@/components/email/EmailCampaignButton'
+
+const EMAIL_FIELDS = ['name', 'email', 'phone', 'college_name', 'educational_status', 'referral_source', 'challenge_status']
 
 function formatStatus(value: string | null): string {
   if (!value) return '—'
@@ -28,6 +31,8 @@ export default function LearnerApplicationsTable({
   isAdmin,
   syncAction,
   serviceAccountEmail,
+  currentUserEmail,
+  emailAction,
 }: {
   applications: LearnerApplication[]
   commentsByEmail: Record<string, ProspectComment[]>
@@ -35,6 +40,8 @@ export default function LearnerApplicationsTable({
   isAdmin: boolean
   syncAction: (sheetUrl: string, tab: string) => Promise<SyncToSheetResult>
   serviceAccountEmail: string
+  currentUserEmail: string
+  emailAction: EmailCampaignAction
 }) {
   const [hideDuplicates, setHideDuplicates] = useState(true)
 
@@ -164,6 +171,7 @@ export default function LearnerApplicationsTable({
       columns={columns}
       storageKey="learner-admissions"
       getRowId={(r) => r.id}
+      enableRowSelection={isAdmin}
       pinnedLeft={['created_at', 'name']}
       searchKeys={['name', 'email']}
       searchPlaceholder="Search name or email…"
@@ -180,14 +188,28 @@ export default function LearnerApplicationsTable({
           Hide duplicates
         </label>
       }
-      toolbarRight={
-        <SyncToSheetButton
-          action={syncAction}
-          serviceAccountEmail={serviceAccountEmail}
-          label="Sync to Sheets"
-          title="Sync Website hits to Google Sheets"
-        />
-      }
+      toolbarRight={({ selectedRows, filteredRows }) => (
+        <>
+          {isAdmin && (
+            <EmailCampaignButton
+              rows={(selectedRows.length ? selectedRows : filteredRows) as unknown as Record<string, unknown>[]}
+              fields={EMAIL_FIELDS}
+              defaultRecipientField="email"
+              currentUserEmail={currentUserEmail}
+              action={emailAction}
+              campaign="website-hits"
+              label="Email"
+              title="Email website-hit applicants (mail-merge)"
+            />
+          )}
+          <SyncToSheetButton
+            action={syncAction}
+            serviceAccountEmail={serviceAccountEmail}
+            label="Sync to Sheets"
+            title="Sync Website hits to Google Sheets"
+          />
+        </>
+      )}
     />
   )
 }

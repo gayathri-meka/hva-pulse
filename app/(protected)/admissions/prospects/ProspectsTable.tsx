@@ -7,6 +7,9 @@ import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
 import CommentsCell from '@/components/admissions/CommentsCell'
 import { normEmail, type ProspectComment } from '@/lib/prospectComments'
 import DataTable from '@/components/ui/DataTable'
+import EmailCampaignButton, { type EmailCampaignAction } from '@/components/email/EmailCampaignButton'
+
+const EMAIL_FIELDS = ['name', 'email', 'phone', 'college', 'education_status', 'referral_source', 'challenge_status']
 
 function formatLabel(value: string | null): string {
   if (!value) return '—'
@@ -26,11 +29,15 @@ export default function ProspectsTable({
   commentsByEmail,
   currentUserId,
   isAdmin,
+  currentUserEmail,
+  emailAction,
 }: {
   prospects: Prospect[]
   commentsByEmail: Record<string, ProspectComment[]>
   currentUserId: string
   isAdmin: boolean
+  currentUserEmail: string
+  emailAction: EmailCampaignAction
 }) {
   const columns = useMemo(
     () => [
@@ -157,11 +164,28 @@ export default function ProspectsTable({
       columns={columns}
       storageKey="prospects"
       getRowId={(r) => r.id}
+      enableRowSelection={isAdmin}
       pinnedLeft={['created_at', 'name']}
       searchKeys={['name', 'email']}
       searchPlaceholder="Search name or email…"
       csvFilename="prospects"
       emptyMessage="No prospects yet."
+      toolbarRight={
+        isAdmin
+          ? ({ selectedRows, filteredRows }) => (
+              <EmailCampaignButton
+                rows={(selectedRows.length ? selectedRows : filteredRows) as unknown as Record<string, unknown>[]}
+                fields={EMAIL_FIELDS}
+                defaultRecipientField="email"
+                currentUserEmail={currentUserEmail}
+                action={emailAction}
+                campaign="prospects"
+                label="Email"
+                title="Email prospects (mail-merge)"
+              />
+            )
+          : undefined
+      }
     />
   )
 }
