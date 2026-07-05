@@ -679,6 +679,7 @@ export default async function LearningPage({ searchParams }: Props) {
                     checklistItems={caseChecklistItems}
                     currentUserId={appUser.id}
                     currentUserName={appUser.name ?? null}
+                    isAdmin={appUser.role === 'admin'}
                     observationsForLearner={observationsByLearner.get(selectedLearnerData.learner_id) ?? []}
                     metricOptions={metricDefs.map((m) => ({ id: m.id, name: m.name }))}
                   />
