@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAppUser } from '@/lib/auth'
-import DataSourcesPanel from '@/components/learning/DataSourcesPanel'
 import MetricsPanel from '@/components/learning/MetricsPanel'
 import LearningConfigurationsPanel from '@/components/learning/LearningConfigurationsPanel'
 import LearningTabs from '@/components/learning/LearningTabs'
@@ -38,6 +37,8 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
   if (appUser.role === 'learner') redirect('/learning')
 
   const { tab = 'metrics' } = await searchParams
+  // Data Sources moved to the main Settings section — keep old links working.
+  if (tab === 'sources') redirect('/settings/data-sources')
   const supabase = await createServerSupabaseClient()
 
   const [{ data: sources }, { data: metrics }, settingsMap] = await Promise.all([
@@ -64,7 +65,6 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
         <nav className="flex gap-6">
           {[
             { key: 'metrics',        label: 'Metrics' },
-            { key: 'sources',        label: 'Data Sources' },
             { key: 'configurations', label: 'Configurations' },
           ].map(({ key, label }) => (
             <Link
@@ -82,9 +82,6 @@ export default async function LearningSettingsPage({ searchParams }: Props) {
       </div>
 
       <div className={appUser.role !== 'admin' ? 'guest-readonly' : ''}>
-        {tab === 'sources' && (
-          <DataSourcesPanel sources={sources ?? []} />
-        )}
         {tab === 'metrics' && (
           <MetricsPanel metrics={metrics ?? []} sources={sources ?? []} />
         )}

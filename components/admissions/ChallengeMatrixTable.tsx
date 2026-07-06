@@ -147,11 +147,19 @@ export default function ChallengeMatrixTable({
         },
       }),
       col.accessor((m) => `${m.completedTasks}/${m.totalTasks}`, {
-        id: 'done',
-        header: 'Done',
-        size: 100,
+        id: 'completed',
+        header: 'Completed',
+        size: 110,
         enableColumnFilter: false,
         sortingFn: (a, b) => a.original.completedTasks - b.original.completedTasks,
+        cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
+      }),
+      col.accessor((m) => `${m.attemptedTasks}/${m.totalTasks}`, {
+        id: 'attempted',
+        header: 'Attempted',
+        size: 110,
+        enableColumnFilter: false,
+        sortingFn: (a, b) => a.original.attemptedTasks - b.original.attemptedTasks,
         cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
       }),
       // One column per challenge day — heatmap X/Y cells, sortable by completion

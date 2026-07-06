@@ -1,7 +1,10 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
+import { createClient } from '@supabase/supabase-js'
 import { requireStaff } from '@/lib/auth'
 import { runBigQuery } from '@/lib/bigquery'
+import type { CriterionResult, SystemDecision, ReviewThresholds } from '@/lib/challengeReview'
 import {
   toChatMessage,
   blocksToText,
@@ -269,4 +272,144 @@ export async function getQuestionAnswers(
 
   answers.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
   return { title, type, description, scorecard, answers: answers.slice(0, limit) }
+}
+
+// ── Challenge review — the challenge→interview selection gate ────────────────
+
+function adminClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
+
+type DecisionResult = { ok: true } | { ok: false; error: string }
+type DecisionValue = 'selected' | 'rejected'
+
+const normEmail = (e: string) => e.trim().toLowerCase()
+
+/**
+ * Record the team's verified verdict for one candidate. Upserts by
+ * (email, cohort, course). Overriding the system's recommendation (verdict !=
+ * system) requires a written reason. `systemDecision` + `criteriaSnapshot` are the
+ * live values the reviewer saw — stored so rejection feedback is stable and we can
+ * later flag when the system changes its mind vs this human verdict.
+ */
+export async function setChallengeDecision(input: {
+  email: string
+  cohortId: number
+  courseId: number
+  decision: DecisionValue
+  reason?: string
+  systemDecision: SystemDecision
+  criteriaSnapshot: CriterionResult[]
+}): Promise<DecisionResult> {
+  const user = await requireStaff()
+  const email = normEmail(input.email)
+  if (!email) return { ok: false, error: 'This candidate has no email to record a decision against.' }
+  if (input.decision !== 'selected' && input.decision !== 'rejected')
+    return { ok: false, error: 'Invalid decision.' }
+
+  const overrode = input.decision !== input.systemDecision
+  const reason = (input.reason ?? '').trim()
+  if (overrode && !reason)
+    return { ok: false, error: 'A reason is required when overriding the system recommendation.' }
+
+  const now = new Date().toISOString()
+  const { error } = await adminClient()
+    .from('challenge_decisions')
+    .upsert(
+      {
+        email,
+        cohort_id: input.cohortId,
+        course_id: input.courseId,
+        final_decision: input.decision,
+        reason: reason || null,
+        overrode_system: overrode,
+        system_decision_at_verify: input.systemDecision,
+        criteria_snapshot: input.criteriaSnapshot,
+        decided_by: user.id,
+        decided_by_name: user.name,
+        decided_at: now,
+        updated_at: now,
+      },
+      { onConflict: 'email,cohort_id,course_id' },
+    )
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/challenge')
+  return { ok: true }
+}
+
+/**
+ * Bulk-confirm the system's own verdict for many candidates at once (the queue-burn
+ * path): each selected candidate is recorded EXACTLY as the system decided —
+ * never an override. Overrides (which need a reason) go through the drawer one at
+ * a time. Mixed selections are fine; each row confirms to its own system decision.
+ */
+export async function bulkConfirmChallengeDecisions(input: {
+  cohortId: number
+  courseId: number
+  items: { email: string; systemDecision: SystemDecision; criteriaSnapshot: CriterionResult[] }[]
+}): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const user = await requireStaff()
+
+  const now = new Date().toISOString()
+  const rows = input.items
+    .filter((it) => normEmail(it.email))
+    .map((it) => ({
+      email: normEmail(it.email),
+      cohort_id: input.cohortId,
+      course_id: input.courseId,
+      final_decision: it.systemDecision,
+      reason: null,
+      overrode_system: false,
+      system_decision_at_verify: it.systemDecision,
+      criteria_snapshot: it.criteriaSnapshot,
+      decided_by: user.id,
+      decided_by_name: user.name,
+      decided_at: now,
+      updated_at: now,
+    }))
+
+  if (rows.length === 0) return { ok: false, error: 'No candidates to confirm.' }
+
+  const { error } = await adminClient()
+    .from('challenge_decisions')
+    .upsert(rows, { onConflict: 'email,cohort_id,course_id' })
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/challenge')
+  return { ok: true, count: rows.length }
+}
+
+/** Update the editable thresholds the rule engine uses for this challenge. */
+export async function updateChallengeReviewConfig(input: {
+  cohortId: number
+  courseId: number
+  thresholds: ReviewThresholds
+}): Promise<DecisionResult> {
+  const user = await requireStaff()
+  const t = input.thresholds
+  const bounds = [t.minAttemptedQuestions, t.minActiveDays, t.minSpanDays, t.maxCrammingPct]
+  if (bounds.some((n) => !Number.isInteger(n) || n < 0))
+    return { ok: false, error: 'Thresholds must be whole numbers (0 or greater).' }
+  if (t.maxCrammingPct > 100) return { ok: false, error: 'Cramming % cannot exceed 100.' }
+
+  const { error } = await adminClient()
+    .from('challenge_review_config')
+    .upsert(
+      {
+        cohort_id: input.cohortId,
+        course_id: input.courseId,
+        min_attempted_questions: t.minAttemptedQuestions,
+        min_active_days: t.minActiveDays,
+        min_span_days: t.minSpanDays,
+        max_cramming_pct: t.maxCrammingPct,
+        updated_by: user.id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'cohort_id,course_id' },
+    )
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/challenge')
+  return { ok: true }
 }

@@ -23,6 +23,8 @@ const VIEWS = [
   'pulse_task_question_attempts',
   'pulse_task_completion_status',
   'pulse_weekly_completion',
+  'pulse_challenge_task_status',
+  'pulse_challenge_intake',
 ]
 
 async function main() {
