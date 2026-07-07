@@ -8,6 +8,14 @@ import ChallengeClient, {
   type CohortDay,
   type TaskState,
 } from '@/components/admissions/ChallengeClient'
+import { paceMetrics } from '@/lib/challengePace'
+import {
+  evaluateCandidate,
+  DEFAULT_THRESHOLDS,
+  type ReviewThresholds,
+} from '@/lib/challengeReview'
+import { parseIntake, type IntakeRaw } from '@/lib/challengeIntake'
+import type { ChallengeReviewRow } from '@/components/admissions/ChallengeReviewTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,10 +102,13 @@ export default async function AdmissionsChallengePage() {
     return all
   }
 
-  const [fetchedRows, { data: prospectRows }] = await Promise.all([
-    fetchAllRawRows(src.id),
-    supabase.from('prospects').select('email, name'),
-  ])
+  const [fetchedRows, { data: prospectRows }, { data: configRows }, { data: decisionRows }] =
+    await Promise.all([
+      fetchAllRawRows(src.id),
+      supabase.from('prospects').select('email, name'),
+      supabase.from('challenge_review_config').select('*'),
+      supabase.from('challenge_decisions').select('*'),
+    ])
 
   // Defensive dedupe: syncDataSource does a non-atomic delete-then-insert, so two
   // overlapping syncs can leave duplicate (member, task) rows — which doubles every
@@ -154,6 +165,10 @@ export default async function AdmissionsChallengePage() {
       const completedTasks = days.reduce((s, d) => s + d.completed, 0)
       // Task-level (matches the Day-by-day tab) — attempted = any activity.
       const attemptedTasks = dims.filter((d) => (d.state ?? 'not_started') !== 'not_started').length
+      // Question-level totals (from the synced view's per-task columns) — power the
+      // review criteria (e.g. attempted-questions > threshold).
+      const attemptedQuestions = dims.reduce((s, d) => s + num(d.attempted_questions), 0)
+      const passedQuestions = dims.reduce((s, d) => s + num(d.passed_questions), 0)
       const started = attemptedTasks > 0
       const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
       const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
@@ -172,12 +187,78 @@ export default async function AdmissionsChallengePage() {
         totalTasks,
         completedTasks,
         attemptedTasks,
+        attemptedQuestions,
+        passedQuestions,
         started,
         lastActive,
         activityByDate,
       }
     })
     .sort((a, b) => b.completedTasks - a.completedTasks || a.name.localeCompare(b.name))
+
+  // ── Review rows (the challenge→interview selection gate) ──────────────────
+  // This challenge's (cohort, course) — constant across the synced rows.
+  const cohortId = num((rawRows[0]?.dimensions as Dim)?.cohort_id)
+  const courseId = num((rawRows[0]?.dimensions as Dim)?.course_id)
+  const cfg = (configRows ?? []).find((c) => c.cohort_id === cohortId && c.course_id === courseId)
+  const thresholds: ReviewThresholds = cfg
+    ? {
+        minAttemptedQuestions: cfg.min_attempted_questions,
+        minActiveDays: cfg.min_active_days,
+        minSpanDays: cfg.min_span_days,
+        maxCrammingPct: cfg.max_cramming_pct,
+        maxPerCapitaIncomeAnnual: cfg.max_per_capita_income_annual ?? undefined,
+      }
+    : DEFAULT_THRESHOLDS
+
+  const decisionByEmail = new Map((decisionRows ?? []).map((d) => [d.email, d]))
+
+  // Eligibility signals from the challenge intake answers, if that source is
+  // connected + synced. Absent → eligibility criteria stay placeholders.
+  const { data: intakeSrc } = await supabase
+    .from('metric_sources')
+    .select('id')
+    .eq('bq_table', 'pulse_challenge_intake')
+    .maybeSingle()
+  const intakeByEmail = new Map<string, IntakeRaw>()
+  if (intakeSrc) {
+    const intakeRows = await fetchAllRawRows(intakeSrc.id)
+    for (const r of intakeRows) {
+      const email = (r.learner_id ?? '').trim().toLowerCase()
+      if (email) intakeByEmail.set(email, (r.dimensions ?? {}) as IntakeRaw)
+    }
+  }
+
+  const reviewRows: ChallengeReviewRow[] = members.map((m) => {
+    const pace = paceMetrics(m.activityByDate)
+    const intake = intakeByEmail.get(m.email)
+    const signals = {
+      attemptedQuestions: m.attemptedQuestions,
+      activeDays: pace.activeDays,
+      spanDays: pace.spanDays,
+      crammingPct: pace.crammingPct,
+      ...(intake ? parseIntake(intake) : {}),
+    }
+    const evaln = evaluateCandidate(signals, thresholds)
+    const d = decisionByEmail.get(m.email) ?? null
+    return {
+      email: m.email,
+      name: m.name,
+      source: m.source,
+      signals,
+      criteria: evaln.criteria,
+      systemDecision: evaln.systemDecision,
+      failReasons: evaln.failReasons,
+      finalDecision: (d?.final_decision as 'selected' | 'rejected' | undefined) ?? null,
+      reason: d?.reason ?? null,
+      overrodeSystem: d?.overrode_system ?? false,
+      decidedByName: d?.decided_by_name ?? null,
+      decidedAt: d?.decided_at ?? null,
+      intake: intake ?? null,
+      // Flag when the system's live call now differs from what the human verified.
+      systemChanged: d != null && d.system_decision_at_verify != null && d.system_decision_at_verify !== evaln.systemDecision,
+    }
+  })
 
   // Cohort-level per-day rollup.
   const memberCount = members.length
@@ -240,7 +321,17 @@ export default async function AdmissionsChallengePage() {
           <SourceSyncButton sources={[syncSource]} />
         </div>
       )}
-      <ChallengeClient members={members} cohortDays={cohortDays} calendarDates={calendarDates} serviceAccountEmail={process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? ''} />
+      <ChallengeClient
+        members={members}
+        cohortDays={cohortDays}
+        calendarDates={calendarDates}
+        serviceAccountEmail={process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? ''}
+        reviewRows={reviewRows}
+        thresholds={thresholds}
+        cohortId={cohortId}
+        courseId={courseId}
+        canReview={appUser?.role === 'admin' || appUser?.role === 'staff'}
+      />
     </div>
   )
 }

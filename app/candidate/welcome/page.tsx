@@ -59,11 +59,10 @@ export default async function WelcomePage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
-  const { data: prospect } = await admin
-    .from('prospects')
-    .select('name, interest_form_submitted_at')
-    .eq('email', email)
-    .maybeSingle()
+  const [{ data: prospect }, { data: decision }] = await Promise.all([
+    admin.from('prospects').select('name, interest_form_submitted_at').eq('email', email).maybeSingle(),
+    admin.from('challenge_decisions').select('final_decision').eq('email', email).maybeSingle(),
+  ])
 
   const metadata = (user!.user_metadata ?? {}) as Record<string, unknown>
   const metadataName =
@@ -83,15 +82,23 @@ export default async function WelcomePage() {
   // "Current" pill from Interest Form to Challenge automatically.
   const challengeStarted = false
 
+  // Once the challenge review is decided, the challenge is done and the "Current"
+  // pill advances: selected → Interview (wait to be scheduled); rejected → Selection
+  // (see the outcome). Reading challenge_decisions.final_decision.
+  const finalDecision = decision?.final_decision as 'selected' | 'rejected' | undefined
+  const selected = finalDecision === 'selected'
+  const rejected = finalDecision === 'rejected'
+  const decided = selected || rejected
+
   type StageState = 'locked' | 'current' | 'completed' | 'completed-current'
   const stageStates: Record<string, StageState> = {
     welcome:         interestFormSubmitted ? 'completed' : 'current',
     'interest-form': interestFormSubmitted
-      ? (challengeStarted ? 'completed' : 'completed-current')
+      ? (challengeStarted || decided ? 'completed' : 'completed-current')
       : 'locked',
-    challenge:       challengeStarted ? 'current' : 'locked',
-    interview:       'locked',
-    selection:       'locked',
+    challenge:       decided ? 'completed' : challengeStarted ? 'current' : 'locked',
+    interview:       selected ? 'current' : 'locked',
+    selection:       rejected ? 'current' : 'locked',
   }
 
   return (

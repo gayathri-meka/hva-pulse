@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import ChallengeMatrixTable from './ChallengeMatrixTable'
 import ChallengePaceTable from './ChallengePaceTable'
 import ChallengeQuestionsView, { type TaskCatalogDay } from './ChallengeQuestionsView'
+import ChallengeReviewTable, { type ChallengeReviewRow } from './ChallengeReviewTable'
+import type { ReviewThresholds } from '@/lib/challengeReview'
 import LearnerTaskQuestions from './LearnerTaskQuestions'
 import ConversationThreadModal from '@/components/sensai/ConversationThreadModal'
 import type { ChatMessage, ScorecardCategory } from '@/lib/sensaiChat'
@@ -38,6 +40,8 @@ export type Member = {
   totalTasks: number
   completedTasks: number
   attemptedTasks: number  // tasks with any activity (attempted or completed)
+  attemptedQuestions: number  // Σ questions attempted across all tasks
+  passedQuestions: number     // Σ questions passed across all tasks
   started: boolean
   lastActive: string | null
   activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
@@ -88,13 +92,24 @@ export default function ChallengeClient({
   cohortDays,
   calendarDates,
   serviceAccountEmail,
+  reviewRows,
+  thresholds,
+  cohortId,
+  courseId,
+  canReview,
 }: {
   members: Member[]
   cohortDays: CohortDay[]
   calendarDates: string[]
   serviceAccountEmail: string
+  reviewRows: ChallengeReviewRow[]
+  thresholds: ReviewThresholds
+  cohortId: number
+  courseId: number
+  canReview: boolean
 }) {
-  const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions'>('matrix')
+  const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions' | 'review'>('review')
+  const [progressOpen, setProgressOpen] = useState(false)
 
   // Per-member summary + a sync action shared by the Day-by-day and Score tables.
   const syncRows = useMemo(
@@ -167,12 +182,22 @@ export default function ChallengeClient({
 
   return (
     <div className="space-y-8">
-      {/* ── Cohort progress by day ──────────────────────────────────────── */}
+      {/* ── Cohort progress by day (collapsible so the table dominates) ──── */}
       <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        <button
+          onClick={() => setProgressOpen((o) => !o)}
+          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 hover:text-zinc-700"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className={`h-3.5 w-3.5 transition-transform ${progressOpen ? 'rotate-90' : ''}`}
+          >
+            <path fillRule="evenodd" d="M7.293 4.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L11.586 10 7.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
           Cohort progress by day
-        </h2>
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        </button>
+        <div className={`${progressOpen ? 'mt-2 flex' : 'hidden'} gap-3 overflow-x-auto pb-1`}>
           {cohortDays.map((d) => {
             // Headline = people completion rate: what share of members finished
             // every task in the day. This is the "are they clearing it?" signal.
@@ -207,9 +232,10 @@ export default function ChallengeClient({
           {/* View toggle */}
           <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">
             {([
+              ['review', 'Review'],
               ['matrix', 'Day-by-day'],
               ['detail', 'Detailed'],
-              ['pace', 'Score'],
+              ['pace', 'Pace'],
               ['questions', 'By question'],
             ] as const).map(([key, label]) => (
               <button
@@ -225,7 +251,15 @@ export default function ChallengeClient({
           </div>
         </div>
 
-        {view === 'questions' ? (
+        {view === 'review' ? (
+          <ChallengeReviewTable
+            rows={reviewRows}
+            thresholds={thresholds}
+            cohortId={cohortId}
+            courseId={courseId}
+            canReview={canReview}
+          />
+        ) : view === 'questions' ? (
           <ChallengeQuestionsView days={taskCatalog} />
         ) : view === 'pace' ? (
           <ChallengePaceTable members={members} calendarDates={calendarDates} syncAction={syncAction} serviceAccountEmail={serviceAccountEmail} />
