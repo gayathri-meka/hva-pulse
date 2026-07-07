@@ -18,8 +18,9 @@ const GROUPS: { key: CriterionGroup; label: string }[] = [
   { key: 'engagement', label: 'Engagement' },
 ]
 
-// SensAI task holding the Day-3 "Commitment and Availability" questions (course 587).
-const COMMITMENT_TASK_ID = '8649'
+// SensAI task IDs (course 587) whose answers we surface on demand.
+const COMMITMENT_TASK_IDS = ['8649']              // Day 3 — Commitment & Availability
+const SES_TASK_IDS = ['8632', '8679']             // Day 5 Personal & Family Background + Day 6 Family Income
 
 // Light decoding of the option-letter answers so the raw section reads plainly.
 const DECODE: Record<string, Record<string, string>> = {
@@ -28,14 +29,18 @@ const DECODE: Record<string, Record<string, string>> = {
   work_domain_raw: { a: 'Tech', b: 'Non-tech', c: 'Not applicable' },
   willing_raw: { a: 'Yes', b: 'No', c: 'Not sure', d: 'Not applicable' },
 }
-const INTAKE_FIELDS: { key: keyof IntakeRaw; label: string }[] = [
-  { key: 'studying_raw', label: 'Currently studying' },
-  { key: 'level_raw', label: 'Education level' },
-  { key: 'college_name', label: 'Current college' },
-  { key: 'grad_year_raw', label: 'Completion year' },
-  { key: 'work_domain_raw', label: 'Work domain' },
-  { key: 'salary_raw', label: 'Monthly salary' },
-  { key: 'willing_raw', label: 'Willing to leave work' },
+// Each raw answer is tagged with the criterion group it supports, so it renders
+// right under that group's verdicts.
+const INTAKE_FIELDS: { key: keyof IntakeRaw; label: string; group: CriterionGroup }[] = [
+  { key: 'college_name', label: 'Current college', group: 'need' },
+  { key: 'family_income_raw', label: 'Annual family income', group: 'need' },
+  { key: 'family_size_raw', label: 'Family size', group: 'need' },
+  { key: 'studying_raw', label: 'Currently studying', group: 'work_availability' },
+  { key: 'level_raw', label: 'Education level', group: 'work_availability' },
+  { key: 'grad_year_raw', label: 'Completion year', group: 'work_availability' },
+  { key: 'work_domain_raw', label: 'Work domain', group: 'work_availability' },
+  { key: 'salary_raw', label: 'Monthly salary', group: 'work_availability' },
+  { key: 'willing_raw', label: 'Willing to leave work', group: 'work_availability' },
 ]
 function decode(key: keyof IntakeRaw, raw: string): string {
   const map = DECODE[key as string]
@@ -44,21 +49,23 @@ function decode(key: keyof IntakeRaw, raw: string): string {
   return raw
 }
 
-function IntakeAnswers({ intake }: { intake: IntakeRaw }) {
-  const rows = INTAKE_FIELDS.map((f) => ({ ...f, raw: (intake[f.key] ?? '').toString().trim() })).filter((r) => r.raw)
+// The raw intake answers that support a given criterion group — rendered right
+// under that group's verdicts as supporting evidence.
+function GroupAnswers({ intake, group }: { intake: IntakeRaw | null; group: CriterionGroup }) {
+  if (!intake) return null
+  const rows = INTAKE_FIELDS.filter((f) => f.group === group)
+    .map((f) => ({ ...f, raw: (intake[f.key] ?? '').toString().trim() }))
+    .filter((r) => r.raw)
   if (!rows.length) return null
   return (
-    <div className="mt-4">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Intake answers</div>
-      <dl className="divide-y divide-zinc-100 rounded-lg border border-zinc-100">
-        {rows.map((r) => (
-          <div key={r.key as string} className="flex items-start justify-between gap-3 px-3 py-1.5">
-            <dt className="text-xs text-zinc-500">{r.label}</dt>
-            <dd className="max-w-[60%] text-right text-xs font-medium text-zinc-800">{decode(r.key, r.raw)}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <dl className="mt-2 divide-y divide-zinc-100 rounded-lg border border-zinc-100 bg-zinc-50/50">
+      {rows.map((r) => (
+        <div key={r.key as string} className="flex items-start justify-between gap-3 px-3 py-1.5">
+          <dt className="text-xs text-zinc-500">{r.label}</dt>
+          <dd className="max-w-[60%] text-right text-xs font-medium text-zinc-800">{decode(r.key, r.raw)}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -68,9 +75,10 @@ function StatusDot({ status }: { status: CriterionResult['status'] }) {
   return <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${cls}`} />
 }
 
-// Collapsible viewer for the candidate's full Day-3 Commitment & Availability
-// answers — lazy-loaded from BigQuery on first expand (no pre-sync needed).
-function CommitmentAnswers({ email }: { email: string }) {
+// Collapsible viewer for a candidate's answers to one or more SensAI tasks —
+// lazy-loaded from BigQuery on first expand (no pre-sync needed). Used for the
+// Commitment & Availability set and the SES / family-background set.
+function TaskAnswers({ email, taskIds, label }: { email: string; taskIds: string[]; label: string }) {
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<LearnerQuestionThread[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -81,15 +89,17 @@ function CommitmentAnswers({ email }: { email: string }) {
     setOpen(next)
     if (next && data === null && !loading) {
       setLoading(true)
-      getLearnerTaskDetail(email, COMMITMENT_TASK_ID)
-        .then(setData)
+      Promise.all(taskIds.map((t) => getLearnerTaskDetail(email, t)))
+        .then((lists) => setData(lists.flat()))
         .catch(() => setError('Could not load answers from BigQuery.'))
         .finally(() => setLoading(false))
     }
   }
 
+  const answered = data?.filter((q) => q.messages.some((m) => m.role === 'user' && m.content?.trim())) ?? []
+
   return (
-    <div className="mt-4">
+    <div className="mt-3">
       <button
         onClick={toggle}
         className="flex w-full items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 hover:text-zinc-700"
@@ -97,20 +107,19 @@ function CommitmentAnswers({ email }: { email: string }) {
         <svg viewBox="0 0 20 20" fill="currentColor" className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`}>
           <path fillRule="evenodd" d="M7.293 4.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L11.586 10 7.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
         </svg>
-        Commitment &amp; availability answers
+        {label}
       </button>
       {open && (
         <div className="mt-2">
           {loading && <p className="text-xs text-zinc-400">Loading from BigQuery…</p>}
           {error && <p className="text-xs text-red-500">{error}</p>}
-          {data && data.filter((q) => q.messages.some((m) => m.role === 'user' && m.content?.trim())).length === 0 && !loading && (
+          {data && answered.length === 0 && !loading && (
             <p className="text-xs text-zinc-400">No answers recorded.</p>
           )}
-          {data && (
+          {answered.length > 0 && (
             <ul className="space-y-2.5">
-              {data.map((q) => {
-                const answer = [...q.messages].reverse().find((m) => m.role === 'user' && m.content?.trim())?.content?.trim()
-                if (!answer) return null
+              {answered.map((q) => {
+                const answer = [...q.messages].reverse().find((m) => m.role === 'user' && m.content?.trim())!.content!.trim()
                 return (
                   <li key={q.questionId} className="rounded-lg border border-zinc-100 px-3 py-2">
                     <p className="whitespace-pre-line text-[11px] leading-snug text-zinc-500">{q.description.trim()}</p>
@@ -187,7 +196,7 @@ export default function ChallengeReviewDrawer({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-2xl">
+      <aside className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-zinc-100 px-5 py-4">
           <div>
@@ -256,16 +265,20 @@ export default function ChallengeReviewDrawer({
                     </li>
                   ))}
                 </ul>
+
+                {/* Supporting raw answers for this group, right beside the verdicts. */}
+                <GroupAnswers intake={row.intake} group={group} />
+
+                {/* Full task answer sets, loaded on demand, under their group. */}
+                {group === 'need' && (
+                  <TaskAnswers email={row.email} taskIds={SES_TASK_IDS} label="SES / family background answers" />
+                )}
+                {group === 'work_availability' && (
+                  <TaskAnswers email={row.email} taskIds={COMMITMENT_TASK_IDS} label="Commitment & availability answers" />
+                )}
               </div>
             )
           })}
-
-          {/* Raw intake answers — what the candidate actually typed/selected on
-              SensAI. Useful for verifying the sync + judging college tier by hand. */}
-          {row.intake && <IntakeAnswers intake={row.intake} />}
-
-          {/* Full Day-3 Commitment & Availability answers, loaded on demand. */}
-          <CommitmentAnswers email={row.email} />
 
           {/* Current recorded decision */}
           {row.finalDecision && (

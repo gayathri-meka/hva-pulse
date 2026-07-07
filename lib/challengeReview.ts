@@ -24,6 +24,9 @@ export type ReviewThresholds = {
   minActiveDays: number         // active days must be > this
   minSpanDays: number           // span (first→last, inclusive) must be >= this
   maxCrammingPct: number        // cramming % must be < this
+  // Per-capita family income (annual) must be BELOW this to establish need.
+  // Undefined = not configured yet → the per-capita criterion stays 'na'.
+  maxPerCapitaIncomeAnnual?: number
 }
 
 export const DEFAULT_THRESHOLDS: ReviewThresholds = {
@@ -46,19 +49,18 @@ export type CandidateSignals = {
   // Eligibility / straight-elimination gates, from the SensAI intake questions.
   // All undefined until the intake-answer pipeline lands (then they activate).
   collegeTier?: 1 | 2 | 3      // Tier 1 / Tier 2 institutions are eliminated
-  graduationYear?: number      // year current education completes
-  studyMode?: 'full_time' | 'part_time'
+  currentlyStudying?: boolean  // still in education? (not studying → available now)
+  graduationYear?: number      // year current education completes (students only)
   working?: boolean            // currently working?
   willingToQuit?: boolean      // willing to pause/leave work to fully commit?
-  monthlySalaryInr?: number    // current monthly salary/stipend (₹)
+  familyAnnualIncomeInr?: number // total family income per year (₹)
+  familySize?: number          // total people in the family (per-capita denominator)
 }
 
-// Full-time students finishing in this year or later are too far from being
-// placeable to commit now (part-timers finishing late are still fine). Bump per
+// Students finishing in this year or later can't commit in time — it's a no-go.
+// Anyone graduating before it (or not currently studying) is available. Bump per
 // cohort year as needed.
-export const FULL_TIME_GRAD_CUTOFF_YEAR = 2028
-// > 6 LPA is outside the need profile this programme targets.
-export const INCOME_CEILING_ANNUAL_INR = 600_000
+export const GRAD_CUTOFF_YEAR = 2028
 
 export type CriterionStatus = 'pass' | 'fail' | 'na'
 // Need = socio-economic / financial-need gates; Work & Availability = capacity to
@@ -92,18 +94,16 @@ export function evaluateCandidate(
   signals: CandidateSignals,
   thresholds: ReviewThresholds = DEFAULT_THRESHOLDS,
 ): ReviewEvaluation {
-  // Graduation gate: fine if finishing before the cutoff; if finishing at/after it,
-  // full-time is eliminated but part-time can proceed; unknown mode → manual review.
+  // Graduation gate: not currently studying → available → pass; else gate on the
+  // completion year (>= cutoff is a no-go); unknown year for a student → manual review.
   const gradStatus: CriterionStatus =
-    signals.graduationYear === undefined
-      ? 'na'
-      : signals.graduationYear < FULL_TIME_GRAD_CUTOFF_YEAR
-        ? 'pass'
-        : signals.studyMode === 'full_time'
+    signals.currentlyStudying === false
+      ? 'pass'
+      : signals.graduationYear === undefined
+        ? 'na'
+        : signals.graduationYear >= GRAD_CUTOFF_YEAR
           ? 'fail'
-          : signals.studyMode === 'part_time'
-            ? 'pass'
-            : 'na'
+          : 'pass'
 
   // Work gate: not working is fine; working + unwilling to leave is eliminated;
   // working + willing is fine; willingness unknown → manual review.
@@ -118,7 +118,11 @@ export function evaluateCandidate(
             ? 'pass'
             : 'fail'
 
-  const annualIncome = signals.monthlySalaryInr === undefined ? undefined : signals.monthlySalaryInr * 12
+  // Per-capita family income = annual family income ÷ total family members.
+  const perCapitaIncome =
+    signals.familyAnnualIncomeInr !== undefined && signals.familySize
+      ? Math.round(signals.familyAnnualIncomeInr / signals.familySize)
+      : undefined
 
   const criteria: CriterionResult[] = [
     // ── Eligibility (straight-elimination / basic-fit gates) ──────────────────
@@ -146,17 +150,38 @@ export function evaluateCandidate(
       failFeedback: 'Based on your current institution, this programme isn’t the right fit for you.',
     },
     {
+      key: 'per_capita_income',
+      label: 'Per-capita income',
+      group: 'need',
+      placeholder: false, // wired — na means missing income/size or threshold not set
+      status:
+        perCapitaIncome === undefined || thresholds.maxPerCapitaIncomeAnnual === undefined
+          ? 'na'
+          : perCapitaIncome < thresholds.maxPerCapitaIncomeAnnual
+            ? 'pass'
+            : 'fail',
+      value: perCapitaIncome === undefined ? 'n/a' : `₹${perCapitaIncome.toLocaleString('en-IN')}/yr`,
+      threshold:
+        thresholds.maxPerCapitaIncomeAnnual === undefined
+          ? 'not set'
+          : `< ₹${thresholds.maxPerCapitaIncomeAnnual.toLocaleString('en-IN')}/yr`,
+      internalOnly: true,
+      failFeedback: 'Your family’s per-capita income is above the level this programme is aimed at.',
+    },
+    {
       key: 'graduation_timeline',
       label: 'Graduation timeline',
       group: 'work_availability',
-      placeholder: false, // wired — na here means not-a-current-student / mode unknown
+      placeholder: false, // wired — na here means a student whose completion year is unknown
       status: gradStatus,
       value:
-        signals.graduationYear === undefined
-          ? 'n/a'
-          : `${signals.graduationYear}${signals.studyMode ? ` · ${signals.studyMode === 'full_time' ? 'FT' : 'PT'}` : ''}`,
-      threshold: `Before ${FULL_TIME_GRAD_CUTOFF_YEAR}, or part-time`,
-      failFeedback: `Full-time students finishing in ${FULL_TIME_GRAD_CUTOFF_YEAR} or later can’t commit enough time to the programme right now.`,
+        signals.currentlyStudying === false
+          ? 'Not studying'
+          : signals.graduationYear === undefined
+            ? 'n/a'
+            : String(signals.graduationYear),
+      threshold: `Finishing by ${GRAD_CUTOFF_YEAR - 1}`,
+      failFeedback: `You’re set to finish your current education in ${GRAD_CUTOFF_YEAR} or later, so you can’t commit to the programme in time.`,
     },
     {
       key: 'work_commitment',
@@ -176,17 +201,6 @@ export function evaluateCandidate(
                 : 'Working · won’t leave',
       threshold: 'Not working, or willing to fully commit',
       failFeedback: 'Fully committing to HVA means stepping away from other work, which you weren’t able to do.',
-    },
-    {
-      key: 'income_ceiling',
-      label: 'Income ceiling',
-      group: 'need',
-      placeholder: false, // wired — na here means no salary answer
-      status: annualIncome === undefined ? 'na' : annualIncome > INCOME_CEILING_ANNUAL_INR ? 'fail' : 'pass',
-      value: signals.monthlySalaryInr === undefined ? 'n/a' : `₹${signals.monthlySalaryInr}/mo`,
-      threshold: '≤ 6 LPA',
-      internalOnly: true,
-      failFeedback: 'This programme is aimed at candidates below a certain income level.',
     },
     // ── Engagement (challenge effort + performance) ───────────────────────────
     {

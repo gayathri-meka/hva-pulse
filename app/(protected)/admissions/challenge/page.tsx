@@ -207,6 +207,7 @@ export default async function AdmissionsChallengePage() {
         minActiveDays: cfg.min_active_days,
         minSpanDays: cfg.min_span_days,
         maxCrammingPct: cfg.max_cramming_pct,
+        maxPerCapitaIncomeAnnual: cfg.max_per_capita_income_annual ?? undefined,
       }
     : DEFAULT_THRESHOLDS
 

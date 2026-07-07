@@ -392,6 +392,10 @@ export async function updateChallengeReviewConfig(input: {
   if (bounds.some((n) => !Number.isInteger(n) || n < 0))
     return { ok: false, error: 'Thresholds must be whole numbers (0 or greater).' }
   if (t.maxCrammingPct > 100) return { ok: false, error: 'Cramming % cannot exceed 100.' }
+  // Per-capita threshold is optional (null = not set → criterion stays 'na').
+  const perCapita = t.maxPerCapitaIncomeAnnual
+  if (perCapita !== undefined && (!Number.isInteger(perCapita) || perCapita < 0))
+    return { ok: false, error: 'Per-capita income threshold must be a whole number (0 or greater).' }
 
   const { error } = await adminClient()
     .from('challenge_review_config')
@@ -403,6 +407,7 @@ export async function updateChallengeReviewConfig(input: {
         min_active_days: t.minActiveDays,
         min_span_days: t.minSpanDays,
         max_cramming_pct: t.maxCrammingPct,
+        max_per_capita_income_annual: perCapita ?? null,
         updated_by: user.id,
         updated_at: new Date().toISOString(),
       },

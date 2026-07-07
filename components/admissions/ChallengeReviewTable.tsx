@@ -42,7 +42,7 @@ const CRITERIA_COLS: { key: string; label: string }[] = [
   // Need
   { key: 'ses', label: 'SES' },
   { key: 'college_tier', label: 'College' },
-  { key: 'income_ceiling', label: 'Income' },
+  { key: 'per_capita_income', label: 'Per-capita' },
   // Work & Availability
   { key: 'graduation_timeline', label: 'Grad yr' },
   { key: 'work_commitment', label: 'Commit' },
@@ -362,6 +362,24 @@ function EditRulesModal({
         {field('minActiveDays', 'Active days must be greater than', 'days')}
         {field('minSpanDays', 'Span must be at least', 'days')}
         {field('maxCrammingPct', 'Cramming must be under', '%')}
+        <label className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm text-zinc-700">
+            Per-capita income must be under
+            <span className="mt-0.5 block text-[11px] text-zinc-400">annual family income ÷ family size · blank = not set</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <input
+              type="number"
+              value={t.maxPerCapitaIncomeAnnual ?? ''}
+              placeholder="—"
+              onChange={(e) =>
+                setT({ ...t, maxPerCapitaIncomeAnnual: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
+              className="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+            />
+            <span className="text-xs text-zinc-400">₹/yr</span>
+          </span>
+        </label>
       </div>
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">

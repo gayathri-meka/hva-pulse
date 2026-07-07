@@ -167,7 +167,7 @@ describe('updateChallengeReviewConfig', () => {
     expect(res).toEqual({ ok: false, error: expect.stringContaining('cannot exceed 100') })
   })
 
-  test('upserts the config row keyed by (cohort, course)', async () => {
+  test('upserts the config row keyed by (cohort, course); per-capita null when unset', async () => {
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
     const { upsert } = mockUpsertClient({ error: null })
     const res = await updateChallengeReviewConfig({ cohortId: 214, courseId: 587, thresholds: good })
@@ -180,8 +180,31 @@ describe('updateChallengeReviewConfig', () => {
       min_active_days: 10,
       min_span_days: 14,
       max_cramming_pct: 30,
+      max_per_capita_income_annual: null,
       updated_by: 'staff-1',
     })
     expect(opts).toEqual({ onConflict: 'cohort_id,course_id' })
+  })
+
+  test('writes the per-capita threshold when provided', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert } = mockUpsertClient({ error: null })
+    const res = await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: { ...good, maxPerCapitaIncomeAnnual: 80_000 },
+    })
+    expect(res).toEqual({ ok: true })
+    expect(upsert.mock.calls[0][0]).toMatchObject({ max_per_capita_income_annual: 80_000 })
+  })
+
+  test('rejects a negative per-capita threshold', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const res = await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: { ...good, maxPerCapitaIncomeAnnual: -5 },
+    })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('Per-capita') })
   })
 })

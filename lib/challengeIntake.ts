@@ -20,12 +20,14 @@ export type IntakeRaw = {
   work_domain_raw?: string | null
   salary_raw?: string | null
   willing_raw?: string | null
+  family_size_raw?: string | null
+  family_income_raw?: string | null
 }
 
 // The subset of signals derived from intake (collegeTier excluded — placeholder).
 type IntakeSignals = Pick<
   CandidateSignals,
-  'graduationYear' | 'studyMode' | 'working' | 'willingToQuit' | 'monthlySalaryInr'
+  'currentlyStudying' | 'graduationYear' | 'working' | 'willingToQuit' | 'familyAnnualIncomeInr' | 'familySize'
 >
 
 const norm = (v: string | null | undefined) =>
@@ -91,39 +93,50 @@ export function parseSalary(v: string | null | undefined): number | undefined {
   if (/\b(no|zero)\b.*\bincome\b|^no income$|no fixed income|^0+$/.test(s)) return 0
   // A stray single option letter is not a salary.
   if (/^[a-z]$/.test(s)) return undefined
-  // "10k" / "10 k" → 10000.
-  const kMatch = s.match(/(\d[\d,]*(?:\.\d+)?)\s*k\b/)
-  if (kMatch) {
-    const n = Number(kMatch[1].replace(/,/g, ''))
-    return Number.isFinite(n) ? Math.round(n * 1000) : undefined
+  // Scale-word shorthand: crore → 1e7, lakh → 1e5, k → 1e3.
+  const scaled = (re: RegExp, mult: number) => {
+    const m = s.match(re)
+    if (!m) return undefined
+    const n = Number(m[1].replace(/,/g, ''))
+    return Number.isFinite(n) ? Math.round(n * mult) : undefined
   }
-  // Otherwise take the first run of digits (drop ₹, commas, "rs", "per month").
+  const crore = scaled(/(\d[\d,]*(?:\.\d+)?)\s*(?:crores?|cr)\b/, 10_000_000)
+  if (crore !== undefined) return crore
+  const lakh = scaled(/(\d[\d,]*(?:\.\d+)?)\s*(?:lakhs?|lacs?|l)\b/, 100_000)
+  if (lakh !== undefined) return lakh
+  const k = scaled(/(\d[\d,]*(?:\.\d+)?)\s*k\b/, 1_000)
+  if (k !== undefined) return k
+  // Otherwise take the first run of digits (drop ₹, commas, "rs", "per year").
   const digits = s.replace(/[,₹]/g, '').match(/\d+/)
   if (!digits) return undefined
   const n = Number(digits[0])
   return Number.isFinite(n) ? n : undefined
 }
 
+// Family size (or any small count) → integer, or undefined if unreadable / implausible.
+export function parseCount(v: string | null | undefined): number | undefined {
+  if (isBlank(v)) return undefined
+  const m = norm(v).match(/\d+/)
+  if (!m) return undefined
+  const n = Number(m[0])
+  return n >= 1 && n <= 40 ? n : undefined
+}
+
 export function parseIntake(raw: IntakeRaw): IntakeSignals {
   const studying = parseStudying(raw.studying_raw)
   const working = parseWorking(raw.work_domain_raw)
   const willingToQuit = parseWilling(raw.willing_raw)
-  const monthlySalaryInr = parseSalary(raw.salary_raw)
 
   // Graduation gate only applies to CURRENT students. If not studying, there's no
-  // "current education" year to gate on.
+  // "current education" year to gate on (they're available now).
   const graduationYear = studying ? parseYear(raw.grad_year_raw) : undefined
 
-  // FT/PT isn't asked — infer per the agreed rule: currently studying AND working
-  // → part-time (can proceed); studying and not working → full-time. Unknown work
-  // status leaves mode undefined (→ manual review for late-completion cases).
-  const studyMode: IntakeSignals['studyMode'] = studying
-    ? working === true
-      ? 'part_time'
-      : working === false
-        ? 'full_time'
-        : undefined
-    : undefined
-
-  return { graduationYear, studyMode, working, willingToQuit, monthlySalaryInr }
+  return {
+    currentlyStudying: studying,
+    graduationYear,
+    working,
+    willingToQuit,
+    familyAnnualIncomeInr: parseSalary(raw.family_income_raw),
+    familySize: parseCount(raw.family_size_raw),
+  }
 }
