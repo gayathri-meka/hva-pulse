@@ -175,6 +175,10 @@ export default async function AdmissionsChallengePage() {
       const challengeTotal = challengeDims.reduce((s, d) => s + num(d.total_questions), 0)
       const challengePassed = challengeDims.reduce((s, d) => s + num(d.passed_questions), 0)
       const keyQuestionScorePct = challengeTotal > 0 ? Math.round((100 * challengePassed) / challengeTotal) : undefined
+      // Actual average grader score (0–4 scale) across scored challenge questions.
+      const challengeScoreSum = challengeDims.reduce((s, d) => s + num(d.score_sum), 0)
+      const challengeScoreCount = challengeDims.reduce((s, d) => s + num(d.scored_questions), 0)
+      const keyQuestionAvgScore = challengeScoreCount > 0 ? Math.round((challengeScoreSum / challengeScoreCount) * 10) / 10 : undefined
       const started = attemptedTasks > 0
       const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
       const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
@@ -197,6 +201,7 @@ export default async function AdmissionsChallengePage() {
         attemptedQuestions,
         passedQuestions,
         keyQuestionScorePct,
+        keyQuestionAvgScore,
         started,
         firstActive,
         lastActive,
@@ -273,6 +278,7 @@ export default async function AdmissionsChallengePage() {
       attemptedQuestions: m.attemptedQuestions,
       totalQuestions: totals.questions,
       keyQuestionScorePct: m.keyQuestionScorePct,
+      keyQuestionAvgScore: m.keyQuestionAvgScore,
       activeDays: pace.activeDays,
       spanDays: pace.spanDays,
       crammingPct: pace.crammingPct,

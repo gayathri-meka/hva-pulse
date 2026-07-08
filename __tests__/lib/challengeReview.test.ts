@@ -107,6 +107,11 @@ describe('evaluateCandidate', () => {
     expect(r.failReasons).toEqual([])
   })
 
+  it('shows the average grader score (0–4) alongside the pass rate when present', () => {
+    const r = evaluateCandidate({ ...passing, keyQuestionScorePct: 60, keyQuestionAvgScore: 3.2 })
+    expect(get(r, 'key_question_score').value).toBe('avg 3.2/4 · 60% passed')
+  })
+
   it('leaves every intake criterion na (and out of the decision) when no intake data is present', () => {
     const r = evaluateCandidate(passing)
     for (const key of ['ses', 'college', 'per_capita_income', 'graduation_timeline', 'work_commitment', 'key_question_score']) {

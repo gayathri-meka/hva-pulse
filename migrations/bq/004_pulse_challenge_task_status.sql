@@ -144,6 +144,9 @@ per_user_question AS (
       WHEN g.score IS NOT NULL AND g.pass_score IS NOT NULL THEN g.score >= g.pass_score
       ELSE FALSE
     END) AS passed,
+    -- Best raw grader score on this question (0–4 for the coding scale). Powers the
+    -- informational "average challenge score" — kept alongside the pass/fail count.
+    MAX(g.score) AS question_score,
     MAX(g.attempt_at) AS last_attempt_at
   FROM graded g
   GROUP BY g.user_id, g.question_id
@@ -154,6 +157,8 @@ per_user_task_quiz AS (
     q.task_id,
     COUNT(*)            AS attempted_questions,
     COUNTIF(puq.passed) AS passed_questions,
+    SUM(puq.question_score)                    AS score_sum,
+    COUNTIF(puq.question_score IS NOT NULL)     AS scored_questions,
     MAX(puq.last_attempt_at) AS last_attempt_at
   FROM per_user_question puq
   JOIN q ON q.question_id = puq.question_id
@@ -187,6 +192,8 @@ SELECT
   COALESCE(tqc.total_questions, 0)      AS total_questions,
   COALESCE(putq.attempted_questions, 0) AS attempted_questions,
   COALESCE(putq.passed_questions, 0)    AS passed_questions,
+  COALESCE(putq.score_sum, 0)           AS score_sum,
+  COALESCE(putq.scored_questions, 0)    AS scored_questions,
   (putc.task_id IS NOT NULL)            AS has_task_completion,
   CASE
     WHEN COALESCE(tqc.total_questions, 0) > 0 THEN

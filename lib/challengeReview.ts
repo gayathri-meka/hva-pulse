@@ -109,8 +109,10 @@ export type CandidateSignals = {
   crammingPct: number
   // SES rubric answers, keyed by rawField (place_raw, marital_raw, …). Scored via lib/ses.
   sesAnswers?: Record<string, string | null | undefined>
-  // Placeholder — not yet implemented → criterion is 'na'.
+  // Informational (never gates): % of "[Coding] Challenges" questions passed, and
+  // the actual average grader score across them (0–4 scale).
   keyQuestionScorePct?: number
+  keyQuestionAvgScore?: number
   // Eligibility / straight-elimination gates, from the SensAI intake questions.
   // All undefined until the intake-answer pipeline lands (then they activate).
   collegeName?: string         // current college/institute — matched against the excluded list
@@ -362,7 +364,12 @@ export function evaluateCandidate(
       placeholder: false,
       informational: true,
       status: signals.keyQuestionScorePct === undefined ? 'na' : 'pass',
-      value: signals.keyQuestionScorePct === undefined ? 'n/a' : `${signals.keyQuestionScorePct}% passed`,
+      value:
+        signals.keyQuestionScorePct === undefined
+          ? 'n/a'
+          : signals.keyQuestionAvgScore !== undefined
+            ? `avg ${signals.keyQuestionAvgScore}/4 · ${signals.keyQuestionScorePct}% passed`
+            : `${signals.keyQuestionScorePct}% passed`,
       threshold: 'For information only — not used to select or reject',
     },
   ]

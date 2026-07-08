@@ -43,6 +43,7 @@ export type Member = {
   attemptedQuestions: number  // Σ questions attempted across all tasks
   passedQuestions: number     // Σ questions passed across all tasks
   keyQuestionScorePct?: number // % passed across "[Coding] Challenges" tasks (informational)
+  keyQuestionAvgScore?: number // avg grader score (0–4) across those questions (informational)
   started: boolean
   firstActive: string | null
   lastActive: string | null
