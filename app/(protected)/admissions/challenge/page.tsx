@@ -169,6 +169,12 @@ export default async function AdmissionsChallengePage() {
       // review criteria (e.g. attempted-questions > threshold).
       const attemptedQuestions = dims.reduce((s, d) => s + num(d.attempted_questions), 0)
       const passedQuestions = dims.reduce((s, d) => s + num(d.passed_questions), 0)
+      // "Challenge-question score" (informational): % of questions passed across the
+      // "[Coding] Challenges" tasks (title contains "challenges").
+      const challengeDims = dims.filter((d) => (d.task_title ?? '').toLowerCase().includes('challenges'))
+      const challengeTotal = challengeDims.reduce((s, d) => s + num(d.total_questions), 0)
+      const challengePassed = challengeDims.reduce((s, d) => s + num(d.passed_questions), 0)
+      const keyQuestionScorePct = challengeTotal > 0 ? Math.round((100 * challengePassed) / challengeTotal) : undefined
       const started = attemptedTasks > 0
       const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
       const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
@@ -190,6 +196,7 @@ export default async function AdmissionsChallengePage() {
         attemptedTasks,
         attemptedQuestions,
         passedQuestions,
+        keyQuestionScorePct,
         started,
         firstActive,
         lastActive,
@@ -265,6 +272,7 @@ export default async function AdmissionsChallengePage() {
     const signals = {
       attemptedQuestions: m.attemptedQuestions,
       totalQuestions: totals.questions,
+      keyQuestionScorePct: m.keyQuestionScorePct,
       activeDays: pace.activeDays,
       spanDays: pace.spanDays,
       crammingPct: pace.crammingPct,

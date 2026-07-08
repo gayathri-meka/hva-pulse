@@ -42,6 +42,7 @@ export type Member = {
   attemptedTasks: number  // tasks with any activity (attempted or completed)
   attemptedQuestions: number  // Σ questions attempted across all tasks
   passedQuestions: number     // Σ questions passed across all tasks
+  keyQuestionScorePct?: number // % passed across "[Coding] Challenges" tasks (informational)
   started: boolean
   firstActive: string | null
   lastActive: string | null

@@ -221,7 +221,11 @@ export default function ChallengeReviewDrawer({
                 <ul className="space-y-2.5">
                   {items.map((c) => (
                     <li key={c.key} className="flex items-start gap-2.5">
-                      <StatusDot status={c.status} />
+                      {c.informational ? (
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-300" />
+                      ) : (
+                        <StatusDot status={c.status} />
+                      )}
                       <div className="flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm text-zinc-800">
@@ -231,10 +235,21 @@ export default function ChallengeReviewDrawer({
                                 placeholder
                               </span>
                             )}
+                            {c.informational && (
+                              <span className="ml-1.5 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-500">
+                                info only
+                              </span>
+                            )}
                           </span>
                           <span
                             className={`text-xs font-semibold ${
-                              c.status === 'pass' ? 'text-emerald-700' : c.status === 'fail' ? 'text-red-600' : 'text-zinc-400'
+                              c.informational
+                                ? 'text-zinc-500'
+                                : c.status === 'pass'
+                                  ? 'text-emerald-700'
+                                  : c.status === 'fail'
+                                    ? 'text-red-600'
+                                    : 'text-zinc-400'
                             }`}
                           >
                             {c.value}

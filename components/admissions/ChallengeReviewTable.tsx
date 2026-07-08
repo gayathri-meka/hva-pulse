@@ -55,7 +55,7 @@ const CRITERIA_COLS: { key: string; label: string }[] = [
   { key: 'active_days', label: 'Active' },
   { key: 'span', label: 'Span' },
   { key: 'cramming', label: 'Cramming' },
-  { key: 'key_question_score', label: 'Key-Q' },
+  { key: 'key_question_score', label: 'Challenge' },
 ]
 
 const criterion = (row: ChallengeReviewRow, key: string) => row.criteria.find((c) => c.key === key)
@@ -65,6 +65,12 @@ const statusWord = (s: CriterionResult['status'] | undefined) =>
 function CriterionChip({ c }: { c: CriterionResult | undefined }) {
   if (!c || c.status === 'na')
     return <span className="text-zinc-300">—</span>
+  if (c.informational)
+    return (
+      <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-600 ring-1 ring-sky-200">
+        {c.value}
+      </span>
+    )
   const cls =
     c.status === 'pass'
       ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'

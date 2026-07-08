@@ -91,14 +91,20 @@ describe('evaluateCandidate', () => {
     expect(get(evaluateCandidate({ ...passing, crammingPct: 29 }), 'cramming').status).toBe('pass')
   })
 
-  it('marks only the unbuilt criteria (key-Q) as placeholders', () => {
+  it('has no unbuilt placeholders left; key-Q is informational', () => {
     const r = evaluateCandidate(passing)
-    expect(get(r, 'key_question_score').placeholder).toBe(true)
-    // Wired gates are NOT placeholders even when this candidate has no data — they
-    // just come back 'na' (not applicable / no answer), never the "unbuilt" badge.
-    for (const key of ['ses', 'college', 'per_capita_income', 'graduation_timeline', 'work_commitment']) {
+    for (const key of ['ses', 'college', 'per_capita_income', 'graduation_timeline', 'work_commitment', 'key_question_score']) {
       expect(get(r, key).placeholder).toBe(false)
     }
+    expect(get(r, 'key_question_score').informational).toBe(true)
+  })
+
+  it('never lets the informational Challenge-question score gate the decision', () => {
+    // Even a 0% key-question score must not reject an otherwise-passing candidate.
+    const r = evaluateCandidate({ ...passing, keyQuestionScorePct: 0 })
+    expect(get(r, 'key_question_score').value).toBe('0% passed')
+    expect(r.systemDecision).toBe('selected')
+    expect(r.failReasons).toEqual([])
   })
 
   it('leaves every intake criterion na (and out of the decision) when no intake data is present', () => {

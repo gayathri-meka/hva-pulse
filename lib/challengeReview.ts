@@ -143,6 +143,7 @@ export type CriterionResult = {
   placeholder: boolean // true = criterion's data isn't wired yet (always 'na')
   internalOnly?: boolean // fail feedback is for the team only — NOT shown to the candidate
   failFeedback?: string  // shown on a fail (to the team always; to the candidate unless internalOnly)
+  informational?: boolean // shown for context only — NEVER affects the system decision
   sesBreakdown?: SesBreakdownRow[] // SES criterion only — per-question answer/score/weight for drill-down
 }
 
@@ -352,22 +353,26 @@ export function evaluateCandidate(
       threshold: `Under ${thresholds.maxCrammingPct}% of all work done on the single busiest day`,
       failFeedback: `Too much of your work was crammed into one day (${signals.crammingPct}%); we look for steadier effort.`,
     },
-    // Key-question score — placeholder (needs per-selected-question scores synced).
+    // Challenge-question score — INFORMATIONAL only. % of questions passed across
+    // the "[Coding] Challenges" tasks. Shown for context; never gates a decision.
     {
       key: 'key_question_score',
-      label: 'Key-question score',
+      label: 'Challenge-question score',
       group: 'engagement',
-      placeholder: true, // per-selected-question scores not synced yet
-      status: 'na',
-      value: signals.keyQuestionScorePct === undefined ? 'n/a' : `${signals.keyQuestionScorePct}%`,
-      threshold: 'TBD',
-      failFeedback: 'Your scores on the key challenge questions were below the bar.',
+      placeholder: false,
+      informational: true,
+      status: signals.keyQuestionScorePct === undefined ? 'na' : 'pass',
+      value: signals.keyQuestionScorePct === undefined ? 'n/a' : `${signals.keyQuestionScorePct}% passed`,
+      threshold: 'For information only — not used to select or reject',
     },
   ]
 
-  const graded = criteria.filter((c) => c.status !== 'na')
+  // Informational criteria are shown for context but NEVER affect the decision.
+  const graded = criteria.filter((c) => c.status !== 'na' && !c.informational)
   const systemDecision: SystemDecision = graded.every((c) => c.status === 'pass') ? 'selected' : 'rejected'
-  const failReasons = criteria.filter((c) => c.status === 'fail' && c.failFeedback).map((c) => c.failFeedback!)
+  const failReasons = criteria
+    .filter((c) => c.status === 'fail' && !c.informational && c.failFeedback)
+    .map((c) => c.failFeedback!)
 
   return { criteria, systemDecision, failReasons }
 }
