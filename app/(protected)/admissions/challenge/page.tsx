@@ -285,7 +285,6 @@ export default async function AdmissionsChallengePage() {
       decidedByName: d?.decided_by_name ?? null,
       decidedAt: d?.decided_at ?? null,
       published: d?.published_at != null,
-      intake: intake ?? null,
       // Flag when the system's live call now differs from what the human verified.
       systemChanged: d != null && d.system_decision_at_verify != null && d.system_decision_at_verify !== evaln.systemDecision,
     }

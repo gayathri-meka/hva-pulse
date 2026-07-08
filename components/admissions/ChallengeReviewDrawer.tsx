@@ -4,7 +4,6 @@ import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ChallengeReviewRow } from './ChallengeReviewTable'
 import { REVIEW_DECISIONS_ENABLED, type CriterionResult, type CriterionGroup } from '@/lib/challengeReview'
-import type { IntakeRaw } from '@/lib/challengeIntake'
 import {
   setChallengeDecision,
   releaseChallengeDecisions,
@@ -20,58 +19,14 @@ const GROUPS: { key: CriterionGroup; label: string }[] = [
   { key: 'engagement', label: 'Engagement' },
 ]
 
-// SensAI task IDs (course 587) whose answers we surface on demand.
-const COMMITMENT_TASK_IDS = ['8649']              // Day 3 — Commitment & Availability
-const SES_TASK_IDS = ['8632', '8679']             // Day 5 Personal & Family Background + Day 6 Family Income
-
-// Light decoding of the option-letter answers so the raw section reads plainly.
-const DECODE: Record<string, Record<string, string>> = {
-  studying_raw: { a: 'Yes', b: 'No' },
-  level_raw: { a: 'Class 12', b: "Bachelor's", c: "Master's", d: 'Diploma', e: 'Other', f: 'Not applicable' },
-  work_domain_raw: { a: 'Tech', b: 'Non-tech', c: 'Not applicable' },
-  willing_raw: { a: 'Yes', b: 'No', c: 'Not sure', d: 'Not applicable' },
-  course_type_raw: { a: 'Full-time', b: 'Part-time', c: 'Distance', d: 'Online', e: 'Not applicable' },
-}
-// Each raw answer is tagged with the criterion group it supports, so it renders
-// right under that group's verdicts.
-const INTAKE_FIELDS: { key: keyof IntakeRaw; label: string; group: CriterionGroup }[] = [
-  // college_name is omitted — the College criterion already shows it directly.
-  { key: 'family_income_raw', label: 'Annual family income', group: 'need' },
-  { key: 'family_size_raw', label: 'Family size', group: 'need' },
-  { key: 'studying_raw', label: 'Currently studying', group: 'work_availability' },
-  { key: 'level_raw', label: 'Education level', group: 'work_availability' },
-  { key: 'grad_year_raw', label: 'Completion year', group: 'work_availability' },
-  { key: 'course_type_raw', label: 'Course type', group: 'work_availability' },
-  { key: 'work_domain_raw', label: 'Work domain', group: 'work_availability' },
-  { key: 'salary_raw', label: 'Monthly salary', group: 'work_availability' },
-  { key: 'willing_raw', label: 'Willing to leave work', group: 'work_availability' },
+// The SensAI intake tasks (course 587) whose answers we surface, in day order.
+const SENSAI_TASKS: { id: string; label: string }[] = [
+  { id: '8639', label: 'Day 1 · Personal Information' },
+  { id: '8648', label: 'Day 2 · Education & Learning Journey' },
+  { id: '8649', label: 'Day 3 · Commitment & Availability' },
+  { id: '8632', label: 'Day 5 · Personal & Family Background' },
+  { id: '8679', label: 'Day 6 · Family Income & Living Situation' },
 ]
-function decode(key: keyof IntakeRaw, raw: string): string {
-  const map = DECODE[key as string]
-  const norm = raw.trim().toLowerCase().replace(/[.]+$/, '')
-  if (map && map[norm]) return `${map[norm]}`
-  return raw
-}
-
-// The raw intake answers that support a given criterion group — rendered right
-// under that group's verdicts as supporting evidence.
-function GroupAnswers({ intake, group }: { intake: IntakeRaw | null; group: CriterionGroup }) {
-  if (!intake) return null
-  const rows = INTAKE_FIELDS.filter((f) => f.group === group)
-    .map((f) => ({ ...f, raw: (intake[f.key] ?? '').toString().trim() }))
-    .filter((r) => r.raw)
-  if (!rows.length) return null
-  return (
-    <dl className="mt-2 divide-y divide-zinc-100 rounded-lg border border-zinc-100 bg-zinc-50/50">
-      {rows.map((r) => (
-        <div key={r.key as string} className="flex items-start justify-between gap-3 px-3 py-1.5">
-          <dt className="text-xs text-zinc-500">{r.label}</dt>
-          <dd className="max-w-[60%] text-right text-xs font-medium text-zinc-800">{decode(r.key, r.raw)}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
 
 function StatusDot({ status }: { status: CriterionResult['status'] }) {
   const cls =
@@ -289,20 +244,18 @@ export default function ChallengeReviewDrawer({
                     </li>
                   ))}
                 </ul>
-
-                {/* Supporting raw answers for this group, right beside the verdicts. */}
-                <GroupAnswers intake={row.intake} group={group} />
-
-                {/* Full task answer sets, loaded on demand, under their group. */}
-                {group === 'need' && (
-                  <TaskAnswers email={row.email} taskIds={SES_TASK_IDS} label="SES / family background answers" />
-                )}
-                {group === 'work_availability' && (
-                  <TaskAnswers email={row.email} taskIds={COMMITMENT_TASK_IDS} label="Commitment & availability answers" />
-                )}
               </div>
             )
           })}
+
+          {/* All SensAI intake answers, grouped by day, loaded on demand — kept
+              together at the end rather than split across the criteria groups. */}
+          <div className="mt-5 border-t border-zinc-100 pt-4">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">SensAI answers</div>
+            {SENSAI_TASKS.map((t) => (
+              <TaskAnswers key={t.id} email={row.email} taskIds={[t.id]} label={t.label} />
+            ))}
+          </div>
 
           {/* Current recorded decision */}
           {row.finalDecision && (

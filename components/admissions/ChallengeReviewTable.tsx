@@ -15,7 +15,6 @@ import {
   type SystemDecision,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
-import type { IntakeRaw } from '@/lib/challengeIntake'
 import {
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
@@ -38,7 +37,6 @@ export type ChallengeReviewRow = {
   decidedAt: string | null
   systemChanged: boolean
   published: boolean // decision released to the candidate portal
-  intake: IntakeRaw | null // raw synced intake answers (null if not synced)
 }
 
 // Which criteria get their own column, and the short header for each. Eligibility
