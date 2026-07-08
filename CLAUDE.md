@@ -337,6 +337,15 @@ The **Review** sub-tab in Admissions → Challenge (`components/admissions/Chall
 - Scraper: `lib/scraper.ts` (Jooble API) + API endpoint at `app/api/scrape/route.ts`
 - Requires `JOOBLE_API_KEY` env var
 
+### Team Tools — Scorecard Studio
+
+`app/(protected)/tools/` (sidebar **Tools**, staff+admin only — `requireStaff`; hidden for guests) is a home for team utilities. First tool: **Scorecard Studio**, three functions for SensAI grading rubrics ("scorecards"):
+- **Generate** — question + grading intent (+ optional example answers as anchors) → a scorecard built on six principles (observable descriptors, explicit fail condition, one-thing-per-scorecard, anchored levels, question-specific, few levels).
+- **Inspect** — scores a pasted scorecard 0–100 on AI-gradeability across the six dimensions, flags vague spots (verbatim snippet + fix), and can **Rewrite it tighter**.
+- **Test** — dry-runs grading an answer against a scorecard **three times** and shows the score/feedback + whether it's consistent.
+
+Prompts + pure helpers (`parseModelJSON`, `normalizeInspect`) live in `lib/tools/scorecard.ts` (unit-tested); the Anthropic calls + validation/auth are server actions in `app/(protected)/tools/actions.ts` (model `claude-sonnet-4-6`, needs `ANTHROPIC_API_KEY`). UI is `ScorecardStudio.tsx` (Pulse design language). **The Test tab's grading system prompt (`TEST_SYSTEM`) is a PLACEHOLDER approximation of SensAI's grader, flagged `TEST_PROMPT_IS_PLACEHOLDER` — swap in the real SensAI grading prompt when available so it mirrors production.** Adding a new protected route means updating both `protectedPrefixes` and `matcher` in `middleware.ts` (done for `/tools`).
+
 ### UI Conventions
 
 **Before making any UI changes, read `docs/ui-design-language.md`.** It is the single source of truth for colours, typography, spacing, borders, cards, tables, buttons, tabs, modals, badges, and empty states.
