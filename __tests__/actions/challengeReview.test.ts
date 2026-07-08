@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   setChallengeDecision,
   bulkConfirmChallengeDecisions,
+  releaseChallengeDecisions,
   updateChallengeReviewConfig,
 } from '@/app/(protected)/admissions/challenge/actions'
 import type { CriterionResult } from '@/lib/challengeReview'
@@ -24,6 +25,20 @@ function mockUpsertClient(result: { error: { message: string } | null }) {
   const client = { from: vi.fn().mockReturnValue({ upsert }) }
   vi.mocked(createClient).mockReturnValue(client as never)
   return { client, upsert }
+}
+
+// from().update().eq().eq().in().not().select() → resolves { data, error }.
+function mockUpdateChain(result: { data?: unknown[]; error: { message: string } | null }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const q: any = {}
+  q.update = vi.fn(() => q)
+  q.eq = vi.fn(() => q)
+  q.in = vi.fn(() => q)
+  q.not = vi.fn(() => q)
+  q.select = vi.fn(() => Promise.resolve(result))
+  const client = { from: vi.fn(() => q) }
+  vi.mocked(createClient).mockReturnValue(client as never)
+  return { client, q }
 }
 
 const snapshot: CriterionResult[] = [
@@ -206,5 +221,48 @@ describe('updateChallengeReviewConfig', () => {
       thresholds: { ...good, maxPerCapitaIncomeAnnual: -5 },
     })
     expect(res).toEqual({ ok: false, error: expect.stringContaining('Per-capita') })
+  })
+
+  test('writes the excluded colleges, trimmed + deduped', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert } = mockUpsertClient({ error: null })
+    await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: { ...good, excludedColleges: ['  BMS College ', 'bms college', '', 'RV College'] },
+    })
+    expect(upsert.mock.calls[0][0].excluded_colleges).toEqual(['BMS College', 'RV College'])
+  })
+})
+
+describe('releaseChallengeDecisions', () => {
+  test('rejects a non-staff caller', async () => {
+    vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
+    await expect(
+      releaseChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['a@x.com'], publish: true }),
+    ).rejects.toThrow('NEXT_REDIRECT')
+  })
+
+  test('errors when no candidates are given', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const res = await releaseChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['  '], publish: true })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('No candidates') })
+  })
+
+  test('publishes only decided rows and reports the count', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { q } = mockUpdateChain({ data: [{ email: 'a@x.com' }], error: null })
+    const res = await releaseChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['A@X.com'], publish: true })
+    expect(res).toEqual({ ok: true, count: 1 })
+    // published_at set, and the "must be decided" filter is applied.
+    expect(q.update.mock.calls[0][0].published_at).toEqual(expect.any(String))
+    expect(q.not).toHaveBeenCalledWith('final_decision', 'is', null)
+  })
+
+  test('un-publishes when publish is false (published_at → null)', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { q } = mockUpdateChain({ data: [], error: null })
+    await releaseChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['a@x.com'], publish: false })
+    expect(q.update.mock.calls[0][0].published_at).toBeNull()
   })
 })

@@ -7,6 +7,7 @@ import { REVIEW_DECISIONS_ENABLED, type CriterionResult, type CriterionGroup } f
 import type { IntakeRaw } from '@/lib/challengeIntake'
 import {
   setChallengeDecision,
+  releaseChallengeDecisions,
   getLearnerTaskDetail,
   type LearnerQuestionThread,
 } from '@/app/(protected)/admissions/challenge/actions'
@@ -193,6 +194,16 @@ export default function ChallengeReviewDrawer({
     })
   }
 
+  function release(publish: boolean) {
+    setError(null)
+    startTransition(async () => {
+      const res = await releaseChallengeDecisions({ cohortId, courseId, emails: [row.email], publish })
+      if (!res.ok) { setError(res.error); return }
+      router.refresh()
+      onClose()
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden />
@@ -290,6 +301,32 @@ export default function ChallengeReviewDrawer({
               {row.decidedByName && <span> · {row.decidedByName}</span>}
               {row.decidedAt && <span> · {fmtDate(row.decidedAt)}</span>}
               {row.reason && <p className="mt-1 italic text-zinc-500">“{row.reason}”</p>}
+              {canReview && (
+                <div className="mt-2 flex items-center gap-2 border-t border-zinc-200 pt-2">
+                  {row.published ? (
+                    <>
+                      <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                        released to candidate
+                      </span>
+                      <button
+                        disabled={pending}
+                        onClick={() => release(false)}
+                        className="text-[11px] text-zinc-400 hover:text-zinc-600 disabled:opacity-50"
+                      >
+                        Unrelease
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      disabled={pending}
+                      onClick={() => release(true)}
+                      className="rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      Release to candidate
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

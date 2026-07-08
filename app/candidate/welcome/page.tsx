@@ -61,7 +61,7 @@ export default async function WelcomePage() {
   )
   const [{ data: prospect }, { data: decision }] = await Promise.all([
     admin.from('prospects').select('name, interest_form_submitted_at').eq('email', email).maybeSingle(),
-    admin.from('challenge_decisions').select('final_decision').eq('email', email).maybeSingle(),
+    admin.from('challenge_decisions').select('final_decision, published_at').eq('email', email).maybeSingle(),
   ])
 
   const metadata = (user!.user_metadata ?? {}) as Record<string, unknown>
@@ -85,7 +85,10 @@ export default async function WelcomePage() {
   // Once the challenge review is decided, the challenge is done and the "Current"
   // pill advances: selected → Interview (wait to be scheduled); rejected → Selection
   // (see the outcome). Reading challenge_decisions.final_decision.
-  const finalDecision = decision?.final_decision as 'selected' | 'rejected' | undefined
+  // The stepper only advances once the decision has been released to the portal.
+  const finalDecision = decision?.published_at
+    ? (decision.final_decision as 'selected' | 'rejected' | undefined)
+    : undefined
   const selected = finalDecision === 'selected'
   const rejected = finalDecision === 'rejected'
   const decided = selected || rejected

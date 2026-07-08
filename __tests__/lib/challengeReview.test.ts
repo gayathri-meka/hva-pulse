@@ -1,9 +1,25 @@
 import { describe, it, expect } from 'vitest'
 import {
   evaluateCandidate,
+  isExcludedCollege,
   DEFAULT_THRESHOLDS,
   type CandidateSignals,
 } from '@/lib/challengeReview'
+
+describe('isExcludedCollege', () => {
+  const list = ['BMS College of Engineering', 'RV College of Engineering']
+  it('matches on normalisation and trailing text, case-insensitively', () => {
+    expect(isExcludedCollege('bms college of engineering', list)).toBe(true)
+    expect(isExcludedCollege('R.V. College of Engineering, Bengaluru', list)).toBe(true)
+  })
+  it('does not match unrelated colleges or blanks', () => {
+    expect(isExcludedCollege('Government First Grade College', list)).toBe(false)
+    expect(isExcludedCollege('', list)).toBe(false)
+  })
+  it('ignores trivially short excluded entries', () => {
+    expect(isExcludedCollege('anything', ['a', 'bc'])).toBe(false)
+  })
+})
 
 // A candidate that clears every implemented criterion.
 const passing: CandidateSignals = {
@@ -62,21 +78,21 @@ describe('evaluateCandidate', () => {
     expect(get(evaluateCandidate({ ...passing, crammingPct: 29 }), 'cramming').status).toBe('pass')
   })
 
-  it('marks only the unbuilt criteria (SES, college tier, key-Q) as placeholders', () => {
+  it('marks only the unbuilt criteria (SES, key-Q) as placeholders', () => {
     const r = evaluateCandidate(passing)
-    for (const key of ['ses', 'college_tier', 'key_question_score']) {
+    for (const key of ['ses', 'key_question_score']) {
       expect(get(r, key).placeholder).toBe(true)
     }
     // Wired gates are NOT placeholders even when this candidate has no data — they
     // just come back 'na' (not applicable / no answer), never the "unbuilt" badge.
-    for (const key of ['per_capita_income', 'graduation_timeline', 'work_commitment']) {
+    for (const key of ['college', 'per_capita_income', 'graduation_timeline', 'work_commitment']) {
       expect(get(r, key).placeholder).toBe(false)
     }
   })
 
   it('leaves every intake criterion na (and out of the decision) when no intake data is present', () => {
     const r = evaluateCandidate(passing)
-    for (const key of ['ses', 'college_tier', 'per_capita_income', 'graduation_timeline', 'work_commitment', 'key_question_score']) {
+    for (const key of ['ses', 'college', 'per_capita_income', 'graduation_timeline', 'work_commitment', 'key_question_score']) {
       expect(get(r, key).status).toBe('na')
     }
     expect(r.systemDecision).toBe('selected')
@@ -104,18 +120,26 @@ describe('evaluateCandidate', () => {
   it('groups criteria into need, work & availability, and engagement', () => {
     const r = evaluateCandidate(passing)
     expect(get(r, 'ses').group).toBe('need')
-    expect(get(r, 'college_tier').group).toBe('need')
+    expect(get(r, 'college').group).toBe('need')
     expect(get(r, 'graduation_timeline').group).toBe('work_availability')
     expect(get(r, 'work_commitment').group).toBe('work_availability')
     expect(get(r, 'attempted_questions').group).toBe('engagement')
   })
 
   // ── Eligibility / straight-elimination gates ──────────────────────────────
-  it('eliminates Tier 1 / Tier 2 colleges and passes Tier 3', () => {
-    expect(get(evaluateCandidate({ ...passing, collegeTier: 1 }), 'college_tier').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, collegeTier: 2 }), 'college_tier').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, collegeTier: 3 }), 'college_tier').status).toBe('pass')
-    expect(evaluateCandidate({ ...passing, collegeTier: 1 }).systemDecision).toBe('rejected')
+  it('eliminates a candidate whose college is on the excluded list', () => {
+    const excludedColleges = ['BMS College of Engineering', 'Nitte Meenakshi Institute of Technology']
+    const th = { ...DEFAULT_THRESHOLDS, excludedColleges }
+    const col = (collegeName?: string) => get(evaluateCandidate({ ...passing, collegeName }, th), 'college')
+    // Exact + tolerant (trailing city / casing) matches → fail.
+    expect(col('BMS College of Engineering').status).toBe('fail')
+    expect(col('nitte meenakshi institute of technology, bengaluru').status).toBe('fail')
+    // A non-listed college passes.
+    expect(col('Some Rural Degree College').status).toBe('pass')
+    // No college answer, or no list configured → na (gate inactive).
+    expect(col(undefined).status).toBe('na')
+    expect(get(evaluateCandidate({ ...passing, collegeName: 'BMS College of Engineering' }), 'college').status).toBe('na')
+    expect(evaluateCandidate({ ...passing, collegeName: 'BMS College of Engineering' }, th).systemDecision).toBe('rejected')
   })
 
   it('rejects students finishing 2028+, passes 2027-and-earlier and non-students', () => {
@@ -138,8 +162,8 @@ describe('evaluateCandidate', () => {
   })
 
   it('flags sensitive eligibility fails as internal-only', () => {
-    const r = evaluateCandidate({ ...passing, collegeTier: 1, ses: 'fail' })
-    expect(get(r, 'college_tier').internalOnly).toBe(true)
+    const r = evaluateCandidate({ ...passing, collegeName: 'X', ses: 'fail' }, { ...DEFAULT_THRESHOLDS, excludedColleges: ['X College'] })
+    expect(get(r, 'college').internalOnly).toBe(true)
     expect(get(r, 'ses').internalOnly).toBe(true)
     // engagement + neutral gates are candidate-visible.
     expect(get(r, 'work_commitment').internalOnly).toBeUndefined()

@@ -27,11 +27,14 @@ export default async function SelectionPage() {
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   const { data: decision } = await admin
     .from('challenge_decisions')
-    .select('final_decision, criteria_snapshot')
+    .select('final_decision, criteria_snapshot, published_at')
     .eq('email', email)
     .maybeSingle()
 
-  const status = decision?.final_decision as 'selected' | 'rejected' | undefined
+  // Only reveal the outcome once the team has RELEASED it to the portal.
+  const status = decision?.published_at
+    ? (decision.final_decision as 'selected' | 'rejected' | undefined)
+    : undefined
 
   let panel: Panel
   if (status === 'selected') {

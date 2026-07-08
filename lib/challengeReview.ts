@@ -14,10 +14,10 @@
 // be a hard need-gate; because the decision requires every non-'na' criterion to
 // pass, an SES fail will reject regardless of performance the moment it goes live.
 
-// SAFETY LOCK — while false, the admin Select/Reject actions (drawer + bulk) are
-// greyed out so no one records a verdict by mistake (which would surface to the
-// candidate). Flip to true once the team is ready to start deciding.
-export const REVIEW_DECISIONS_ENABLED = false
+// Recording a Select/Reject is now internal-only — it does NOT reach the candidate
+// until it's explicitly *released* to the portal (see releaseChallengeDecisions).
+// So decision recording is enabled; the deliberate, guarded step is Release.
+export const REVIEW_DECISIONS_ENABLED = true
 
 export type ReviewThresholds = {
   minAttemptedQuestions: number // attempted questions must be > this
@@ -27,6 +27,29 @@ export type ReviewThresholds = {
   // Per-capita family income (annual) must be BELOW this to establish need.
   // Undefined = not configured yet → the per-capita criterion stays 'na'.
   maxPerCapitaIncomeAnnual?: number
+  // Colleges we won't take learners from. A candidate whose college matches one is
+  // eliminated. Empty/undefined = the college gate is inactive (criterion stays 'na').
+  excludedColleges?: string[]
+}
+
+// Normalise a college name for matching: lowercase and strip ALL non-alphanumerics
+// (spaces + punctuation), so "R.V. College", "RV College" and "rv college" all
+// collapse to the same key.
+function normCollege(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+// Is this college on the excluded list? Matches on normalised equality or either
+// name being contained in the other (to tolerate trailing city/branch text),
+// guarding against trivially-short excluded entries.
+export function isExcludedCollege(collegeName: string, excluded: string[]): boolean {
+  const c = normCollege(collegeName)
+  if (!c) return false
+  return excluded.some((e) => {
+    const n = normCollege(e)
+    if (n.length < 4) return false
+    return c === n || c.includes(n) || n.includes(c)
+  })
 }
 
 export const DEFAULT_THRESHOLDS: ReviewThresholds = {
@@ -48,7 +71,7 @@ export type CandidateSignals = {
   keyQuestionScorePct?: number
   // Eligibility / straight-elimination gates, from the SensAI intake questions.
   // All undefined until the intake-answer pipeline lands (then they activate).
-  collegeTier?: 1 | 2 | 3      // Tier 1 / Tier 2 institutions are eliminated
+  collegeName?: string         // current college/institute — matched against the excluded list
   currentlyStudying?: boolean  // still in education? (not studying → available now)
   graduationYear?: number      // year current education completes (students only)
   working?: boolean            // currently working?
@@ -118,6 +141,16 @@ export function evaluateCandidate(
             ? 'pass'
             : 'fail'
 
+  // College gate: eliminated if the candidate's college is on the excluded list.
+  const college = (signals.collegeName ?? '').trim()
+  const excluded = thresholds.excludedColleges ?? []
+  const collegeStatus: CriterionStatus =
+    !college || excluded.length === 0
+      ? 'na'
+      : isExcludedCollege(college, excluded)
+        ? 'fail'
+        : 'pass'
+
   // Per-capita family income = annual family income ÷ total family members.
   const perCapitaIncome =
     signals.familyAnnualIncomeInr !== undefined && signals.familySize
@@ -139,13 +172,13 @@ export function evaluateCandidate(
       failFeedback: 'Our socio-economic assessment did not establish financial need.',
     },
     {
-      key: 'college_tier',
-      label: 'College tier',
+      key: 'college',
+      label: 'College',
       group: 'need',
-      placeholder: true, // needs a Tier 1/2 college list to classify — not built yet
-      status: signals.collegeTier === undefined ? 'na' : signals.collegeTier <= 2 ? 'fail' : 'pass',
-      value: signals.collegeTier === undefined ? 'n/a' : `Tier ${signals.collegeTier}`,
-      threshold: 'Not Tier 1 / Tier 2',
+      placeholder: false, // wired — na means no college answer or no excluded list set
+      status: collegeStatus,
+      value: college || 'n/a',
+      threshold: 'Not on the excluded-colleges list',
       internalOnly: true,
       failFeedback: 'Based on your current institution, this programme isn’t the right fit for you.',
     },

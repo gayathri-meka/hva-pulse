@@ -18,6 +18,7 @@ import {
 import type { IntakeRaw } from '@/lib/challengeIntake'
 import {
   bulkConfirmChallengeDecisions,
+  releaseChallengeDecisions,
   updateChallengeReviewConfig,
 } from '@/app/(protected)/admissions/challenge/actions'
 
@@ -35,6 +36,7 @@ export type ChallengeReviewRow = {
   decidedByName: string | null
   decidedAt: string | null
   systemChanged: boolean
+  published: boolean // decision released to the candidate portal
   intake: IntakeRaw | null // raw synced intake answers (null if not synced)
 }
 
@@ -43,7 +45,7 @@ export type ChallengeReviewRow = {
 const CRITERIA_COLS: { key: string; label: string }[] = [
   // Need
   { key: 'ses', label: 'SES' },
-  { key: 'college_tier', label: 'College' },
+  { key: 'college', label: 'College' },
   { key: 'per_capita_income', label: 'Per-capita' },
   // Work & Availability
   { key: 'graduation_timeline', label: 'Grad yr' },
@@ -104,12 +106,14 @@ export default function ChallengeReviewTable({
   const router = useRouter()
   const [openEmail, setOpenEmail] = useState<string | null>(null)
   const [bulkRows, setBulkRows] = useState<ChallengeReviewRow[] | null>(null)
+  const [releaseRows, setReleaseRows] = useState<ChallengeReviewRow[] | null>(null)
   const [editRules, setEditRules] = useState(false)
   const [pending, startTransition] = useTransition()
 
   const pendingCount = rows.filter((r) => r.finalDecision == null).length
   const selectedCount = rows.filter((r) => r.finalDecision === 'selected').length
   const rejectedCount = rows.filter((r) => r.finalDecision === 'rejected').length
+  const publishedCount = rows.filter((r) => r.published).length
   const sysSelected = rows.filter((r) => r.systemDecision === 'selected').length
 
   const openRow = openEmail ? rows.find((r) => r.email === openEmail) ?? null : null
@@ -153,6 +157,14 @@ export default function ChallengeReviewTable({
             return (
               <span className="inline-flex items-center gap-1">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${base}`}>{info.getValue()}</span>
+                {r.published && (
+                  <span
+                    title="Released to the candidate portal"
+                    className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700"
+                  >
+                    released
+                  </span>
+                )}
                 {r.systemChanged && <span title="System changed its mind since this was verified">⚠</span>}
               </span>
             )
@@ -212,6 +224,21 @@ export default function ChallengeReviewTable({
     })
   }
 
+  function runRelease() {
+    if (!releaseRows) return
+    startTransition(async () => {
+      const res = await releaseChallengeDecisions({
+        cohortId,
+        courseId,
+        emails: releaseRows.map((r) => r.email),
+        publish: true,
+      })
+      setReleaseRows(null)
+      if (res.ok) router.refresh()
+      else alert(res.error)
+    })
+  }
+
   return (
     <div>
       {/* Summary strip — team verdicts, then what the system suggests. */}
@@ -224,6 +251,9 @@ export default function ChallengeReviewTable({
         </span>
         <span className="text-zinc-500">
           <strong className="text-red-600">{rejectedCount}</strong> rejected
+        </span>
+        <span className="text-zinc-500">
+          <strong className="text-sky-600">{publishedCount}</strong> released
         </span>
         <span className="h-4 w-px bg-zinc-200" aria-hidden />
         <span className="text-zinc-400">
@@ -267,6 +297,15 @@ export default function ChallengeReviewTable({
                 className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:hover:bg-zinc-300"
               >
                 Confirm system verdict ({selectedRows.length})
+              </button>
+            )}
+            {canReview && selectedRows.filter((r) => r.finalDecision && !r.published).length > 0 && (
+              <button
+                onClick={() => setReleaseRows(selectedRows.filter((r) => r.finalDecision && !r.published))}
+                title="Make the decision visible on the candidate's portal"
+                className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
+              >
+                Release to candidates ({selectedRows.filter((r) => r.finalDecision && !r.published).length})
               </button>
             )}
             {canReview && (
@@ -314,6 +353,34 @@ export default function ChallengeReviewTable({
               className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               {pending ? 'Confirming…' : 'Confirm'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {releaseRows && (
+        <Modal title="Release to candidates" onClose={() => setReleaseRows(null)}>
+          <p className="text-sm text-zinc-600">
+            Make the decision visible on the candidate portal for <strong>{releaseRows.length}</strong> candidate
+            {releaseRows.length === 1 ? '' : 's'}?{' '}
+            {releaseRows.filter((r) => r.finalDecision === 'selected').length} will see{' '}
+            <strong className="text-emerald-700">selected</strong> and{' '}
+            {releaseRows.filter((r) => r.finalDecision === 'rejected').length} will see a{' '}
+            <strong className="text-red-700">rejection</strong>. This is what candidates see on their portal.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setReleaseRows(null)}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={pending}
+              onClick={runRelease}
+              className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+            >
+              {pending ? 'Releasing…' : 'Release'}
             </button>
           </div>
         </Modal>
@@ -401,6 +468,21 @@ function EditRulesModal({
             <span className="text-xs text-zinc-400">₹/yr</span>
           </span>
         </label>
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-1 text-sm text-zinc-700">Excluded colleges</div>
+        <p className="mb-2 text-[11px] text-zinc-400">
+          Colleges we won&apos;t take learners from (one per line). A candidate whose college matches one is eliminated.
+          Leave empty to disable this gate.
+        </p>
+        <textarea
+          rows={5}
+          value={(t.excludedColleges ?? []).join('\n')}
+          onChange={(e) => setT({ ...t, excludedColleges: e.target.value.split('\n') })}
+          placeholder={'e.g.\nNitte Meenakshi Institute of Technology\nBMS College of Engineering'}
+          className="w-full resize-y rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
+        />
       </div>
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">

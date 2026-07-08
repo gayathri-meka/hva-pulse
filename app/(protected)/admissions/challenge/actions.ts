@@ -380,6 +380,38 @@ export async function bulkConfirmChallengeDecisions(input: {
   return { ok: true, count: rows.length }
 }
 
+/**
+ * Release (or un-release) verified decisions to the candidate portal. A decision
+ * is recorded internally on select/reject, but the candidate only sees it once
+ * released. Only rows that HAVE a final_decision are affected.
+ */
+export async function releaseChallengeDecisions(input: {
+  cohortId: number
+  courseId: number
+  emails: string[]
+  publish: boolean
+}): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  await requireStaff()
+  const emails = [...new Set(input.emails.map(normEmail).filter(Boolean))]
+  if (!emails.length) return { ok: false, error: 'No candidates selected.' }
+
+  const { data, error } = await adminClient()
+    .from('challenge_decisions')
+    .update({
+      published_at: input.publish ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('cohort_id', input.cohortId)
+    .eq('course_id', input.courseId)
+    .in('email', emails)
+    .not('final_decision', 'is', null) // can't release something that isn't decided
+    .select('email')
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/challenge')
+  return { ok: true, count: data?.length ?? 0 }
+}
+
 /** Update the editable thresholds the rule engine uses for this challenge. */
 export async function updateChallengeReviewConfig(input: {
   cohortId: number
@@ -397,6 +429,17 @@ export async function updateChallengeReviewConfig(input: {
   if (perCapita !== undefined && (!Number.isInteger(perCapita) || perCapita < 0))
     return { ok: false, error: 'Per-capita income threshold must be a whole number (0 or greater).' }
 
+  // Excluded colleges: trim, drop blanks, dedupe (case-insensitive).
+  const seenCollege = new Set<string>()
+  const excludedColleges = (t.excludedColleges ?? [])
+    .map((c) => c.trim())
+    .filter((c) => {
+      const k = c.toLowerCase()
+      if (!c || seenCollege.has(k)) return false
+      seenCollege.add(k)
+      return true
+    })
+
   const { error } = await adminClient()
     .from('challenge_review_config')
     .upsert(
@@ -408,6 +451,7 @@ export async function updateChallengeReviewConfig(input: {
         min_span_days: t.minSpanDays,
         max_cramming_pct: t.maxCrammingPct,
         max_per_capita_income_annual: perCapita ?? null,
+        excluded_colleges: excludedColleges,
         updated_by: user.id,
         updated_at: new Date().toISOString(),
       },

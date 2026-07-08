@@ -210,6 +210,7 @@ export default async function AdmissionsChallengePage() {
         minSpanDays: cfg.min_span_days,
         maxCrammingPct: cfg.max_cramming_pct,
         maxPerCapitaIncomeAnnual: cfg.max_per_capita_income_annual ?? undefined,
+        excludedColleges: cfg.excluded_colleges ?? [],
       }
     : DEFAULT_THRESHOLDS
 
@@ -239,6 +240,7 @@ export default async function AdmissionsChallengePage() {
       activeDays: pace.activeDays,
       spanDays: pace.spanDays,
       crammingPct: pace.crammingPct,
+      collegeName: (intake?.college_name ?? '').trim() || undefined,
       ...(intake ? parseIntake(intake) : {}),
     }
     const evaln = evaluateCandidate(signals, thresholds)
@@ -256,6 +258,7 @@ export default async function AdmissionsChallengePage() {
       overrodeSystem: d?.overrode_system ?? false,
       decidedByName: d?.decided_by_name ?? null,
       decidedAt: d?.decided_at ?? null,
+      published: d?.published_at != null,
       intake: intake ?? null,
       // Flag when the system's live call now differs from what the human verified.
       systemChanged: d != null && d.system_decision_at_verify != null && d.system_decision_at_verify !== evaln.systemDecision,
