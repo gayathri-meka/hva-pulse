@@ -97,23 +97,26 @@ export function sesMaxScore(weights?: SesWeights): number {
 
 const norm = (v: string | null | undefined) => (v ?? '').toString().trim().toLowerCase().replace(/[.。]+$/, '')
 
-// The base (unweighted) option score for a raw answer to one question, or null if
-// unanswered / unrecognised.
-export function optionScore(q: SesQuestion, raw: string | null | undefined): number | null {
+// The chosen option's base (unweighted) score + a human-readable label for a raw
+// answer to one question, or null if unanswered / unrecognised.
+export function resolveAnswer(q: SesQuestion, raw: string | null | undefined): { score: number; label: string } | null {
   const s = norm(raw)
   if (!s) return null
 
   if (q.variant === 'familySize') {
     const n = Number(s.match(/\d+/)?.[0])
     if (!Number.isFinite(n) || n < 1) return null
-    return n < 2 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4
+    const score = n < 2 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4
+    const band = q.options.find((o) => o.score === score)?.label ?? String(n)
+    return { score, label: `${band} (${n})` }
   }
 
   if (q.variant === 'multiSelect') {
     // "choose all that apply" — one or more letters. Best asset held = lowest need.
     const letters = s.split(/[^a-z]+/).filter(Boolean)
-    const scores = letters.map((l) => q.options.find((o) => o.letter === l)?.score).filter((x): x is number => x != null)
-    return scores.length ? Math.min(...scores) : null
+    const opts = letters.map((l) => q.options.find((o) => o.letter === l)).filter((o): o is SesOption => o != null)
+    if (!opts.length) return null
+    return { score: Math.min(...opts.map((o) => o.score)), label: opts.map((o) => o.label).join(', ') }
   }
 
   // Single-letter option.
@@ -121,17 +124,25 @@ export function optionScore(q: SesQuestion, raw: string | null | undefined): num
   if (!letter) return null
   if (q.pnsLetter && letter === q.pnsLetter) {
     // Prefer-not-to-say → average of the real options (neutral).
-    return q.options.reduce((a, o) => a + o.score, 0) / q.options.length
+    return { score: q.options.reduce((a, o) => a + o.score, 0) / q.options.length, label: 'Prefer not to say' }
   }
-  return q.options.find((o) => o.letter === letter)?.score ?? null
+  const opt = q.options.find((o) => o.letter === letter)
+  return opt ? { score: opt.score, label: opt.label } : null
 }
+
+/** The base (unweighted) option score for a raw answer, or null. */
+export function optionScore(q: SesQuestion, raw: string | null | undefined): number | null {
+  return resolveAnswer(q, raw)?.score ?? null
+}
+
+export type SesBreakdownRow = { key: string; label: string; answer: string; optionScore: number; weight: number; contribution: number }
 
 export type SesResult = {
   score: number
   maxScore: number
   answered: number
   total: number
-  breakdown: { key: string; label: string; optionScore: number; weight: number; contribution: number }[]
+  breakdown: SesBreakdownRow[]
 }
 
 /** Weighted SES score from a map of rawField → raw answer. */
@@ -140,13 +151,13 @@ export function computeSes(raw: Record<string, string | null | undefined>, weigh
   let score = 0
   let answered = 0
   for (const q of SES_RUBRIC) {
-    const base = optionScore(q, raw[q.rawField])
-    if (base == null) continue
+    const ans = resolveAnswer(q, raw[q.rawField])
+    if (ans == null) continue
     const weight = effectiveWeight(q, weights)
-    const contribution = base * weight
+    const contribution = ans.score * weight
     score += contribution
     answered++
-    breakdown.push({ key: q.key, label: q.label, optionScore: base, weight, contribution })
+    breakdown.push({ key: q.key, label: q.label, answer: ans.label, optionScore: ans.score, weight, contribution })
   }
   return { score: Math.round(score * 10) / 10, maxScore: sesMaxScore(weights), answered, total: SES_RUBRIC.length, breakdown }
 }

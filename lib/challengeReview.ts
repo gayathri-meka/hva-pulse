@@ -1,4 +1,4 @@
-import { computeSes, sesMaxScore, type SesWeights } from './ses'
+import { computeSes, sesMaxScore, type SesWeights, type SesBreakdownRow } from './ses'
 
 // Challenge review rule engine — the challenge→interview selection gate.
 //
@@ -143,6 +143,7 @@ export type CriterionResult = {
   placeholder: boolean // true = criterion's data isn't wired yet (always 'na')
   internalOnly?: boolean // fail feedback is for the team only — NOT shown to the candidate
   failFeedback?: string  // shown on a fail (to the team always; to the candidate unless internalOnly)
+  sesBreakdown?: SesBreakdownRow[] // SES criterion only — per-question answer/score/weight for drill-down
 }
 
 export type SystemDecision = 'selected' | 'rejected'
@@ -245,6 +246,7 @@ export function evaluateCandidate(
           : `Weighted SES need score ≥ ${thresholds.sesCutoff} (of ${sesMaxScore(thresholds.sesWeights)})`,
       internalOnly: true,
       failFeedback: 'Our socio-economic assessment did not establish sufficient financial need.',
+      sesBreakdown: ses?.breakdown,
     },
     {
       key: 'college',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { optionScore, computeSes, sesMaxScore, effectiveWeight, SES_RUBRIC } from '@/lib/ses'
+import { optionScore, resolveAnswer, computeSes, sesMaxScore, effectiveWeight, SES_RUBRIC } from '@/lib/ses'
 
 const q = (key: string) => SES_RUBRIC.find((x) => x.key === key)!
 
@@ -44,7 +44,21 @@ describe('optionScore', () => {
   })
 })
 
+describe('resolveAnswer (score + label for the breakdown)', () => {
+  it('returns the chosen option label', () => {
+    expect(resolveAnswer(q('social_category'), 'a')).toEqual({ score: 3, label: 'SC' })
+    expect(resolveAnswer(q('marital'), 'e')).toEqual({ score: 2.5, label: 'Prefer not to say' })
+    expect(resolveAnswer(q('family_size'), '5')).toEqual({ score: 3, label: '4–6 (5)' })
+    expect(resolveAnswer(q('assets'), 'a, c')).toEqual({ score: 1, label: 'Insurance, FD / savings' })
+  })
+})
+
 describe('computeSes', () => {
+  it('records the answer label in the breakdown', () => {
+    const r = computeSes({ social_category_raw: 'a' })
+    expect(r.breakdown[0]).toMatchObject({ key: 'social_category', answer: 'SC', optionScore: 3, weight: 5, contribution: 15 })
+  })
+
   it('sums option score × weight over answered questions', () => {
     // social_category a=SC=3 × weight 5 = 15; marital b=Unmarried=2 × 3 = 6 → 21.
     const r = computeSes({ social_category_raw: 'a', marital_raw: 'b' })

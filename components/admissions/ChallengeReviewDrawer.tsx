@@ -116,6 +116,7 @@ export default function ChallengeReviewDrawer({
   const [pending, startTransition] = useTransition()
   const [reason, setReason] = useState(row.reason ?? '')
   const [error, setError] = useState<string | null>(null)
+  const [sesOpen, setSesOpen] = useState(false)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -240,6 +241,50 @@ export default function ChallengeReviewDrawer({
                           </span>
                         </div>
                         <div className="text-[11px] text-zinc-400">Rule: {c.threshold}</div>
+                        {c.sesBreakdown && c.sesBreakdown.length > 0 && (
+                          <div className="mt-1">
+                            <button
+                              onClick={() => setSesOpen((v) => !v)}
+                              className="text-[11px] font-medium text-sky-600 hover:text-sky-700"
+                            >
+                              {sesOpen ? '▾ Hide score breakdown' : '▸ Show score breakdown'}
+                            </button>
+                            {sesOpen && (
+                              <div className="mt-1.5 overflow-hidden rounded-lg border border-zinc-200">
+                                <table className="w-full border-collapse text-[11px]">
+                                  <thead>
+                                    <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-400">
+                                      <th className="px-2 py-1 text-left font-medium">Question</th>
+                                      <th className="px-2 py-1 text-left font-medium">Answer</th>
+                                      <th className="px-2 py-1 text-right font-medium">Score</th>
+                                      <th className="px-2 py-1 text-right font-medium">Wt</th>
+                                      <th className="px-2 py-1 text-right font-medium">=</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-zinc-100">
+                                    {c.sesBreakdown.map((b) => (
+                                      <tr key={b.key}>
+                                        <td className="px-2 py-1 text-zinc-600">{b.label}</td>
+                                        <td className="px-2 py-1 text-zinc-500">{b.answer}</td>
+                                        <td className="px-2 py-1 text-right tabular-nums text-zinc-500">{b.optionScore}</td>
+                                        <td className="px-2 py-1 text-right tabular-nums text-zinc-500">{b.weight}</td>
+                                        <td className="px-2 py-1 text-right font-medium tabular-nums text-zinc-700">{b.contribution}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="border-t border-zinc-200 bg-zinc-50">
+                                      <td className="px-2 py-1 font-semibold text-zinc-700" colSpan={4}>Total SES score</td>
+                                      <td className="px-2 py-1 text-right font-bold tabular-nums text-zinc-900">
+                                        {c.sesBreakdown.reduce((a, b) => a + b.contribution, 0)}
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </li>
                   ))}
