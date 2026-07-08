@@ -42,12 +42,21 @@ describe('computeSnapshot', () => {
       { status: 'not_shortlisted' },
       { status: 'rejected' },
       { status: 'hired' },
+      { status: 'placed_elsewhere' },
+      { status: 'placed_elsewhere' },
     ]
     const result = computeSnapshot(10, applications, [])
     expect(result.pending).toBe(2)
     expect(result.shortlisted).toBe(1)
     expect(result.notShortlisted).toBe(1)
     expect(result.rejected).toBe(1)
+    expect(result.hired).toBe(1)
+    expect(result.placedElsewhere).toBe(2)
+  })
+
+  test('placed_elsewhere is counted separately and never as hired', () => {
+    const result = computeSnapshot(5, [{ status: 'placed_elsewhere' }, { status: 'hired' }], [])
+    expect(result.placedElsewhere).toBe(1)
     expect(result.hired).toBe(1)
   })
 

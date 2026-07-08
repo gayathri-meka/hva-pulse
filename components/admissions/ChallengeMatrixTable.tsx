@@ -198,6 +198,20 @@ export default function ChallengeMatrixTable({
           },
         }),
       ),
+      col.accessor((m) => m.firstActive, {
+        id: 'start_date',
+        header: 'Start date',
+        size: 130,
+        enableColumnFilter: false,
+        sortingFn: (a, b) => {
+          const av = a.original.firstActive, bv = b.original.firstActive
+          if (!av && !bv) return 0
+          if (!av) return -1
+          if (!bv) return 1
+          return new Date(av).getTime() - new Date(bv).getTime()
+        },
+        cell: (info) => <span className="text-zinc-500">{fmtDate(info.getValue() as string | null)}</span>,
+      }),
       col.accessor((m) => m.lastActive, {
         id: 'last_active',
         header: 'Last active',

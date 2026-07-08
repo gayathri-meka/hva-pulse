@@ -13,6 +13,7 @@ export type AnalyticsRow = {
   referral_source?:    string | null
   referral_detail?:    string | null
   educational_status?: string | null
+  college?:            string | null
 }
 
 export default async function AdmissionsAnalyticsPage() {
@@ -54,12 +55,12 @@ export default async function AdmissionsAnalyticsPage() {
   const [{ data: hits }, { data: signups }, challengeRows] = await Promise.all([
     supabase
       .from('learner_applications')
-      .select('created_at, email, signup_token, signed_up_at, referral_source, referral_detail, educational_status')
+      .select('created_at, email, signup_token, signed_up_at, referral_source, referral_detail, educational_status, college:college_name')
       .order('created_at', { ascending: false }),
     supabase
       .from('prospects')
       // alias education_status → educational_status so both populations share AnalyticsRow
-      .select('created_at, email, signup_token, referral_source, referral_detail, educational_status:education_status')
+      .select('created_at, email, signup_token, referral_source, referral_detail, educational_status:education_status, college')
       .order('created_at', { ascending: false }),
     challengeSrc ? fetchAllChallengeRows(challengeSrc.id) : Promise.resolve([] as RawRow[]),
   ])

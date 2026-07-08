@@ -168,6 +168,7 @@ export const TOOLS: ChatCompletionTool[] = [
                 'hired',
                 'not_shortlisted',
                 'rejected',
+                'placed_elsewhere',
               ],
             },
             description: 'Filter by one or more application statuses.',

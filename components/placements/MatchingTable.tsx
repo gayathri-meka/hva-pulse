@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-table'
 
 export type MatchingStatus =
-  | 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired'
+  | 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired' | 'placed_elsewhere'
   | 'not_applied' | 'not_interested'
 
 export type AppDetail = {
@@ -85,6 +85,7 @@ const STATUS_BADGE: Record<MatchingStatus, string> = {
   not_shortlisted:    'bg-zinc-100 text-zinc-600',
   rejected:           'bg-red-100 text-red-700',
   hired:              'bg-emerald-100 text-emerald-700',
+  placed_elsewhere:   'bg-teal-100 text-teal-700',
   not_applied:        'bg-zinc-100 text-zinc-500',
   not_interested:     'bg-zinc-100 text-zinc-400',
 }
@@ -97,13 +98,14 @@ const STATUS_LABEL: Record<MatchingStatus, string> = {
   not_shortlisted:    'Not Shortlisted',
   rejected:           'Rejected',
   hired:              'Hired',
+  placed_elsewhere:   'Placed Elsewhere',
   not_applied:        'Not Applied',
   not_interested:     'Not Interested',
 }
 
 // Application statuses available in the dropdown (excludes non-application statuses)
 const APP_STATUS_OPTIONS = [
-  'applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired',
+  'applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired', 'placed_elsewhere',
 ] as const
 
 const DEFAULT_NS_REASONS = [

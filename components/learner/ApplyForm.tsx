@@ -37,6 +37,7 @@ const STATUS_BADGE: Record<string, string> = {
   not_shortlisted:     'bg-zinc-100 text-zinc-600',
   rejected:            'bg-red-100 text-red-700',
   hired:               'bg-emerald-100 text-emerald-700',
+  placed_elsewhere:    'bg-teal-100 text-teal-700',
 }
 const STATUS_LABEL: Record<string, string> = {
   applied:             'Applied',
@@ -46,6 +47,7 @@ const STATUS_LABEL: Record<string, string> = {
   not_shortlisted:     'Not Shortlisted',
   rejected:            'Rejected',
   hired:               'Hired',
+  placed_elsewhere:    'Placed Elsewhere',
 }
 
 export default function ApplyForm({ roleId, roleStatus, location, salaryRange, application, resumes, readOnly = false, blockReason = null }: Props) {

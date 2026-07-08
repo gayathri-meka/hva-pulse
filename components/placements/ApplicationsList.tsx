@@ -113,7 +113,7 @@ import StatusFilter from './StatusFilter'
 import ExpandableNote from '@/components/ui/ExpandableNote'
 import type { ApplicationWithLearner } from '@/types'
 
-const STATUS_OPTIONS = ['applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired'] as const
+const STATUS_OPTIONS = ['applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'rejected', 'hired', 'placed_elsewhere'] as const
 const STATUS_LABEL: Record<string, string> = {
   applied:             'Applied',
   shortlisted:         'Shortlisted',
@@ -122,6 +122,7 @@ const STATUS_LABEL: Record<string, string> = {
   not_shortlisted:     'Not Shortlisted',
   rejected:            'Rejected',
   hired:               'Hired',
+  placed_elsewhere:    'Placed Elsewhere',
 }
 const STATUS_BADGE: Record<string, string> = {
   applied:             'bg-blue-100 text-blue-700',
@@ -131,9 +132,10 @@ const STATUS_BADGE: Record<string, string> = {
   not_shortlisted:     'bg-zinc-100 text-zinc-600',
   rejected:            'bg-red-100 text-red-700',
   hired:               'bg-emerald-100 text-emerald-700',
+  placed_elsewhere:    'bg-teal-100 text-teal-700',
 }
 const STATUS_SORT_ORDER: Record<string, number> = {
-  applied: 0, shortlisted: 1, interviews_ongoing: 2, on_hold: 3, hired: 4, not_shortlisted: 5, rejected: 6,
+  applied: 0, shortlisted: 1, interviews_ongoing: 2, on_hold: 3, hired: 4, not_shortlisted: 5, rejected: 6, placed_elsewhere: 7,
 }
 
 const DEFAULT_NS_REASONS = [

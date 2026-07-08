@@ -43,6 +43,7 @@ export type Member = {
   attemptedQuestions: number  // Σ questions attempted across all tasks
   passedQuestions: number     // Σ questions passed across all tasks
   started: boolean
+  firstActive: string | null
   lastActive: string | null
   activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
 }
@@ -134,6 +135,26 @@ export default function ChallengeClient({
       keyField: 'email',
       columns: SYNC_COLUMNS,
       rows: syncRows,
+    })
+
+  // Pace sync: the sparkline can't go to a sheet, but the underlying per-day task
+  // counts can — one column per calendar date (IST), value = tasks done that day.
+  const paceSyncAction = (url: string, tab: string) =>
+    syncRowsToSheet({
+      sheetUrl: url,
+      tab,
+      keyHeader: 'Email',
+      keyField: 'email',
+      columns: [
+        { header: 'Name', field: 'name' },
+        { header: 'Email', field: 'email' },
+        ...calendarDates.map((d) => ({ header: d, field: d })),
+      ],
+      rows: members.map((m) => ({
+        name: m.name,
+        email: m.email,
+        ...Object.fromEntries(calendarDates.map((d) => [d, m.activityByDate[d] ?? 0])),
+      })),
     })
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
@@ -262,7 +283,7 @@ export default function ChallengeClient({
         ) : view === 'questions' ? (
           <ChallengeQuestionsView days={taskCatalog} />
         ) : view === 'pace' ? (
-          <ChallengePaceTable members={members} calendarDates={calendarDates} syncAction={syncAction} serviceAccountEmail={serviceAccountEmail} />
+          <ChallengePaceTable members={members} calendarDates={calendarDates} syncAction={paceSyncAction} serviceAccountEmail={serviceAccountEmail} />
         ) : view === 'matrix' ? (
           <ChallengeMatrixTable
             members={members}

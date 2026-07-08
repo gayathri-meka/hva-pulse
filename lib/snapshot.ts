@@ -13,6 +13,7 @@ export type SnapshotStats = {
   onHold: number
   notShortlisted: number
   rejected: number
+  placedElsewhere: number
   hired: number
   pending: number
   applicationRate: number
@@ -34,6 +35,7 @@ export function computeSnapshot(
   const onHoldCount            = applications.filter((a) => a.status === 'on_hold').length
   const notShortlistedCount = applications.filter((a) => a.status === 'not_shortlisted').length
   const rejectedCount       = applications.filter((a) => a.status === 'rejected').length
+  const placedElsewhereCount = applications.filter((a) => a.status === 'placed_elsewhere').length
   const hiredCount          = applications.filter((a) => a.status === 'hired').length
   const pendingCount        = applications.filter((a) => a.status === 'applied').length
 
@@ -56,6 +58,7 @@ export function computeSnapshot(
     onHold:            onHoldCount,
     notShortlisted: notShortlistedCount,
     rejected:       rejectedCount,
+    placedElsewhere: placedElsewhereCount,
     hired:          hiredCount,
     pending:        pendingCount,
     applicationRate,

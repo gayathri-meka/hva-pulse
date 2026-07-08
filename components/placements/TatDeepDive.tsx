@@ -46,11 +46,13 @@ const STATUS_BADGE: Record<string, string> = {
   not_shortlisted:    'bg-zinc-100 text-zinc-600',
   rejected:           'bg-red-50 text-red-600',
   hired:              'bg-emerald-50 text-emerald-700',
+  placed_elsewhere:   'bg-teal-50 text-teal-700',
 }
 
 const STATUS_LABEL: Record<string, string> = {
   applied: 'Applied', shortlisted: 'Shortlisted', interviews_ongoing: 'Interviews',
   on_hold: 'On Hold', not_shortlisted: 'Not Shortlisted', rejected: 'Rejected', hired: 'Hired',
+  placed_elsewhere: 'Placed Elsewhere',
 }
 
 export default function TatDeepDive({

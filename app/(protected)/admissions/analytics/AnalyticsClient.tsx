@@ -23,6 +23,9 @@ function weekKey(iso: string): string {
 // breaking down further (which platform / which NGO).
 const SOCIAL = 'Through social media'
 const NGO = 'Through an NGO'
+// College source carries no referral_detail — the college name lives in the
+// separate `college` field, so we thread that in as the detail (see below).
+const COLLEGE = 'Through my college or university'
 const SOCIAL_PLATFORMS = ['LinkedIn', 'Website', 'Instagram', 'Facebook', 'WhatsApp']
 const isBlankDetail = (s: string) => /^(na|n\/a|none|nil|-)$/i.test(s)
 
@@ -68,11 +71,13 @@ type SubMap = Record<string, Slice[]>
 function detailBreakdown(pairs: { source: string | null; detail: string | null | undefined }[]): SubMap {
   const social: (string | null)[] = []
   const ngo: (string | null)[] = []
+  const college: (string | null)[] = []
   for (const { source, detail } of pairs) {
     if (source === SOCIAL) social.push(normPlatform(detail))
     else if (source === NGO) ngo.push(normNgo(detail))
+    else if (source === COLLEGE) college.push(normNgo(detail)) // normNgo just title-cases a name
   }
-  return { [SOCIAL]: countLabels(social), [NGO]: countLabels(ngo) }
+  return { [SOCIAL]: countLabels(social), [NGO]: countLabels(ngo), [COLLEGE]: countLabels(college) }
 }
 
 // Count events per week, gap-filled from the first event week through this week
@@ -160,13 +165,24 @@ export default function AnalyticsClient({
       referralHitsSub: detailBreakdown(
         uniqueHitRows.map((h) => {
           const own = canonicalReferral(h.referral_source)
-          if (own) return { source: own, detail: h.referral_detail }
           const p = prospectFor(h)
-          return { source: canonicalReferral(p?.referral_source), detail: p?.referral_detail }
+          const source = own || canonicalReferral(p?.referral_source)
+          // College name comes from the `college` field (hit's own, else prospect's);
+          // every other source's detail is its referral_detail from the same row.
+          const detail =
+            source === COLLEGE
+              ? firstFilled(h.college, p?.college)
+              : own
+                ? h.referral_detail
+                : p?.referral_detail
+          return { source, detail }
         }),
       ),
       referralSignupsSub: detailBreakdown(
-        signups.map((s) => ({ source: canonicalReferral(s.referral_source), detail: s.referral_detail })),
+        signups.map((s) => {
+          const source = canonicalReferral(s.referral_source)
+          return { source, detail: source === COLLEGE ? s.college : s.referral_detail }
+        }),
       ),
       eduHits: countLabels(
         uniqueHitRows.map((h) => canonicalEducation(firstFilled(h.educational_status, prospectFor(h)?.educational_status))),

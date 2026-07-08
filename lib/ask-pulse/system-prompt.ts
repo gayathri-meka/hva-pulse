@@ -28,6 +28,10 @@ always combine both.
                        ↘ not_shortlisted (company did not select for interview)
                                           ↘ rejected (rejected after interview)
 
+Any application can also become placed_elsewhere — the learner got placed through
+another process and dropped out of this one. It is a drop-off and does NOT count
+as one of our placements (only 'hired' counts as placed).
+
 Key distinction: not_shortlisted = dropped before interviews; rejected = dropped after interviews.
 
 **TAT columns** on applications:

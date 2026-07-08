@@ -44,6 +44,7 @@ const MY_STATUS_BADGE: Partial<Record<MyStatus, string>> = {
   not_shortlisted:     'bg-zinc-100 text-zinc-600',
   rejected:            'bg-red-100 text-red-700',
   hired:               'bg-emerald-100 text-emerald-700',
+  placed_elsewhere:    'bg-teal-100 text-teal-700',
   not_interested:      'bg-zinc-100 text-zinc-500',
 }
 
@@ -55,6 +56,7 @@ const MY_STATUS_LABEL: Record<MyStatus, string> = {
   not_shortlisted:     'Not Shortlisted',
   rejected:            'Rejected',
   hired:               'Hired',
+  placed_elsewhere:    'Placed Elsewhere',
   not_interested:      'Not Interested',
   not_applied:         '',
 }

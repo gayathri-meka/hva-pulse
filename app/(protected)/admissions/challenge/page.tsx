@@ -172,6 +172,7 @@ export default async function AdmissionsChallengePage() {
       const started = attemptedTasks > 0
       const activityTimes = dims.map((d) => activityMs(d.last_activity_at)).filter((n): n is number => n != null)
       const lastActive = activityTimes.length ? new Date(Math.max(...activityTimes)).toISOString() : null
+      const firstActive = activityTimes.length ? new Date(Math.min(...activityTimes)).toISOString() : null
       // Tasks done per IST calendar day — powers the Pace view (sparkline +
       // active/span/cramming metrics + the per-date heat columns).
       const activityByDate: Record<string, number> = {}
@@ -190,6 +191,7 @@ export default async function AdmissionsChallengePage() {
         attemptedQuestions,
         passedQuestions,
         started,
+        firstActive,
         lastActive,
         activityByDate,
       }

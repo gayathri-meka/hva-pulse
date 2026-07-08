@@ -17,6 +17,7 @@ interface Props {
   onHold:                     number
   hired:                      number
   rejected:                   number
+  placedElsewhere:            number
   reasonCounts:               Record<string, number>
   notShortlistedReasonCounts: Record<string, number>
   rejectionReasonCounts:      Record<string, number>
@@ -319,6 +320,7 @@ export default function PlacementFunnel({
   onHold,
   hired,
   rejected,
+  placedElsewhere,
   reasonCounts,
   notShortlistedReasonCounts,
   rejectionReasonCounts,
@@ -460,6 +462,15 @@ export default function PlacementFunnel({
           labelCls:   'text-red-400', countCls: 'text-red-700',
           metaCls:    'text-red-400', dividerCls: 'bg-red-200',
           onWhyClick: () => setShowRejReasons(true),
+        },
+        {
+          label:      'Placed Elsewhere',
+          count:      placedElsewhere,
+          pctStr:     `${pct(placedElsewhere, totalApps)} of apps`,
+          href:       '/placements/applications?status=placed_elsewhere',
+          cardBg:     'bg-teal-50',   cardBorder: 'border-teal-100',
+          labelCls:   'text-teal-500', countCls: 'text-teal-800',
+          metaCls:    'text-teal-500', dividerCls: 'bg-teal-200',
         },
       ]} />
 

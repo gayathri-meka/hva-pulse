@@ -12,6 +12,7 @@ const STATUS_ORDER = [
   'not_shortlisted',
   'hired',
   'rejected',
+  'placed_elsewhere',
 ]
 
 const STATUS_LABELS: Record<string, string> = {
@@ -24,6 +25,7 @@ const STATUS_LABELS: Record<string, string> = {
   not_shortlisted:    'Not Shortlisted',
   hired:              'Hired',
   rejected:           'Rejected',
+  placed_elsewhere:   'Placed Elsewhere',
 }
 
 const STATUS_ACTIVE_CLASS: Record<string, string> = {
@@ -36,6 +38,7 @@ const STATUS_ACTIVE_CLASS: Record<string, string> = {
   not_shortlisted:    'bg-zinc-600 text-white',
   hired:              'bg-emerald-600 text-white',
   rejected:           'bg-red-600 text-white',
+  placed_elsewhere:   'bg-teal-600 text-white',
 }
 
 interface Props {

@@ -209,6 +209,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   const stillApplied      = allApps.filter((a) => a.status === 'applied').length
   const hired             = allApps.filter((a) => a.status === 'hired').length
   const rejected          = allApps.filter((a) => a.status === 'rejected').length
+  const placedElsewhere   = allApps.filter((a) => a.status === 'placed_elsewhere').length
   const hiredCount        = uniqueHiredLearnerCount(allApps)  // distinct learners placed
 
   // Everyone who passed the shortlisting gate (used as stage-3 denominator)
@@ -291,6 +292,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
           onHold={onHold}
           hired={hired}
           rejected={rejected}
+          placedElsewhere={placedElsewhere}
           reasonCounts={reasonCounts}
           notShortlistedReasonCounts={notShortlistedReasonCounts}
           rejectionReasonCounts={rejectionReasonCounts}

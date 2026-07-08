@@ -10,6 +10,7 @@ const STATUS_LABELS: Record<string, string> = {
   not_shortlisted:     'Not Shortlisted',
   hired:               'Hired',
   rejected:            'Rejected',
+  placed_elsewhere:    'Placed Elsewhere',
 }
 
 // Active pill colours per status
@@ -21,9 +22,10 @@ const STATUS_ACTIVE_CLASS: Record<string, string> = {
   not_shortlisted:     'bg-zinc-600 text-white',
   hired:               'bg-emerald-600 text-white',
   rejected:            'bg-red-600 text-white',
+  placed_elsewhere:    'bg-teal-600 text-white',
 }
 
-const STATUS_ORDER = ['applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'hired', 'rejected']
+const STATUS_ORDER = ['applied', 'shortlisted', 'interviews_ongoing', 'on_hold', 'not_shortlisted', 'hired', 'rejected', 'placed_elsewhere']
 
 interface Props {
   // Counts from the full (unfiltered-by-status) result set
