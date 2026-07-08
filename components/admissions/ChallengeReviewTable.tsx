@@ -446,7 +446,7 @@ function EditRulesModal({
         Changing these re-evaluates every candidate.
       </p>
       <div className="divide-y divide-zinc-100">
-        {field('minAttemptedQuestions', 'Attempted questions must be greater than', 'questions')}
+        {field('minQuestionsAttemptedPct', 'Questions attempted must be at least', '%')}
         {field('minActiveDays', 'Active days must be greater than', 'days')}
         {field('minSpanDays', 'Span must be at least', 'days')}
         {field('maxCrammingPct', 'Cramming must be under', '%')}

@@ -198,6 +198,30 @@ export default async function AdmissionsChallengePage() {
     })
     .sort((a, b) => b.completedTasks - a.completedTasks || a.name.localeCompare(b.name))
 
+  // Challenge catalog totals (fixed for the cohort): count each distinct task once.
+  // "Items" = reading tasks + individual quiz questions.
+  const taskCatalog = new Map<string, { type: string; q: number }>()
+  for (const r of rawRows) {
+    const d = r.dimensions as Dim
+    const t = d?.task_id
+    if (!t || taskCatalog.has(t)) continue
+    taskCatalog.set(t, { type: d.task_type ?? '', q: num(d.total_questions) })
+  }
+  const catalog = [...taskCatalog.values()]
+  const readingTasks = catalog.filter((v) => v.type !== 'quiz').length
+  const totalQuestions = catalog.reduce((s, v) => s + v.q, 0)
+  const distinctDays = new Set(
+    rawRows.map((r) => (r.dimensions as Dim)?.milestone_ordering).filter((v) => v != null),
+  ).size
+  const totals = {
+    days: distinctDays,
+    tasks: catalog.length,
+    readingTasks,
+    quizTasks: catalog.filter((v) => v.type === 'quiz').length,
+    questions: totalQuestions,
+    items: readingTasks + totalQuestions,
+  }
+
   // ── Review rows (the challenge→interview selection gate) ──────────────────
   // This challenge's (cohort, course) — constant across the synced rows.
   const cohortId = num((rawRows[0]?.dimensions as Dim)?.cohort_id)
@@ -205,7 +229,7 @@ export default async function AdmissionsChallengePage() {
   const cfg = (configRows ?? []).find((c) => c.cohort_id === cohortId && c.course_id === courseId)
   const thresholds: ReviewThresholds = cfg
     ? {
-        minAttemptedQuestions: cfg.min_attempted_questions,
+        minQuestionsAttemptedPct: cfg.min_questions_attempted_pct ?? DEFAULT_THRESHOLDS.minQuestionsAttemptedPct,
         minActiveDays: cfg.min_active_days,
         minSpanDays: cfg.min_span_days,
         maxCrammingPct: cfg.max_cramming_pct,
@@ -237,6 +261,7 @@ export default async function AdmissionsChallengePage() {
     const intake = intakeByEmail.get(m.email)
     const signals = {
       attemptedQuestions: m.attemptedQuestions,
+      totalQuestions: totals.questions,
       activeDays: pace.activeDays,
       spanDays: pace.spanDays,
       crammingPct: pace.crammingPct,
@@ -338,6 +363,7 @@ export default async function AdmissionsChallengePage() {
         canReview={appUser?.role === 'admin' || appUser?.role === 'staff'}
         isAdmin={appUser?.role === 'admin'}
         currentUserEmail={appUser?.email ?? ''}
+        totals={totals}
       />
     </div>
   )

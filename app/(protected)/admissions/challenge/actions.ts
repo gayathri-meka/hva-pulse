@@ -420,10 +420,11 @@ export async function updateChallengeReviewConfig(input: {
 }): Promise<DecisionResult> {
   const user = await requireStaff()
   const t = input.thresholds
-  const bounds = [t.minAttemptedQuestions, t.minActiveDays, t.minSpanDays, t.maxCrammingPct]
+  const bounds = [t.minQuestionsAttemptedPct, t.minActiveDays, t.minSpanDays, t.maxCrammingPct]
   if (bounds.some((n) => !Number.isInteger(n) || n < 0))
     return { ok: false, error: 'Thresholds must be whole numbers (0 or greater).' }
   if (t.maxCrammingPct > 100) return { ok: false, error: 'Cramming % cannot exceed 100.' }
+  if (t.minQuestionsAttemptedPct > 100) return { ok: false, error: 'Questions-attempted % cannot exceed 100.' }
   // Per-capita threshold is optional (null = not set → criterion stays 'na').
   const perCapita = t.maxPerCapitaIncomeAnnual
   if (perCapita !== undefined && (!Number.isInteger(perCapita) || perCapita < 0))
@@ -446,7 +447,7 @@ export async function updateChallengeReviewConfig(input: {
       {
         cohort_id: input.cohortId,
         course_id: input.courseId,
-        min_attempted_questions: t.minAttemptedQuestions,
+        min_questions_attempted_pct: t.minQuestionsAttemptedPct,
         min_active_days: t.minActiveDays,
         min_span_days: t.minSpanDays,
         max_cramming_pct: t.maxCrammingPct,

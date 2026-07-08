@@ -20,7 +20,7 @@
 export const REVIEW_DECISIONS_ENABLED = true
 
 export type ReviewThresholds = {
-  minAttemptedQuestions: number // attempted questions must be > this
+  minQuestionsAttemptedPct: number // % of all quiz questions attempted must be >= this
   minActiveDays: number         // active days must be > this
   minSpanDays: number           // span (first→last, inclusive) must be >= this
   maxCrammingPct: number        // cramming % must be < this
@@ -53,7 +53,7 @@ export function isExcludedCollege(collegeName: string, excluded: string[]): bool
 }
 
 export const DEFAULT_THRESHOLDS: ReviewThresholds = {
-  minAttemptedQuestions: 100,
+  minQuestionsAttemptedPct: 40,
   minActiveDays: 10,
   minSpanDays: 14,
   maxCrammingPct: 30,
@@ -63,6 +63,7 @@ export const DEFAULT_THRESHOLDS: ReviewThresholds = {
 // and left undefined until their data pipeline lands.
 export type CandidateSignals = {
   attemptedQuestions: number
+  totalQuestions: number   // total quiz questions in the challenge (denominator for %)
   activeDays: number
   spanDays: number
   crammingPct: number
@@ -150,6 +151,10 @@ export function evaluateCandidate(
       : isExcludedCollege(college, excluded)
         ? 'fail'
         : 'pass'
+
+  // Share of the challenge's quiz questions this candidate attempted.
+  const questionsAttemptedPct =
+    signals.totalQuestions > 0 ? Math.round((signals.attemptedQuestions / signals.totalQuestions) * 100) : 0
 
   // Per-capita family income = annual family income ÷ total family members.
   const perCapitaIncome =
@@ -241,10 +246,10 @@ export function evaluateCandidate(
       label: 'Questions attempted',
       group: 'engagement',
       placeholder: false,
-      status: signals.attemptedQuestions > thresholds.minAttemptedQuestions ? 'pass' : 'fail',
-      value: String(signals.attemptedQuestions),
-      threshold: `> ${thresholds.minAttemptedQuestions}`,
-      failFeedback: `You attempted ${signals.attemptedQuestions} questions; we look for more than ${thresholds.minAttemptedQuestions}.`,
+      status: questionsAttemptedPct >= thresholds.minQuestionsAttemptedPct ? 'pass' : 'fail',
+      value: `${questionsAttemptedPct}% (${signals.attemptedQuestions}/${signals.totalQuestions})`,
+      threshold: `>= ${thresholds.minQuestionsAttemptedPct}%`,
+      failFeedback: `You attempted ${questionsAttemptedPct}% of the challenge questions; we look for at least ${thresholds.minQuestionsAttemptedPct}%.`,
     },
     {
       key: 'active_days',

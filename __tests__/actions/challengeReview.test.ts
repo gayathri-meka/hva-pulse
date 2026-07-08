@@ -153,7 +153,7 @@ describe('bulkConfirmChallengeDecisions', () => {
 })
 
 describe('updateChallengeReviewConfig', () => {
-  const good = { minAttemptedQuestions: 100, minActiveDays: 10, minSpanDays: 14, maxCrammingPct: 30 }
+  const good = { minQuestionsAttemptedPct: 40, minActiveDays: 10, minSpanDays: 14, maxCrammingPct: 30 }
 
   test('rejects a non-staff caller', async () => {
     vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
@@ -191,7 +191,7 @@ describe('updateChallengeReviewConfig', () => {
     expect(row).toMatchObject({
       cohort_id: 214,
       course_id: 587,
-      min_attempted_questions: 100,
+      min_questions_attempted_pct: 40,
       min_active_days: 10,
       min_span_days: 14,
       max_cramming_pct: 30,

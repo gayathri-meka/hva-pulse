@@ -47,6 +47,14 @@ export type Member = {
   lastActive: string | null
   activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
 }
+export type ChallengeTotals = {
+  days: number
+  tasks: number
+  readingTasks: number
+  quizTasks: number
+  questions: number
+  items: number
+}
 export type CohortDay = {
   ordering: number
   name: string
@@ -100,6 +108,7 @@ export default function ChallengeClient({
   canReview,
   isAdmin,
   currentUserEmail,
+  totals,
 }: {
   members: Member[]
   cohortDays: CohortDay[]
@@ -112,6 +121,7 @@ export default function ChallengeClient({
   canReview: boolean
   isAdmin: boolean
   currentUserEmail: string
+  totals: ChallengeTotals
 }) {
   const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions' | 'review'>('review')
   const [progressOpen, setProgressOpen] = useState(false)
@@ -207,6 +217,17 @@ export default function ChallengeClient({
 
   return (
     <div className="space-y-8">
+      {/* Challenge composition — the total body of work the X/Y counts are out of. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+        <span><strong className="text-zinc-700">{totals.days}</strong> days</span>
+        <span className="text-zinc-300">·</span>
+        <span><strong className="text-zinc-700">{totals.tasks}</strong> tasks ({totals.readingTasks} reading + {totals.quizTasks} quizzes)</span>
+        <span className="text-zinc-300">·</span>
+        <span><strong className="text-zinc-700">{totals.questions}</strong> questions</span>
+        <span className="text-zinc-300">·</span>
+        <span><strong className="text-zinc-700">{totals.items}</strong> total items</span>
+      </div>
+
       {/* ── Cohort progress by day (collapsible so the table dominates) ──── */}
       <section>
         <button

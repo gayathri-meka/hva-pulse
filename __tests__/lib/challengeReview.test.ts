@@ -24,6 +24,7 @@ describe('isExcludedCollege', () => {
 // A candidate that clears every implemented criterion.
 const passing: CandidateSignals = {
   attemptedQuestions: 150,
+  totalQuestions: 200, // 75% attempted (>= default 40%)
   activeDays: 12,
   spanDays: 14,
   crammingPct: 20,
@@ -52,15 +53,18 @@ describe('evaluateCandidate', () => {
   })
 
   it('collects feedback for every failed criterion', () => {
-    const r = evaluateCandidate({ attemptedQuestions: 10, activeDays: 2, spanDays: 3, crammingPct: 80 })
+    const r = evaluateCandidate({ attemptedQuestions: 10, totalQuestions: 200, activeDays: 2, spanDays: 3, crammingPct: 80 })
     expect(r.systemDecision).toBe('rejected')
     expect(r.failReasons).toHaveLength(4)
   })
 
   // Boundary checks — operators are attempted>min, active>min, span>=min, cramming<max.
-  it('treats attempted questions as strictly greater than the threshold', () => {
-    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 100 }), 'attempted_questions').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 101 }), 'attempted_questions').status).toBe('pass')
+  it('gates on the % of questions attempted (>= threshold)', () => {
+    // Default threshold is 40%. Use /100 so the % is exact.
+    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 39, totalQuestions: 100 }), 'attempted_questions').status).toBe('fail')
+    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 40, totalQuestions: 100 }), 'attempted_questions').status).toBe('pass')
+    // Value shows the % and the raw fraction.
+    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 40, totalQuestions: 100 }), 'attempted_questions').value).toBe('40% (40/100)')
   })
 
   it('treats active days as strictly greater than the threshold', () => {
@@ -177,15 +181,15 @@ describe('evaluateCandidate', () => {
   })
 
   it('honours custom thresholds', () => {
-    const lenient = { minAttemptedQuestions: 5, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90 }
-    const weak: CandidateSignals = { attemptedQuestions: 6, activeDays: 2, spanDays: 2, crammingPct: 80 }
+    const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90 }
+    const weak: CandidateSignals = { attemptedQuestions: 6, totalQuestions: 200, activeDays: 2, spanDays: 2, crammingPct: 80 }
     expect(evaluateCandidate(weak, lenient).systemDecision).toBe('selected')
     expect(evaluateCandidate(weak, DEFAULT_THRESHOLDS).systemDecision).toBe('rejected')
   })
 
   it('renders human-readable value/threshold strings for display', () => {
     const r = evaluateCandidate(passing)
-    expect(get(r, 'attempted_questions').threshold).toBe('> 100')
+    expect(get(r, 'attempted_questions').threshold).toBe('>= 40%')
     expect(get(r, 'span').value).toBe('14 days')
     expect(get(r, 'cramming').threshold).toBe('< 30%')
   })
