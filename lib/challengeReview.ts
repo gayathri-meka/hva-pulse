@@ -268,7 +268,10 @@ export function evaluateCandidate(
           : perCapitaIncome < thresholds.maxPerCapitaIncomeAnnual
             ? 'pass'
             : 'fail',
-      value: perCapitaIncome === undefined ? 'n/a' : `₹${perCapitaIncome.toLocaleString('en-IN')}/yr`,
+      value:
+        perCapitaIncome === undefined
+          ? 'n/a'
+          : `₹${perCapitaIncome.toLocaleString('en-IN')}/yr (₹${(signals.familyAnnualIncomeInr ?? 0).toLocaleString('en-IN')} ÷ ${signals.familySize} members)`,
       threshold:
         thresholds.maxPerCapitaIncomeAnnual === undefined
           ? 'Threshold not set yet'

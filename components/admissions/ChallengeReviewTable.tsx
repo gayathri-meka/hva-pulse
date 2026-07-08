@@ -575,7 +575,7 @@ function EditRulesModal({
       <label className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-zinc-50 px-3 py-2">
         <span className="text-sm font-medium text-zinc-800">
           Need established when SES score ≥
-          <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">blank = SES gate off · current max = {sesMax}</span>
+          <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">blank = SES gate off · score is out of a max of {sesMax}</span>
         </span>
         <input
           type="number"
@@ -585,32 +585,56 @@ function EditRulesModal({
           className="w-20 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
         />
       </label>
-      <div className="divide-y divide-zinc-100">
-        {SES_RUBRIC.map((q) => (
-          <div key={q.key} className="py-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-zinc-700">{q.label}</span>
-              <span className="flex shrink-0 items-center gap-1.5">
-                <span className="text-[11px] text-zinc-400">weight</span>
-                <input
-                  type="number"
-                  value={effectiveWeight(q, t.sesWeights)}
-                  onChange={(e) =>
-                    setT({ ...t, sesWeights: { ...(t.sesWeights ?? {}), [q.key]: Number(e.target.value) } })
-                  }
-                  className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
-                />
-              </span>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {q.options.map((o, i) => (
-                <span key={i} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500">
-                  {o.label} <span className="font-semibold text-zinc-700">{o.score}</span>
-                </span>
+      <p className="mb-1.5 text-[11px] text-zinc-400">
+        Columns 0–4 are the fixed score each option earns. &ldquo;PNS&rdquo; = prefer not to say (scored as the average).
+        Only the <span className="font-medium text-zinc-600">Weight</span> column is editable.
+      </p>
+      <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-500">
+              <th className="px-2 py-1.5 text-left font-semibold">Question</th>
+              {[0, 1, 2, 3, 4].map((s) => (
+                <th key={s} className="px-2 py-1.5 text-center font-semibold">{s}</th>
               ))}
-            </div>
-          </div>
-        ))}
+              <th className="px-2 py-1.5 text-center font-semibold">PNS</th>
+              <th className="px-2 py-1.5 text-center font-semibold">Weight</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {SES_RUBRIC.map((q) => {
+              const pnsAvg = q.pnsLetter
+                ? Math.round((q.options.reduce((a, o) => a + o.score, 0) / q.options.length) * 10) / 10
+                : null
+              return (
+                <tr key={q.key} className="align-middle">
+                  <td className="px-2 py-1.5 text-zinc-700">{q.label}</td>
+                  {[0, 1, 2, 3, 4].map((s) => {
+                    const opt = q.options.find((o) => o.score === s)
+                    return (
+                      <td key={s} className="px-2 py-1.5 text-center text-[11px] leading-tight text-zinc-500">
+                        {opt ? opt.label : <span className="text-zinc-300">—</span>}
+                      </td>
+                    )
+                  })}
+                  <td className="px-2 py-1.5 text-center text-[11px] text-zinc-500">
+                    {pnsAvg != null ? pnsAvg : <span className="text-zinc-300">—</span>}
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <input
+                      type="number"
+                      value={effectiveWeight(q, t.sesWeights)}
+                      onChange={(e) =>
+                        setT({ ...t, sesWeights: { ...(t.sesWeights ?? {}), [q.key]: Number(e.target.value) } })
+                      }
+                      className="w-14 rounded-lg border border-zinc-300 px-1.5 py-1 text-center text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
       </>
       )}

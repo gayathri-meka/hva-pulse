@@ -349,11 +349,19 @@ export default async function AdmissionsChallengePage() {
           { value: completedCount, label: 'completed' },
         ]}
       />
-      {appUser?.role === 'admin' && (
-        <div className="mb-4 flex items-center justify-end">
-          <SourceSyncButton sources={[syncSource]} />
+      {/* Challenge composition + sync, on one line. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+          <span><strong className="text-zinc-700">{totals.days}</strong> days</span>
+          <span className="text-zinc-300">·</span>
+          <span><strong className="text-zinc-700">{totals.tasks}</strong> tasks ({totals.readingTasks} reading + {totals.quizTasks} quizzes)</span>
+          <span className="text-zinc-300">·</span>
+          <span><strong className="text-zinc-700">{totals.questions}</strong> questions</span>
+          <span className="text-zinc-300">·</span>
+          <span><strong className="text-zinc-700">{totals.items}</strong> total items</span>
         </div>
-      )}
+        {appUser?.role === 'admin' && <SourceSyncButton sources={[syncSource]} />}
+      </div>
       <ChallengeClient
         members={members}
         cohortDays={cohortDays}
@@ -366,7 +374,6 @@ export default async function AdmissionsChallengePage() {
         canReview={appUser?.role === 'admin' || appUser?.role === 'staff'}
         isAdmin={appUser?.role === 'admin'}
         currentUserEmail={appUser?.email ?? ''}
-        totals={totals}
       />
     </div>
   )
