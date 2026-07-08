@@ -115,6 +115,7 @@ const ADMIN_LINKS: NavItem[] = [
       { href: '/users',                 label: 'Users'  },
       { href: '/settings/sheets',       label: 'Sheets' },
       { href: '/settings/data-sources', label: 'Data Sources' },
+      { href: '/settings/email',        label: 'Email' },
       { href: '/settings/export',       label: 'Export' },
     ],
   },

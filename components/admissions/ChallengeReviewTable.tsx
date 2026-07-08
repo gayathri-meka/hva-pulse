@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/placements/Modal'
+import EmailCampaignButton from '@/components/email/EmailCampaignButton'
+import { sendEmailCampaign } from '@/app/(protected)/admissions/actions'
 import ChallengeReviewDrawer from './ChallengeReviewDrawer'
 import {
   REVIEW_DECISIONS_ENABLED,
@@ -88,12 +90,16 @@ export default function ChallengeReviewTable({
   cohortId,
   courseId,
   canReview,
+  isAdmin,
+  currentUserEmail,
 }: {
   rows: ChallengeReviewRow[]
   thresholds: ReviewThresholds
   cohortId: number
   courseId: number
   canReview: boolean
+  isAdmin: boolean
+  currentUserEmail: string
 }) {
   const router = useRouter()
   const [openEmail, setOpenEmail] = useState<string | null>(null)
@@ -236,8 +242,23 @@ export default function ChallengeReviewTable({
         searchPlaceholder="Search name or email…"
         csvFilename="challenge_review"
         emptyMessage="No candidates to review yet."
-        toolbarRight={({ selectedRows }) => (
+        toolbarRight={({ selectedRows, filteredRows }) => (
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <EmailCampaignButton
+                rows={((selectedRows.length ? selectedRows : filteredRows) as ChallengeReviewRow[]).map((r) => ({
+                  name: r.name,
+                  email: r.email,
+                }))}
+                fields={['name', 'email']}
+                defaultRecipientField="email"
+                currentUserEmail={currentUserEmail}
+                action={sendEmailCampaign}
+                campaign="challenge"
+                label="Email"
+                title="Email challenge members (mail-merge)"
+              />
+            )}
             {canReview && selectedRows.length > 0 && (
               <button
                 onClick={() => setBulkRows(selectedRows)}

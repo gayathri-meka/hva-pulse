@@ -333,6 +333,8 @@ export default async function AdmissionsChallengePage() {
         cohortId={cohortId}
         courseId={courseId}
         canReview={appUser?.role === 'admin' || appUser?.role === 'staff'}
+        isAdmin={appUser?.role === 'admin'}
+        currentUserEmail={appUser?.email ?? ''}
       />
     </div>
   )

@@ -33,8 +33,9 @@ GOOGLE_SHEET_ID
 JOOBLE_API_KEY                  # Required for Job Outreach scraper
 OPENAI_API_KEY                  # Required for ask-pulse-evals only (evaluation suite)
 ANTHROPIC_API_KEY               # Required for Ask Pulse (claude-sonnet-4-6)
-RESEND_API_KEY                  # Required to send templated email campaigns (mail-merge)
-EMAIL_FROM                      # From address for campaigns; must be on the Resend-verified domain
+GOOGLE_OAUTH_CLIENT_ID          # OAuth 2.0 Web client — for Gmail-based email campaigns (mail-merge)
+GOOGLE_OAUTH_CLIENT_SECRET      # paired secret; consent screen needs gmail.send + userinfo.email scopes
+EMAIL_FROM_NAME                 # optional From display name; address is always the connected Google account
 GOOGLE_ALUMNI_SHEET_ID          # Alumni roster Google Sheet ID
 MCP_DATABASE_URL                # Read-only Postgres URL for the MCP server (pulse_mcp_ro role)
                                 # Format: postgresql://pulse_mcp_ro:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
@@ -133,9 +134,11 @@ Productised UI: `components/SyncToSheetButton.tsx` (reusable button + modal) tak
 
 ### Email campaigns (mail-merge) — `lib/email.ts` + `lib/emailTemplate.ts`
 
-Generic templated email send. `lib/emailTemplate.ts` (pure, unit-tested) does `<<placeholder>>` substitution per row; `lib/email.ts` sends via **Resend** (REST over fetch — no SDK; needs `RESEND_API_KEY` + a verified sending domain + `EMAIL_FROM`). `sendTemplatedEmails` dedupes + validates recipients and batches (100/request). Reusable UI: `components/email/EmailCampaignButton.tsx` (compose subject/body with `<<field>>` chips, preview, **send-test-to-self**, then a two-step **confirm + send to N**). Each surface passes its rows + a server action; wired on **both admissions tables** (Prospects + Website hits) → `sendEmailCampaign` in `app/(protected)/admissions/actions.ts` (admin-only, logs every recipient to `email_log`, migration 058). The button lives in the DataTable toolbar and targets the **selected rows** (via DataTable row selection) or, if none selected, the **currently-filtered rows**.
+Generic templated email send. `lib/emailTemplate.ts` (pure, unit-tested) does `<<placeholder>>` substitution per row; `lib/email.ts` sends via the **Gmail API** (`lib/googleMail.ts`, REST over fetch — no SDK) using **one shared Google account** connected via OAuth. `sendTemplatedEmails` dedupes + validates recipients, then sends **one Gmail message per recipient** (Gmail has no batch endpoint). Reusable UI: `components/email/EmailCampaignButton.tsx` (compose subject/body with `<<field>>` chips, preview, **send-test-to-self**, then a two-step **confirm + send to N**). Each surface passes its rows + a server action; wired on **all three admissions tables** (Prospects, Website hits, Challenge → Review) → `sendEmailCampaign` in `app/(protected)/admissions/actions.ts` (admin-only, logs every recipient to `email_log`, migration 058). The button lives in the DataTable toolbar and targets the **selected rows** (via DataTable row selection) or, if none selected, the **currently-filtered rows**.
 
-Sends are **admin-only** and **inert until Resend is configured** (returns a clear "not configured" error). **Not yet built (do before any large/marketing send):** unsubscribe link + suppression/opt-out list. HTML bodies are plain-text for now.
+**Google OAuth email setup:** the sending account is connected under **Settings → Email** (`/api/google/connect` → `/api/google/callback`); the refresh token is stored in `email_oauth_credentials` (migration 062, one row, `provider` unique). `getGmailSender()` mints a fresh access token per send. Needs `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` (separate from the Sheets/BigQuery service account) with `gmail.send` + `userinfo.email` scopes and redirect URI `<origin>/api/google/callback`. The From address is always the connected account (Gmail can't spoof); `EMAIL_FROM_NAME` sets only the display name.
+
+Sends are **admin-only** and **inert until a Google account is connected** (returns a clear "connect a Google account under Settings → Email" error). Gmail caps sending (~2,000 recipients/day on Workspace) — split very large campaigns across days. **Not yet built (do before any large/marketing send):** unsubscribe link + suppression/opt-out list. HTML bodies are plain-text for now.
 
 ### Alumni Data Ownership — Important
 

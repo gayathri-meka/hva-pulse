@@ -98,6 +98,8 @@ export default function ChallengeClient({
   cohortId,
   courseId,
   canReview,
+  isAdmin,
+  currentUserEmail,
 }: {
   members: Member[]
   cohortDays: CohortDay[]
@@ -108,6 +110,8 @@ export default function ChallengeClient({
   cohortId: number
   courseId: number
   canReview: boolean
+  isAdmin: boolean
+  currentUserEmail: string
 }) {
   const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions' | 'review'>('review')
   const [progressOpen, setProgressOpen] = useState(false)
@@ -279,6 +283,8 @@ export default function ChallengeClient({
             cohortId={cohortId}
             courseId={courseId}
             canReview={canReview}
+            isAdmin={isAdmin}
+            currentUserEmail={currentUserEmail}
           />
         ) : view === 'questions' ? (
           <ChallengeQuestionsView days={taskCatalog} />
