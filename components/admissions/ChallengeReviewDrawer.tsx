@@ -8,6 +8,7 @@ import type { IntakeRaw } from '@/lib/challengeIntake'
 import {
   setChallengeDecision,
   releaseChallengeDecisions,
+  clearChallengeDecisions,
   getLearnerTaskDetail,
   type LearnerQuestionThread,
 } from '@/app/(protected)/admissions/challenge/actions'
@@ -29,16 +30,18 @@ const DECODE: Record<string, Record<string, string>> = {
   level_raw: { a: 'Class 12', b: "Bachelor's", c: "Master's", d: 'Diploma', e: 'Other', f: 'Not applicable' },
   work_domain_raw: { a: 'Tech', b: 'Non-tech', c: 'Not applicable' },
   willing_raw: { a: 'Yes', b: 'No', c: 'Not sure', d: 'Not applicable' },
+  course_type_raw: { a: 'Full-time', b: 'Part-time', c: 'Distance', d: 'Online', e: 'Not applicable' },
 }
 // Each raw answer is tagged with the criterion group it supports, so it renders
 // right under that group's verdicts.
 const INTAKE_FIELDS: { key: keyof IntakeRaw; label: string; group: CriterionGroup }[] = [
-  { key: 'college_name', label: 'Current college', group: 'need' },
+  // college_name is omitted — the College criterion already shows it directly.
   { key: 'family_income_raw', label: 'Annual family income', group: 'need' },
   { key: 'family_size_raw', label: 'Family size', group: 'need' },
   { key: 'studying_raw', label: 'Currently studying', group: 'work_availability' },
   { key: 'level_raw', label: 'Education level', group: 'work_availability' },
   { key: 'grad_year_raw', label: 'Completion year', group: 'work_availability' },
+  { key: 'course_type_raw', label: 'Course type', group: 'work_availability' },
   { key: 'work_domain_raw', label: 'Work domain', group: 'work_availability' },
   { key: 'salary_raw', label: 'Monthly salary', group: 'work_availability' },
   { key: 'willing_raw', label: 'Willing to leave work', group: 'work_availability' },
@@ -204,6 +207,16 @@ export default function ChallengeReviewDrawer({
     })
   }
 
+  function undoDecision() {
+    setError(null)
+    startTransition(async () => {
+      const res = await clearChallengeDecisions({ cohortId, courseId, emails: [row.email] })
+      if (!res.ok) { setError(res.error); return }
+      router.refresh()
+      onClose()
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden />
@@ -325,6 +338,14 @@ export default function ChallengeReviewDrawer({
                       Release to candidate
                     </button>
                   )}
+                  <button
+                    disabled={pending}
+                    onClick={undoDecision}
+                    title="Undo this decision — back to Pending (also un-releases)"
+                    className="ml-auto text-[11px] text-zinc-400 hover:text-zinc-600 disabled:opacity-50"
+                  >
+                    Undo → Pending
+                  </button>
                 </div>
               )}
             </div>

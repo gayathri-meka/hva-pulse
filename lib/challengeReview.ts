@@ -24,6 +24,9 @@ export type ReviewThresholds = {
   minActiveDays: number         // active days must be > this
   minSpanDays: number           // span (first→last, inclusive) must be >= this
   maxCrammingPct: number        // cramming % must be < this
+  // A working candidate earning MORE than this per year is rejected regardless of
+  // willingness to quit (their own annual salary). Editable "6 LPA" bar.
+  maxWorkIncomeAnnual: number
   // Per-capita family income (annual) must be BELOW this to establish need.
   // Undefined = not configured yet → the per-capita criterion stays 'na'.
   maxPerCapitaIncomeAnnual?: number
@@ -32,23 +35,53 @@ export type ReviewThresholds = {
   excludedColleges?: string[]
 }
 
-// Normalise a college name for matching: lowercase and strip ALL non-alphanumerics
-// (spaces + punctuation), so "R.V. College", "RV College" and "rv college" all
-// collapse to the same key.
+// Short label for a course type (for the criterion value display).
+function courseTypeShort(c: CandidateSignals['courseType']): string {
+  return c === 'full_time' ? 'FT' : c === 'part_time' ? 'PT' : c === 'distance' ? 'Distance' : c === 'online' ? 'Online' : ''
+}
+
+// ₹ per year → "LPA" figure, trimming a trailing ".0" (600000 → "6", 180000 → "1.8").
+function lpa(annualInr: number): string {
+  return String(Number((annualInr / 100_000).toFixed(1)))
+}
+
+// Normalise a college name for the spaceless key: lowercase, strip ALL
+// non-alphanumerics, so "R.V. College", "R V College" and "rv college" collapse
+// to the same key (handles punctuation + spacing + acronym dots).
 function normCollege(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
-// Is this college on the excluded list? Matches on normalised equality or either
-// name being contained in the other (to tolerate trailing city/branch text),
-// guarding against trivially-short excluded entries.
+// Word tokens (for order-insensitive overlap).
+function collegeTokens(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean),
+  )
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0
+  let inter = 0
+  for (const t of a) if (b.has(t)) inter++
+  return inter / (a.size + b.size - inter)
+}
+
+// Fuzzy match a college name against the excluded list. NOT exact-string:
+//   • normalised (punctuation/spacing/acronym-dot insensitive)
+//   • substring either way — tolerates trailing city/branch text
+//   • token-Jaccard ≥ 0.7 — tolerates word reordering / extra words
+// Deliberately NOT character-similarity (Dice/Levenshtein): college names share
+// boilerplate ("College of Engineering"), which makes different colleges score
+// falsely high. Jaccard on whole tokens keeps different institutions apart.
 export function isExcludedCollege(collegeName: string, excluded: string[]): boolean {
   const c = normCollege(collegeName)
-  if (!c) return false
+  if (c.length < 4) return false
+  const cTokens = collegeTokens(collegeName)
   return excluded.some((e) => {
     const n = normCollege(e)
     if (n.length < 4) return false
-    return c === n || c.includes(n) || n.includes(c)
+    if (c === n || c.includes(n) || n.includes(c)) return true
+    return jaccard(cTokens, collegeTokens(e)) >= 0.7
   })
 }
 
@@ -57,6 +90,7 @@ export const DEFAULT_THRESHOLDS: ReviewThresholds = {
   minActiveDays: 10,
   minSpanDays: 14,
   maxCrammingPct: 30,
+  maxWorkIncomeAnnual: 600_000, // 6 LPA
 }
 
 // The raw per-candidate signals the engine scores. Placeholder signals are optional
@@ -75,16 +109,17 @@ export type CandidateSignals = {
   collegeName?: string         // current college/institute — matched against the excluded list
   currentlyStudying?: boolean  // still in education? (not studying → available now)
   graduationYear?: number      // year current education completes (students only)
+  courseType?: 'full_time' | 'part_time' | 'distance' | 'online' // current course type
   working?: boolean            // currently working?
   willingToQuit?: boolean      // willing to pause/leave work to fully commit?
+  monthlySalaryInr?: number    // the candidate's own monthly salary/stipend (₹)
   familyAnnualIncomeInr?: number // total family income per year (₹)
   familySize?: number          // total people in the family (per-capita denominator)
 }
 
-// Students finishing in this year or later can't commit in time — it's a no-go.
-// Anyone graduating before it (or not currently studying) is available. Bump per
-// cohort year as needed.
-export const GRAD_CUTOFF_YEAR = 2028
+// Regular (full-time / part-time) students must finish BY this year. Distance /
+// online learners are exempt (they can join any time). Bump per cohort year.
+export const GRAD_LATEST_YEAR = 2028
 
 export type CriterionStatus = 'pass' | 'fail' | 'na'
 // Need = socio-economic / financial-need gates; Work & Availability = capacity to
@@ -118,29 +153,45 @@ export function evaluateCandidate(
   signals: CandidateSignals,
   thresholds: ReviewThresholds = DEFAULT_THRESHOLDS,
 ): ReviewEvaluation {
-  // Graduation gate: not currently studying → available → pass; else gate on the
-  // completion year (>= cutoff is a no-go); unknown year for a student → manual review.
+  // Graduation gate:
+  //   • not currently studying → available → pass
+  //   • distance / online learner → flexible → pass at any completion year
+  //   • regular (full/part-time) student → must finish by GRAD_LATEST_YEAR
+  //   • completion year (or course type, for a late finisher) unknown → manual review
+  const isFlexibleStudy = signals.courseType === 'distance' || signals.courseType === 'online'
+  const isRegularStudy = signals.courseType === 'full_time' || signals.courseType === 'part_time'
   const gradStatus: CriterionStatus =
     signals.currentlyStudying === false
       ? 'pass'
-      : signals.graduationYear === undefined
-        ? 'na'
-        : signals.graduationYear >= GRAD_CUTOFF_YEAR
-          ? 'fail'
-          : 'pass'
+      : isFlexibleStudy
+        ? 'pass'
+        : signals.graduationYear === undefined
+          ? 'na'
+          : signals.graduationYear <= GRAD_LATEST_YEAR
+            ? 'pass'
+            : isRegularStudy
+              ? 'fail'
+              : 'na' // finishing late, but course type unknown → can't apply the exception
 
-  // Work gate: not working is fine; working + unwilling to leave is eliminated;
-  // working + willing is fine; willingness unknown → manual review.
+  // Work gate:
+  //   • not working → take → pass
+  //   • working + earning above the income bar → reject (even if willing to quit)
+  //   • working, at/below the bar, willing to quit → take → pass
+  //   • working, at/below the bar, NOT willing → reject
+  //   • working status / willingness unknown → manual review
+  const workAnnualIncome = signals.monthlySalaryInr === undefined ? undefined : signals.monthlySalaryInr * 12
   const workStatus: CriterionStatus =
     signals.working === undefined
       ? 'na'
       : !signals.working
         ? 'pass'
-        : signals.willingToQuit === undefined
-          ? 'na'
-          : signals.willingToQuit
-            ? 'pass'
-            : 'fail'
+        : workAnnualIncome !== undefined && workAnnualIncome > thresholds.maxWorkIncomeAnnual
+          ? 'fail'
+          : signals.willingToQuit === undefined
+            ? 'na'
+            : signals.willingToQuit
+              ? 'pass'
+              : 'fail'
 
   // College gate: eliminated if the candidate's college is on the excluded list.
   const college = (signals.collegeName ?? '').trim()
@@ -183,7 +234,7 @@ export function evaluateCandidate(
       placeholder: false, // wired — na means no college answer or no excluded list set
       status: collegeStatus,
       value: college || 'n/a',
-      threshold: 'Not on the excluded-colleges list',
+      threshold: 'College is not on the excluded-colleges list',
       internalOnly: true,
       failFeedback: 'Based on your current institution, this programme isn’t the right fit for you.',
     },
@@ -201,8 +252,8 @@ export function evaluateCandidate(
       value: perCapitaIncome === undefined ? 'n/a' : `₹${perCapitaIncome.toLocaleString('en-IN')}/yr`,
       threshold:
         thresholds.maxPerCapitaIncomeAnnual === undefined
-          ? 'not set'
-          : `< ₹${thresholds.maxPerCapitaIncomeAnnual.toLocaleString('en-IN')}/yr`,
+          ? 'Threshold not set yet'
+          : `Family income ÷ family size below ₹${thresholds.maxPerCapitaIncomeAnnual.toLocaleString('en-IN')} per person / year`,
       internalOnly: true,
       failFeedback: 'Your family’s per-capita income is above the level this programme is aimed at.',
     },
@@ -210,35 +261,31 @@ export function evaluateCandidate(
       key: 'graduation_timeline',
       label: 'Graduation timeline',
       group: 'work_availability',
-      placeholder: false, // wired — na here means a student whose completion year is unknown
+      placeholder: false, // wired — na = late finisher with unknown course type / year
       status: gradStatus,
       value:
         signals.currentlyStudying === false
           ? 'Not studying'
-          : signals.graduationYear === undefined
-            ? 'n/a'
-            : String(signals.graduationYear),
-      threshold: `Finishing by ${GRAD_CUTOFF_YEAR - 1}`,
-      failFeedback: `You’re set to finish your current education in ${GRAD_CUTOFF_YEAR} or later, so you can’t commit to the programme in time.`,
+          : `${signals.graduationYear ?? 'n/a'}${courseTypeShort(signals.courseType) ? ` · ${courseTypeShort(signals.courseType)}` : ''}`,
+      threshold: `Distance/online: any year. Full-time/part-time: must finish by ${GRAD_LATEST_YEAR}`,
+      failFeedback: `You’re a full-time/part-time student finishing after ${GRAD_LATEST_YEAR}, so you can’t commit to the programme in time.`,
     },
     {
       key: 'work_commitment',
       label: 'Work commitment',
       group: 'work_availability',
-      placeholder: false, // wired — na here means no answer / willingness unknown
+      placeholder: false, // wired — na = working status or willingness unknown
       status: workStatus,
       value:
         signals.working === undefined
           ? 'n/a'
           : !signals.working
             ? 'Not working'
-            : signals.willingToQuit === undefined
-              ? 'Working · ?'
-              : signals.willingToQuit
-                ? 'Working · will commit'
-                : 'Working · won’t leave',
-      threshold: 'Not working, or willing to fully commit',
-      failFeedback: 'Fully committing to HVA means stepping away from other work, which you weren’t able to do.',
+            : `Working${signals.monthlySalaryInr !== undefined ? ` · ₹${signals.monthlySalaryInr}/mo` : ''}${
+                signals.willingToQuit === true ? ' · will quit' : signals.willingToQuit === false ? ' · won’t quit' : ''
+              }`,
+      threshold: `Not working — or working, earning ≤ ${lpa(thresholds.maxWorkIncomeAnnual)} LPA, and willing to quit`,
+      failFeedback: 'Fully committing to HVA means stepping away from other work, which wasn’t possible based on your answers.',
     },
     // ── Engagement (challenge effort + performance) ───────────────────────────
     {
@@ -248,7 +295,7 @@ export function evaluateCandidate(
       placeholder: false,
       status: questionsAttemptedPct >= thresholds.minQuestionsAttemptedPct ? 'pass' : 'fail',
       value: `${questionsAttemptedPct}% (${signals.attemptedQuestions}/${signals.totalQuestions})`,
-      threshold: `>= ${thresholds.minQuestionsAttemptedPct}%`,
+      threshold: `At least ${thresholds.minQuestionsAttemptedPct}% of all quiz questions attempted`,
       failFeedback: `You attempted ${questionsAttemptedPct}% of the challenge questions; we look for at least ${thresholds.minQuestionsAttemptedPct}%.`,
     },
     {
@@ -258,7 +305,7 @@ export function evaluateCandidate(
       placeholder: false,
       status: signals.activeDays > thresholds.minActiveDays ? 'pass' : 'fail',
       value: `${signals.activeDays} days`,
-      threshold: `> ${thresholds.minActiveDays} days`,
+      threshold: `Active on more than ${thresholds.minActiveDays} days`,
       failFeedback: `You were active on ${signals.activeDays} days; we look for more than ${thresholds.minActiveDays}.`,
     },
     {
@@ -268,7 +315,7 @@ export function evaluateCandidate(
       placeholder: false,
       status: signals.spanDays >= thresholds.minSpanDays ? 'pass' : 'fail',
       value: `${signals.spanDays} days`,
-      threshold: `>= ${thresholds.minSpanDays} days`,
+      threshold: `First-to-last activity spans at least ${thresholds.minSpanDays} days`,
       failFeedback: `You worked across ${signals.spanDays} days; we look for consistency over at least ${thresholds.minSpanDays} days.`,
     },
     {
@@ -278,7 +325,7 @@ export function evaluateCandidate(
       placeholder: false,
       status: signals.crammingPct < thresholds.maxCrammingPct ? 'pass' : 'fail',
       value: `${signals.crammingPct}%`,
-      threshold: `< ${thresholds.maxCrammingPct}%`,
+      threshold: `Under ${thresholds.maxCrammingPct}% of all work done on the single busiest day`,
       failFeedback: `Too much of your work was crammed into one day (${signals.crammingPct}%); we look for steadier effort.`,
     },
     // Key-question score — placeholder (needs per-selected-question scores synced).

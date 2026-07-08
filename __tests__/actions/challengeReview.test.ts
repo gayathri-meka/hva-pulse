@@ -13,6 +13,7 @@ import {
   setChallengeDecision,
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
+  clearChallengeDecisions,
   updateChallengeReviewConfig,
 } from '@/app/(protected)/admissions/challenge/actions'
 import type { CriterionResult } from '@/lib/challengeReview'
@@ -153,7 +154,7 @@ describe('bulkConfirmChallengeDecisions', () => {
 })
 
 describe('updateChallengeReviewConfig', () => {
-  const good = { minQuestionsAttemptedPct: 40, minActiveDays: 10, minSpanDays: 14, maxCrammingPct: 30 }
+  const good = { minQuestionsAttemptedPct: 40, minActiveDays: 10, minSpanDays: 14, maxCrammingPct: 30, maxWorkIncomeAnnual: 600_000 }
 
   test('rejects a non-staff caller', async () => {
     vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
@@ -195,6 +196,7 @@ describe('updateChallengeReviewConfig', () => {
       min_active_days: 10,
       min_span_days: 14,
       max_cramming_pct: 30,
+      max_work_income_annual: 600_000,
       max_per_capita_income_annual: null,
       updated_by: 'staff-1',
     })
@@ -264,5 +266,42 @@ describe('releaseChallengeDecisions', () => {
     const { q } = mockUpdateChain({ data: [], error: null })
     await releaseChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['a@x.com'], publish: false })
     expect(q.update.mock.calls[0][0].published_at).toBeNull()
+  })
+})
+
+describe('clearChallengeDecisions', () => {
+  // from().delete().eq().eq().in().select() → resolves { data, error }.
+  function mockDeleteChain(result: { data?: unknown[]; error: { message: string } | null }) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const q: any = {}
+    q.delete = vi.fn(() => q)
+    q.eq = vi.fn(() => q)
+    q.in = vi.fn(() => q)
+    q.select = vi.fn(() => Promise.resolve(result))
+    vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
+    return { q }
+  }
+
+  test('rejects a non-staff caller', async () => {
+    vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
+    await expect(
+      clearChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['a@x.com'] }),
+    ).rejects.toThrow('NEXT_REDIRECT')
+  })
+
+  test('errors when no candidates are given', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    expect(await clearChallengeDecisions({ cohortId: 214, courseId: 587, emails: [] })).toEqual({
+      ok: false,
+      error: expect.stringContaining('No candidates'),
+    })
+  })
+
+  test('deletes the decision rows and reports the count', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { q } = mockDeleteChain({ data: [{ email: 'a@x.com' }, { email: 'b@x.com' }], error: null })
+    const res = await clearChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['A@X.com', 'b@x.com'] })
+    expect(res).toEqual({ ok: true, count: 2 })
+    expect(q.delete).toHaveBeenCalled()
   })
 })

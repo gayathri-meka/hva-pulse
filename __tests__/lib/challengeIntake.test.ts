@@ -83,6 +83,15 @@ describe('parseIntake', () => {
     expect(s.familySize).toBe(6)
   })
 
+  it('parses course type and the candidate’s own monthly salary', () => {
+    expect(parseIntake({ course_type_raw: 'a' }).courseType).toBe('full_time')
+    expect(parseIntake({ course_type_raw: 'c' }).courseType).toBe('distance')
+    expect(parseIntake({ course_type_raw: 'Online' }).courseType).toBe('online')
+    expect(parseIntake({ course_type_raw: 'e' }).courseType).toBeUndefined() // Not applicable
+    expect(parseIntake({ salary_raw: '40,000' }).monthlySalaryInr).toBe(40000)
+    expect(parseIntake({ salary_raw: 'Not Applicable' }).monthlySalaryInr).toBe(0)
+  })
+
   it('drops the graduation year for a non-student (available now)', () => {
     const s = parseIntake({ studying_raw: 'b', grad_year_raw: '2027', work_domain_raw: 'a' })
     expect(s.currentlyStudying).toBe(false)

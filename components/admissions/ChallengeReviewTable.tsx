@@ -19,6 +19,7 @@ import type { IntakeRaw } from '@/lib/challengeIntake'
 import {
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
+  clearChallengeDecisions,
   updateChallengeReviewConfig,
 } from '@/app/(protected)/admissions/challenge/actions'
 
@@ -107,6 +108,7 @@ export default function ChallengeReviewTable({
   const [openEmail, setOpenEmail] = useState<string | null>(null)
   const [bulkRows, setBulkRows] = useState<ChallengeReviewRow[] | null>(null)
   const [releaseRows, setReleaseRows] = useState<ChallengeReviewRow[] | null>(null)
+  const [resetRows, setResetRows] = useState<ChallengeReviewRow[] | null>(null)
   const [editRules, setEditRules] = useState(false)
   const [pending, startTransition] = useTransition()
 
@@ -239,6 +241,16 @@ export default function ChallengeReviewTable({
     })
   }
 
+  function runReset() {
+    if (!resetRows) return
+    startTransition(async () => {
+      const res = await clearChallengeDecisions({ cohortId, courseId, emails: resetRows.map((r) => r.email) })
+      setResetRows(null)
+      if (res.ok) router.refresh()
+      else alert(res.error)
+    })
+  }
+
   return (
     <div>
       {/* Summary strip — team verdicts, then what the system suggests. */}
@@ -306,6 +318,15 @@ export default function ChallengeReviewTable({
                 className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
               >
                 Release to candidates ({selectedRows.filter((r) => r.finalDecision && !r.published).length})
+              </button>
+            )}
+            {canReview && selectedRows.filter((r) => r.finalDecision).length > 0 && (
+              <button
+                onClick={() => setResetRows(selectedRows.filter((r) => r.finalDecision))}
+                title="Undo — send back to Pending (also un-releases)"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+              >
+                Reset to pending ({selectedRows.filter((r) => r.finalDecision).length})
               </button>
             )}
             {canReview && (
@@ -386,6 +407,30 @@ export default function ChallengeReviewTable({
         </Modal>
       )}
 
+      {resetRows && (
+        <Modal title="Reset to pending" onClose={() => setResetRows(null)}>
+          <p className="text-sm text-zinc-600">
+            Undo the decision for <strong>{resetRows.length}</strong> candidate{resetRows.length === 1 ? '' : 's'} and send
+            them back to <strong>Pending</strong>? Any that were released to the portal will also be un-released.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setResetRows(null)}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={pending}
+              onClick={runReset}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {pending ? 'Resetting…' : 'Reset to pending'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {editRules && (
         <EditRulesModal
           thresholds={thresholds}
@@ -450,6 +495,21 @@ function EditRulesModal({
         {field('minActiveDays', 'Active days must be greater than', 'days')}
         {field('minSpanDays', 'Span must be at least', 'days')}
         {field('maxCrammingPct', 'Cramming must be under', '%')}
+        <label className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm text-zinc-700">
+            Reject a working candidate earning over
+            <span className="mt-0.5 block text-[11px] text-zinc-400">their own salary, per year · rejected even if willing to quit</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <input
+              type="number"
+              value={t.maxWorkIncomeAnnual}
+              onChange={(e) => setT({ ...t, maxWorkIncomeAnnual: Number(e.target.value) })}
+              className="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+            />
+            <span className="text-xs text-zinc-400">₹/yr</span>
+          </span>
+        </label>
         <label className="flex items-center justify-between gap-3 py-2">
           <span className="text-sm text-zinc-700">
             Per-capita income must be under

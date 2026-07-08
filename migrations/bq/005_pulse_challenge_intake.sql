@@ -18,6 +18,7 @@
 --   34084 "which domain is your current work in?"   a=Tech b=Non-tech c=Not Applicable   (working proxy)
 --   34085 "current monthly salary or stipend…"      free text (₹, k, "no income", NA…)
 --   34086 "willing to pause or leave your work…?"   a=Yes b=No c=Not sure d=Not Applicable
+--   34075 "current course type?"                    a=Full-time b=Part-time c=Distance d=Online e=NA
 --   34160 "how many people are there in your family?" integer (per-capita denominator)
 --   34168 "annual income of your family?"           free text (Indian format, "5,00,000")
 --
@@ -51,7 +52,7 @@ latest AS (
   FROM `sensai-441917.sensai_prod.chat_history`
   WHERE role = 'user'
     AND created_at >= TIMESTAMP('2024-01-01')
-    AND question_id IN (34069, 34070, 34073, 34074, 34084, 34085, 34086, 34160, 34168)
+    AND question_id IN (34069, 34070, 34073, 34074, 34075, 34084, 34085, 34086, 34160, 34168)
 ),
 pivoted AS (
   SELECT
@@ -60,6 +61,7 @@ pivoted AS (
     MAX(IF(question_id = 34070, content, NULL)) AS level_raw,
     MAX(IF(question_id = 34073, content, NULL)) AS college_name,
     MAX(IF(question_id = 34074, content, NULL)) AS grad_year_raw,
+    MAX(IF(question_id = 34075, content, NULL)) AS course_type_raw,
     MAX(IF(question_id = 34084, content, NULL)) AS work_domain_raw,
     MAX(IF(question_id = 34085, content, NULL)) AS salary_raw,
     MAX(IF(question_id = 34086, content, NULL)) AS willing_raw,
@@ -77,6 +79,7 @@ SELECT
   p.level_raw,
   p.college_name,
   p.grad_year_raw,
+  p.course_type_raw,
   p.work_domain_raw,
   p.salary_raw,
   p.willing_raw,

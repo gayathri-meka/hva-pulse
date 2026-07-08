@@ -16,6 +16,15 @@ describe('isExcludedCollege', () => {
     expect(isExcludedCollege('Government First Grade College', list)).toBe(false)
     expect(isExcludedCollege('', list)).toBe(false)
   })
+  it('does not false-match a DIFFERENT college that shares boilerplate words', () => {
+    // "RV College of Engineering" must not match "BMS College of Engineering"
+    // just because they share "College of Engineering".
+    expect(isExcludedCollege('RV College of Engineering', ['BMS College of Engineering'])).toBe(false)
+    expect(isExcludedCollege('PES Institute of Technology', ['BMS Institute of Technology'])).toBe(false)
+  })
+  it('matches on word reordering / extra words (token overlap)', () => {
+    expect(isExcludedCollege('College of Engineering, BMS', list)).toBe(true)
+  })
   it('ignores trivially short excluded entries', () => {
     expect(isExcludedCollege('anything', ['a', 'bc'])).toBe(false)
   })
@@ -146,23 +155,32 @@ describe('evaluateCandidate', () => {
     expect(evaluateCandidate({ ...passing, collegeName: 'BMS College of Engineering' }, th).systemDecision).toBe('rejected')
   })
 
-  it('rejects students finishing 2028+, passes 2027-and-earlier and non-students', () => {
-    expect(get(evaluateCandidate({ ...passing, currentlyStudying: true, graduationYear: 2028 }), 'graduation_timeline').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, currentlyStudying: true, graduationYear: 2029 }), 'graduation_timeline').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, currentlyStudying: true, graduationYear: 2027 }), 'graduation_timeline').status).toBe('pass')
-    // Not currently studying → available now → pass, regardless of any year.
+  it('graduation gate: distance/online any year, regular must finish by 2028', () => {
+    const grad = (s: Partial<CandidateSignals>) => get(evaluateCandidate({ ...passing, currentlyStudying: true, ...s }), 'graduation_timeline').status
+    // Regular (full/part-time): <=2028 pass, >=2029 fail.
+    expect(grad({ courseType: 'full_time', graduationYear: 2028 })).toBe('pass')
+    expect(grad({ courseType: 'full_time', graduationYear: 2029 })).toBe('fail')
+    expect(grad({ courseType: 'part_time', graduationYear: 2030 })).toBe('fail')
+    // Distance / online: pass at any year (even after 2028).
+    expect(grad({ courseType: 'distance', graduationYear: 2031 })).toBe('pass')
+    expect(grad({ courseType: 'online', graduationYear: 2031 })).toBe('pass')
+    // Not studying → available → pass.
     expect(get(evaluateCandidate({ ...passing, currentlyStudying: false }), 'graduation_timeline').status).toBe('pass')
-    // A student whose completion year we couldn't read → manual review.
-    expect(get(evaluateCandidate({ ...passing, currentlyStudying: true }), 'graduation_timeline').status).toBe('na')
-    expect(evaluateCandidate({ ...passing, currentlyStudying: true, graduationYear: 2028 }).systemDecision).toBe('rejected')
+    // Late finisher but course type unknown → manual review (can't apply the exception).
+    expect(grad({ graduationYear: 2030 })).toBe('na')
+    expect(grad({})).toBe('na') // no year
   })
 
-  it('eliminates a working candidate unwilling to leave, passes the rest', () => {
-    expect(get(evaluateCandidate({ ...passing, working: true, willingToQuit: false }), 'work_commitment').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, working: true, willingToQuit: true }), 'work_commitment').status).toBe('pass')
-    expect(get(evaluateCandidate({ ...passing, working: false }), 'work_commitment').status).toBe('pass')
-    // working but willingness unknown → manual review.
-    expect(get(evaluateCandidate({ ...passing, working: true }), 'work_commitment').status).toBe('na')
+  it('work gate: not-working pass; >6LPA reject even if willing; ≤6LPA + willing pass', () => {
+    const work = (s: Partial<CandidateSignals>) => get(evaluateCandidate({ ...passing, ...s }), 'work_commitment').status
+    expect(work({ working: false })).toBe('pass')
+    // Earning above the 6 LPA bar → reject regardless of willingness.
+    expect(work({ working: true, monthlySalaryInr: 60_000, willingToQuit: true })).toBe('fail') // 7.2 LPA
+    // At/below the bar: willing → pass, not willing → fail.
+    expect(work({ working: true, monthlySalaryInr: 40_000, willingToQuit: true })).toBe('pass') // 4.8 LPA
+    expect(work({ working: true, monthlySalaryInr: 40_000, willingToQuit: false })).toBe('fail')
+    // Working but willingness unknown (income ok) → manual review.
+    expect(work({ working: true, monthlySalaryInr: 40_000 })).toBe('na')
   })
 
   it('flags sensitive eligibility fails as internal-only', () => {
@@ -181,7 +199,7 @@ describe('evaluateCandidate', () => {
   })
 
   it('honours custom thresholds', () => {
-    const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90 }
+    const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90, maxWorkIncomeAnnual: 600_000 }
     const weak: CandidateSignals = { attemptedQuestions: 6, totalQuestions: 200, activeDays: 2, spanDays: 2, crammingPct: 80 }
     expect(evaluateCandidate(weak, lenient).systemDecision).toBe('selected')
     expect(evaluateCandidate(weak, DEFAULT_THRESHOLDS).systemDecision).toBe('rejected')
@@ -189,8 +207,8 @@ describe('evaluateCandidate', () => {
 
   it('renders human-readable value/threshold strings for display', () => {
     const r = evaluateCandidate(passing)
-    expect(get(r, 'attempted_questions').threshold).toBe('>= 40%')
+    expect(get(r, 'attempted_questions').threshold).toContain('40%')
     expect(get(r, 'span').value).toBe('14 days')
-    expect(get(r, 'cramming').threshold).toBe('< 30%')
+    expect(get(r, 'cramming').threshold).toContain('30%')
   })
 })

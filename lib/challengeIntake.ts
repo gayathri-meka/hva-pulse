@@ -17,6 +17,7 @@ export type IntakeRaw = {
   level_raw?: string | null
   college_name?: string | null
   grad_year_raw?: string | null
+  course_type_raw?: string | null
   work_domain_raw?: string | null
   salary_raw?: string | null
   willing_raw?: string | null
@@ -24,10 +25,17 @@ export type IntakeRaw = {
   family_income_raw?: string | null
 }
 
-// The subset of signals derived from intake (collegeTier excluded — placeholder).
+// The subset of signals derived from intake (collegeName handled in the page).
 type IntakeSignals = Pick<
   CandidateSignals,
-  'currentlyStudying' | 'graduationYear' | 'working' | 'willingToQuit' | 'familyAnnualIncomeInr' | 'familySize'
+  | 'currentlyStudying'
+  | 'graduationYear'
+  | 'courseType'
+  | 'working'
+  | 'willingToQuit'
+  | 'monthlySalaryInr'
+  | 'familyAnnualIncomeInr'
+  | 'familySize'
 >
 
 const norm = (v: string | null | undefined) =>
@@ -65,6 +73,20 @@ function parseWorking(v: string | null | undefined): boolean | undefined {
   if (l === 'c') return false
   if (isNA(v)) return false
   return undefined
+}
+
+// Course type 34075 → a=Full-time b=Part-time c=Distance d=Online e=NA.
+function parseCourseType(v: string | null | undefined): IntakeSignals['courseType'] {
+  const l = optionLetter(v, {
+    'full time': 'a',
+    'full-time': 'a',
+    'part time': 'b',
+    'part-time': 'b',
+    distance: 'c',
+    online: 'd',
+    'not applicable': 'e',
+  })
+  return l === 'a' ? 'full_time' : l === 'b' ? 'part_time' : l === 'c' ? 'distance' : l === 'd' ? 'online' : undefined
 }
 
 // Willingness 34086 → a=Yes b=No c=Not sure d=NA.
@@ -134,8 +156,10 @@ export function parseIntake(raw: IntakeRaw): IntakeSignals {
   return {
     currentlyStudying: studying,
     graduationYear,
+    courseType: parseCourseType(raw.course_type_raw),
     working,
     willingToQuit,
+    monthlySalaryInr: parseSalary(raw.salary_raw),
     familyAnnualIncomeInr: parseSalary(raw.family_income_raw),
     familySize: parseCount(raw.family_size_raw),
   }

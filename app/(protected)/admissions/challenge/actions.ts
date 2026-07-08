@@ -412,6 +412,32 @@ export async function releaseChallengeDecisions(input: {
   return { ok: true, count: data?.length ?? 0 }
 }
 
+/**
+ * Undo a recorded decision — send the candidate(s) back to Pending. Deletes the
+ * challenge_decisions row(s), which also clears any release (published_at).
+ */
+export async function clearChallengeDecisions(input: {
+  cohortId: number
+  courseId: number
+  emails: string[]
+}): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  await requireStaff()
+  const emails = [...new Set(input.emails.map(normEmail).filter(Boolean))]
+  if (!emails.length) return { ok: false, error: 'No candidates selected.' }
+
+  const { data, error } = await adminClient()
+    .from('challenge_decisions')
+    .delete()
+    .eq('cohort_id', input.cohortId)
+    .eq('course_id', input.courseId)
+    .in('email', emails)
+    .select('email')
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/challenge')
+  return { ok: true, count: data?.length ?? 0 }
+}
+
 /** Update the editable thresholds the rule engine uses for this challenge. */
 export async function updateChallengeReviewConfig(input: {
   cohortId: number
@@ -420,7 +446,7 @@ export async function updateChallengeReviewConfig(input: {
 }): Promise<DecisionResult> {
   const user = await requireStaff()
   const t = input.thresholds
-  const bounds = [t.minQuestionsAttemptedPct, t.minActiveDays, t.minSpanDays, t.maxCrammingPct]
+  const bounds = [t.minQuestionsAttemptedPct, t.minActiveDays, t.minSpanDays, t.maxCrammingPct, t.maxWorkIncomeAnnual]
   if (bounds.some((n) => !Number.isInteger(n) || n < 0))
     return { ok: false, error: 'Thresholds must be whole numbers (0 or greater).' }
   if (t.maxCrammingPct > 100) return { ok: false, error: 'Cramming % cannot exceed 100.' }
@@ -451,6 +477,7 @@ export async function updateChallengeReviewConfig(input: {
         min_active_days: t.minActiveDays,
         min_span_days: t.minSpanDays,
         max_cramming_pct: t.maxCrammingPct,
+        max_work_income_annual: t.maxWorkIncomeAnnual,
         max_per_capita_income_annual: perCapita ?? null,
         excluded_colleges: excludedColleges,
         updated_by: user.id,
