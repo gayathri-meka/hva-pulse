@@ -1,0 +1,30 @@
+---
+title: "Data sources"
+description: "Where Pulse's data comes from and how it flows."
+---
+
+Pulse doesn't own most of its raw data — it pulls from a few sources into Postgres and reads from there.
+
+## Google Sheets (in)
+
+The learner roster, learner info, alumni, and attendance live in Google Sheets. Admins trigger a **sync** (Settings → Sheets) that reads a sheet via a service account and upserts into Supabase.
+
+## sensai / BigQuery (in)
+
+**sensai** is HyperVerge's LMS. Its data is mirrored to **BigQuery**, where version-controlled **views** (in `migrations/bq/`) do the heavy joins and parsing. Pulse syncs the output of those views into a `metric_raw_rows` table and always reads from Postgres — pages never query BigQuery directly, so they stay fast.
+
+<Note>
+BigQuery views are applied by hand in the BigQuery console (the sync service account is read-only). After applying one, run `npx tsx scripts/bq-verify.ts` to confirm it resolves.
+</Note>
+
+## Table → Sheet (out)
+
+Some in-app tables can be **pushed back** to a Google Sheet where the table is the source of truth, while preserving columns the team maintains manually in that sheet.
+
+## Email (out)
+
+Templated email campaigns (mail-merge) send via **Resend**. Sending is admin-only and needs a verified sending domain plus a `EMAIL_FROM` address on that domain.
+
+## Managing sources
+
+Sheet and BigQuery connections are managed under **Settings → Data Sources**. Each source maps its columns to a learner id, a value, and dimensions, which the metric layer then composes into metrics.

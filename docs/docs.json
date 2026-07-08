@@ -1,0 +1,57 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "HVA Pulse",
+  "colors": {
+    "primary": "#5BAE5B",
+    "light": "#5BAE5B",
+    "dark": "#4E9C4E"
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "User Guide",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": ["user-guide/overview"]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "user-guide/admissions",
+              "user-guide/learners",
+              "user-guide/learning",
+              "user-guide/placements",
+              "user-guide/alumni-and-ask-pulse"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical",
+        "groups": [
+          {
+            "group": "For developers",
+            "pages": [
+              "technical/architecture",
+              "technical/data-sources",
+              "technical/local-setup",
+              "technical/conventions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/gayathri-meka/hva-pulse"
+    }
+  }
+}

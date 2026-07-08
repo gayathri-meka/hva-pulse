@@ -1,0 +1,39 @@
+---
+title: "Local setup"
+description: "Run Pulse on your machine."
+---
+
+<Steps>
+  <Step title="Clone and install">
+    ```bash
+    git clone https://github.com/gayathri-meka/hva-pulse.git
+    cd hva-pulse
+    npm install
+    ```
+  </Step>
+  <Step title="Configure environment">
+    ```bash
+    cp .env.example .env.local
+    ```
+    Fill in the values. The full list (Supabase, Google, BigQuery, Resend, etc.) is documented in [`CLAUDE.md`](https://github.com/gayathri-meka/hva-pulse/blob/main/CLAUDE.md) under **Environment Variables**.
+  </Step>
+  <Step title="Run">
+    ```bash
+    npm run dev
+    ```
+    Open [localhost:3000](http://localhost:3000) and sign in with a Google account that's in the `users` table.
+  </Step>
+</Steps>
+
+## Everyday commands
+
+```bash
+npm run dev        # dev server
+npm run build      # production build
+npm run test:run   # run the test suite once
+npx tsc --noEmit   # type-check
+```
+
+<Note>
+Tests are required for any change that adds or modifies logic — see [Conventions](/technical/conventions). Run `npm run test:run` before opening a PR.
+</Note>

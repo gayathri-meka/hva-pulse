@@ -1,0 +1,37 @@
+---
+title: "Architecture"
+description: "The big picture in a few lines."
+---
+
+Pulse is a **Next.js (App Router)** app on top of **Supabase** (Postgres + Google OAuth), deployed on **Vercel**.
+
+## The shape of it
+
+```
+Google Sheets ─┐
+               ├─► Supabase Postgres ──► Next.js (server components + server actions) ──► UI
+sensai / BigQuery ─┘                         ▲
+                                             └── Supabase Auth (Google OAuth)
+```
+
+- **Pages** are server components that read from Supabase and render.
+- **Mutations** are Next.js **server actions** (`'use server'`) — each checks the caller's role, writes to Postgres, and revalidates the affected paths.
+- **Auth** is Google OAuth via Supabase; the `users` table maps an email to an app role.
+
+## Three surfaces (route groups)
+
+| Route group | For | Notes |
+| --- | --- | --- |
+| `app/(protected)/` | Staff & admins | Dashboard, learners, admissions, learning, placements, alumni. |
+| `app/(learner)/learner/` | Learners | The placements portal. |
+| `app/candidate/` | Applicants | The public onboarding flow. |
+
+`middleware.ts` enforces auth on protected paths.
+
+## Roles
+
+Roles live on the `users` table: `admin`, `staff`, `guest`, `learner`. Enforcement happens in two places — layouts (redirect) and server actions (`requireStaff()` / `requireAdmin()`).
+
+<Info>
+The deepest, always-current reference is [`CLAUDE.md`](https://github.com/gayathri-meka/hva-pulse/blob/main/CLAUDE.md) in the repo root — module deep-dives, data model, and conventions.
+</Info>

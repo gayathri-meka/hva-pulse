@@ -1,0 +1,36 @@
+---
+title: "Conventions"
+description: "The few rules that keep the codebase consistent."
+---
+
+A short list of the things that matter most. The full, authoritative version lives in [`CLAUDE.md`](https://github.com/gayathri-meka/hva-pulse/blob/main/CLAUDE.md) — when in doubt, that wins.
+
+## Testing is required
+
+Every change that adds or modifies logic ships with tests **in the same PR**:
+
+- **Helpers** (`lib/`): unit-test the happy path and the edge cases.
+- **Server actions**: test auth gating, input validation, the success path, and error surfacing.
+
+Run `npm run test:run` before considering work done.
+
+## Server actions
+
+All mutations are server actions that follow one shape: check the role (`requireStaff()` / `requireAdmin()`), write to Supabase, then `revalidatePath()`.
+
+## Data tables
+
+Use the shared `components/ui/DataTable.tsx` for every new table — it gives sorting, filters, column show/hide, CSV export, and row selection out of the box. Don't hand-roll a new one.
+
+## UI
+
+Read `docs/ui-design-language.md` before UI changes — it's the source of truth for colours, spacing, tables, buttons, and badges. The brand green is `#5BAE5B`.
+
+## Database
+
+- The full schema dump lives at `docs/schema.sql` and must be regenerated whenever a migration changes it.
+- Adding a filter on a new column? Consider whether it needs an index.
+
+## Pull requests
+
+Branch off `main`, keep changes focused, and make sure the test suite is green before requesting review.
