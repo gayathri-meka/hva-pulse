@@ -1,3 +1,5 @@
+import { computeSes, sesMaxScore, type SesWeights } from './ses'
+
 // Challenge review rule engine — the challenge→interview selection gate.
 //
 // Pure + deterministic: given a candidate's signals + the (editable) thresholds,
@@ -33,6 +35,10 @@ export type ReviewThresholds = {
   // Colleges we won't take learners from. A candidate whose college matches one is
   // eliminated. Empty/undefined = the college gate is inactive (criterion stays 'na').
   excludedColleges?: string[]
+  // SES: per-question weight overrides ({} = defaults) + the pass cutoff. Cutoff
+  // undefined = not configured → the SES criterion stays 'na'.
+  sesWeights?: SesWeights
+  sesCutoff?: number
 }
 
 // Short label for a course type (for the criterion value display).
@@ -101,8 +107,9 @@ export type CandidateSignals = {
   activeDays: number
   spanDays: number
   crammingPct: number
-  // Placeholders — undefined = not yet implemented → criterion is 'na'.
-  ses?: 'pass' | 'fail'
+  // SES rubric answers, keyed by rawField (place_raw, marital_raw, …). Scored via lib/ses.
+  sesAnswers?: Record<string, string | null | undefined>
+  // Placeholder — not yet implemented → criterion is 'na'.
   keyQuestionScorePct?: number
   // Eligibility / straight-elimination gates, from the SensAI intake questions.
   // All undefined until the intake-answer pipeline lands (then they activate).
@@ -207,6 +214,15 @@ export function evaluateCandidate(
   const questionsAttemptedPct =
     signals.totalQuestions > 0 ? Math.round((signals.attemptedQuestions / signals.totalQuestions) * 100) : 0
 
+  // SES: weighted socio-economic need score (higher = more needy). Pass when ≥ cutoff.
+  const ses = signals.sesAnswers ? computeSes(signals.sesAnswers, thresholds.sesWeights) : null
+  const sesStatus: CriterionStatus =
+    !ses || ses.answered === 0 || thresholds.sesCutoff === undefined
+      ? 'na'
+      : ses.score >= thresholds.sesCutoff
+        ? 'pass'
+        : 'fail'
+
   // Per-capita family income = annual family income ÷ total family members.
   const perCapitaIncome =
     signals.familyAnnualIncomeInr !== undefined && signals.familySize
@@ -220,12 +236,15 @@ export function evaluateCandidate(
       key: 'ses',
       label: 'Financial need (SES)',
       group: 'need',
-      placeholder: true, // pipeline not built yet
-      status: signals.ses === undefined ? 'na' : signals.ses,
-      value: signals.ses === undefined ? 'n/a' : signals.ses === 'pass' ? 'Need established' : 'No need',
-      threshold: 'Need established',
+      placeholder: false, // wired — na = no SES answers or no cutoff set
+      status: sesStatus,
+      value: ses && ses.answered ? `${ses.score} / ${sesMaxScore(thresholds.sesWeights)}` : 'n/a',
+      threshold:
+        thresholds.sesCutoff === undefined
+          ? 'SES cutoff not set yet'
+          : `Weighted SES need score ≥ ${thresholds.sesCutoff} (of ${sesMaxScore(thresholds.sesWeights)})`,
       internalOnly: true,
-      failFeedback: 'Our socio-economic assessment did not establish financial need.',
+      failFeedback: 'Our socio-economic assessment did not establish sufficient financial need.',
     },
     {
       key: 'college',

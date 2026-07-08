@@ -91,14 +91,12 @@ describe('evaluateCandidate', () => {
     expect(get(evaluateCandidate({ ...passing, crammingPct: 29 }), 'cramming').status).toBe('pass')
   })
 
-  it('marks only the unbuilt criteria (SES, key-Q) as placeholders', () => {
+  it('marks only the unbuilt criteria (key-Q) as placeholders', () => {
     const r = evaluateCandidate(passing)
-    for (const key of ['ses', 'key_question_score']) {
-      expect(get(r, key).placeholder).toBe(true)
-    }
+    expect(get(r, 'key_question_score').placeholder).toBe(true)
     // Wired gates are NOT placeholders even when this candidate has no data — they
     // just come back 'na' (not applicable / no answer), never the "unbuilt" badge.
-    for (const key of ['college', 'per_capita_income', 'graduation_timeline', 'work_commitment']) {
+    for (const key of ['ses', 'college', 'per_capita_income', 'graduation_timeline', 'work_commitment']) {
       expect(get(r, key).placeholder).toBe(false)
     }
   })
@@ -184,7 +182,7 @@ describe('evaluateCandidate', () => {
   })
 
   it('flags sensitive eligibility fails as internal-only', () => {
-    const r = evaluateCandidate({ ...passing, collegeName: 'X', ses: 'fail' }, { ...DEFAULT_THRESHOLDS, excludedColleges: ['X College'] })
+    const r = evaluateCandidate({ ...passing, collegeName: 'X' }, { ...DEFAULT_THRESHOLDS, excludedColleges: ['X College'] })
     expect(get(r, 'college').internalOnly).toBe(true)
     expect(get(r, 'ses').internalOnly).toBe(true)
     // engagement + neutral gates are candidate-visible.
@@ -192,10 +190,15 @@ describe('evaluateCandidate', () => {
     expect(get(r, 'active_days').internalOnly).toBeUndefined()
   })
 
-  it('lets an SES fail gate the decision when a signal is supplied', () => {
-    const r = evaluateCandidate({ ...passing, ses: 'fail' })
-    expect(get(r, 'ses').status).toBe('fail') // a fail status gates regardless of the placeholder flag
-    expect(r.systemDecision).toBe('rejected')
+  it('SES gates on the weighted score vs the cutoff', () => {
+    // social_category a=SC=3 × weight 5 = 15. Cutoff 20 → fail; cutoff 10 → pass.
+    const answers = { social_category_raw: 'a' }
+    expect(get(evaluateCandidate({ ...passing, sesAnswers: answers }, { ...DEFAULT_THRESHOLDS, sesCutoff: 20 }), 'ses').status).toBe('fail')
+    expect(get(evaluateCandidate({ ...passing, sesAnswers: answers }, { ...DEFAULT_THRESHOLDS, sesCutoff: 10 }), 'ses').status).toBe('pass')
+    // No cutoff configured, or no answers → na (never gates).
+    expect(get(evaluateCandidate({ ...passing, sesAnswers: answers }), 'ses').status).toBe('na')
+    expect(get(evaluateCandidate({ ...passing }, { ...DEFAULT_THRESHOLDS, sesCutoff: 10 }), 'ses').status).toBe('na')
+    expect(evaluateCandidate({ ...passing, sesAnswers: answers }, { ...DEFAULT_THRESHOLDS, sesCutoff: 20 }).systemDecision).toBe('rejected')
   })
 
   it('honours custom thresholds', () => {

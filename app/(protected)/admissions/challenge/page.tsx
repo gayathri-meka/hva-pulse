@@ -236,6 +236,8 @@ export default async function AdmissionsChallengePage() {
         maxWorkIncomeAnnual: cfg.max_work_income_annual ?? DEFAULT_THRESHOLDS.maxWorkIncomeAnnual,
         maxPerCapitaIncomeAnnual: cfg.max_per_capita_income_annual ?? undefined,
         excludedColleges: cfg.excluded_colleges ?? [],
+        sesWeights: (cfg.ses_weights ?? {}) as Record<string, number>,
+        sesCutoff: cfg.ses_cutoff ?? undefined,
       }
     : DEFAULT_THRESHOLDS
 
@@ -267,6 +269,7 @@ export default async function AdmissionsChallengePage() {
       spanDays: pace.spanDays,
       crammingPct: pace.crammingPct,
       collegeName: (intake?.college_name ?? '').trim() || undefined,
+      sesAnswers: intake as Record<string, string | null | undefined> | undefined,
       ...(intake ? parseIntake(intake) : {}),
     }
     const evaln = evaluateCandidate(signals, thresholds)

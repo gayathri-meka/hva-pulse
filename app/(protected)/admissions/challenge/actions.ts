@@ -456,6 +456,14 @@ export async function updateChallengeReviewConfig(input: {
   if (perCapita !== undefined && (!Number.isInteger(perCapita) || perCapita < 0))
     return { ok: false, error: 'Per-capita income threshold must be a whole number (0 or greater).' }
 
+  // SES: cutoff optional; weights are per-question non-negative numbers.
+  const sesCutoff = t.sesCutoff
+  if (sesCutoff !== undefined && (!Number.isInteger(sesCutoff) || sesCutoff < 0))
+    return { ok: false, error: 'SES cutoff must be a whole number (0 or greater).' }
+  const sesWeights = t.sesWeights ?? {}
+  if (Object.values(sesWeights).some((w) => typeof w !== 'number' || !Number.isFinite(w) || w < 0))
+    return { ok: false, error: 'SES weights must be numbers (0 or greater).' }
+
   // Excluded colleges: trim, drop blanks, dedupe (case-insensitive).
   const seenCollege = new Set<string>()
   const excludedColleges = (t.excludedColleges ?? [])
@@ -480,6 +488,8 @@ export async function updateChallengeReviewConfig(input: {
         max_work_income_annual: t.maxWorkIncomeAnnual,
         max_per_capita_income_annual: perCapita ?? null,
         excluded_colleges: excludedColleges,
+        ses_weights: sesWeights,
+        ses_cutoff: sesCutoff ?? null,
         updated_by: user.id,
         updated_at: new Date().toISOString(),
       },

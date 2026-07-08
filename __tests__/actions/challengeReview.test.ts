@@ -235,6 +235,24 @@ describe('updateChallengeReviewConfig', () => {
     })
     expect(upsert.mock.calls[0][0].excluded_colleges).toEqual(['BMS College', 'RV College'])
   })
+
+  test('writes SES weights + cutoff, and rejects a negative cutoff', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert } = mockUpsertClient({ error: null })
+    await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: { ...good, sesWeights: { social_category: 6 }, sesCutoff: 40 },
+    })
+    expect(upsert.mock.calls[0][0]).toMatchObject({ ses_weights: { social_category: 6 }, ses_cutoff: 40 })
+
+    const bad = await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: { ...good, sesCutoff: -1 },
+    })
+    expect(bad).toEqual({ ok: false, error: expect.stringContaining('SES cutoff') })
+  })
 })
 
 describe('releaseChallengeDecisions', () => {

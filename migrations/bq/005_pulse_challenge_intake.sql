@@ -19,8 +19,12 @@
 --   34085 "current monthly salary or stipend…"      free text (₹, k, "no income", NA…)
 --   34086 "willing to pause or leave your work…?"   a=Yes b=No c=Not sure d=Not Applicable
 --   34075 "current course type?"                    a=Full-time b=Part-time c=Distance d=Online e=NA
---   34160 "how many people are there in your family?" integer (per-capita denominator)
+--   34160 "how many people are there in your family?" integer (per-capita denominator + SES)
 --   34168 "annual income of your family?"           free text (Indian format, "5,00,000")
+-- SES rubric option answers (letter answers; see lib/ses.ts for score maps):
+--   34025 place · 34158 marital · 34159 social category · 34164 parent education
+--   34165 family situation · 34166 health · 34170 house ownership · 34171 house condition
+--   34172 home location · 34173 formal loans · 34174 informal loans · 34175 assets
 --
 -- BQ base tables have duplicate rows (upsert mirroring) — dedup via GROUP BY.
 
@@ -52,7 +56,11 @@ latest AS (
   FROM `sensai-441917.sensai_prod.chat_history`
   WHERE role = 'user'
     AND created_at >= TIMESTAMP('2024-01-01')
-    AND question_id IN (34069, 34070, 34073, 34074, 34075, 34084, 34085, 34086, 34160, 34168)
+    AND question_id IN (
+      34069, 34070, 34073, 34074, 34075, 34084, 34085, 34086, 34160, 34168,
+      -- SES rubric questions:
+      34025, 34158, 34159, 34164, 34165, 34166, 34170, 34171, 34172, 34173, 34174, 34175
+    )
 ),
 pivoted AS (
   SELECT
@@ -66,7 +74,19 @@ pivoted AS (
     MAX(IF(question_id = 34085, content, NULL)) AS salary_raw,
     MAX(IF(question_id = 34086, content, NULL)) AS willing_raw,
     MAX(IF(question_id = 34160, content, NULL)) AS family_size_raw,
-    MAX(IF(question_id = 34168, content, NULL)) AS family_income_raw
+    MAX(IF(question_id = 34168, content, NULL)) AS family_income_raw,
+    MAX(IF(question_id = 34025, content, NULL)) AS place_raw,
+    MAX(IF(question_id = 34158, content, NULL)) AS marital_raw,
+    MAX(IF(question_id = 34159, content, NULL)) AS social_category_raw,
+    MAX(IF(question_id = 34164, content, NULL)) AS parent_education_raw,
+    MAX(IF(question_id = 34165, content, NULL)) AS family_situation_raw,
+    MAX(IF(question_id = 34166, content, NULL)) AS health_raw,
+    MAX(IF(question_id = 34170, content, NULL)) AS house_ownership_raw,
+    MAX(IF(question_id = 34171, content, NULL)) AS house_condition_raw,
+    MAX(IF(question_id = 34172, content, NULL)) AS home_location_raw,
+    MAX(IF(question_id = 34173, content, NULL)) AS loan_formal_raw,
+    MAX(IF(question_id = 34174, content, NULL)) AS loan_informal_raw,
+    MAX(IF(question_id = 34175, content, NULL)) AS assets_raw
   FROM latest
   WHERE rn = 1
   GROUP BY user_id
@@ -84,7 +104,19 @@ SELECT
   p.salary_raw,
   p.willing_raw,
   p.family_size_raw,
-  p.family_income_raw
+  p.family_income_raw,
+  p.place_raw,
+  p.marital_raw,
+  p.social_category_raw,
+  p.parent_education_raw,
+  p.family_situation_raw,
+  p.health_raw,
+  p.house_ownership_raw,
+  p.house_condition_raw,
+  p.home_location_raw,
+  p.loan_formal_raw,
+  p.loan_informal_raw,
+  p.assets_raw
 FROM members m
 JOIN hva_users u ON u.id = m.user_id
 LEFT JOIN pivoted p ON p.user_id = m.user_id

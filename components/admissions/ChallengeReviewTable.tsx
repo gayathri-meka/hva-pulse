@@ -15,6 +15,7 @@ import {
   type SystemDecision,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
+import { SES_RUBRIC, sesMaxScore, effectiveWeight } from '@/lib/ses'
 import {
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
@@ -456,6 +457,7 @@ function EditRulesModal({
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [t, setT] = useState<ReviewThresholds>(thresholds)
+  const [tab, setTab] = useState<'thresholds' | 'ses'>('thresholds')
 
   const field = (key: keyof ReviewThresholds, label: string, suffix: string) => (
     <label className="flex items-center justify-between gap-3 py-2">
@@ -463,7 +465,7 @@ function EditRulesModal({
       <span className="flex items-center gap-1.5">
         <input
           type="number"
-          value={t[key]}
+          value={t[key] as number}
           onChange={(e) => setT({ ...t, [key]: Number(e.target.value) })}
           className="w-24 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
         />
@@ -482,8 +484,26 @@ function EditRulesModal({
     })
   }
 
+  const sesMax = sesMaxScore(t.sesWeights)
+
   return (
-    <Modal title="Edit review rules" onClose={onClose}>
+    <Modal title="Edit review rules" onClose={onClose} wide>
+      <div className="mb-4 flex gap-1 border-b border-zinc-200">
+        {(['thresholds', 'ses'] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${
+              tab === k ? 'border-[#5BAE5B] text-zinc-900' : 'border-transparent text-zinc-500 hover:text-zinc-700'
+            }`}
+          >
+            {k === 'thresholds' ? 'Thresholds' : 'SES'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'thresholds' && (
+      <>
       <p className="mb-3 text-xs text-zinc-500">
         Thresholds the system uses to recommend select vs reject. Operators are fixed; only the numbers are editable.
         Changing these re-evaluates every candidate.
@@ -542,6 +562,59 @@ function EditRulesModal({
           className="w-full resize-y rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none"
         />
       </div>
+      </>
+      )}
+
+      {tab === 'ses' && (
+      <>
+      <p className="mb-3 text-xs text-zinc-500">
+        Socio-economic need score = each answer&apos;s option score (fixed, shown below) × the question&apos;s weight,
+        summed. Higher = more need. A candidate passes when their score reaches the cutoff. Edit weights + cutoff here;
+        the option scores are fixed.
+      </p>
+      <label className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-zinc-50 px-3 py-2">
+        <span className="text-sm font-medium text-zinc-800">
+          Need established when SES score ≥
+          <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">blank = SES gate off · current max = {sesMax}</span>
+        </span>
+        <input
+          type="number"
+          value={t.sesCutoff ?? ''}
+          placeholder="—"
+          onChange={(e) => setT({ ...t, sesCutoff: e.target.value === '' ? undefined : Number(e.target.value) })}
+          className="w-20 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+        />
+      </label>
+      <div className="divide-y divide-zinc-100">
+        {SES_RUBRIC.map((q) => (
+          <div key={q.key} className="py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-zinc-700">{q.label}</span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span className="text-[11px] text-zinc-400">weight</span>
+                <input
+                  type="number"
+                  value={effectiveWeight(q, t.sesWeights)}
+                  onChange={(e) =>
+                    setT({ ...t, sesWeights: { ...(t.sesWeights ?? {}), [q.key]: Number(e.target.value) } })
+                  }
+                  className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+                />
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {q.options.map((o, i) => (
+                <span key={i} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500">
+                  {o.label} <span className="font-semibold text-zinc-700">{o.score}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      </>
+      )}
+
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <button onClick={onClose} className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50">
