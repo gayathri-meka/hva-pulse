@@ -337,6 +337,12 @@ The **Review** sub-tab in Admissions → Challenge (`components/admissions/Chall
 - Scraper: `lib/scraper.ts` (Jooble API) + API endpoint at `app/api/scrape/route.ts`
 - Requires `JOOBLE_API_KEY` env var
 
+### SensAI grading evals (grader accuracy)
+
+Human labels on the SensAI **AI grader's** output, so the team can measure grader accuracy + failure modes from the tab they already use. Exposed inline in **Admissions → Challenge → by-question** (`ChallengeQuestionsView` → select a question → every learner's answer + AI score/feedback; also in the per-learner `ConversationThreadModal`). For each (learner, question) the team tags **correct / incorrect**, and when incorrect picks one or more **symptoms** (deliberately symptoms, NOT root cause — diagnosis of scorecard-gap vs prompt-issue happens downstream): *inaccurate score · vague/unhelpful feedback · gives away the answer* (`EVAL_SYMPTOMS` in `lib/evals.ts`). Single-rater, latest-attempt (one label per `(context, question_id, learner_email)`, upserted); a **snapshot** of the judged AI score + feedback + scorecard is captured at tag time so the label survives the grader re-running.
+
+Program-agnostic by design — keyed by a `context` string (`EVAL_CONTEXT_SCREENING = 'screening'` now; other programs pass their own later). Store: `sensai_grading_evals` (migration 067, Pulse Postgres). Pure aggregation (`computeEvalStats`, `statsByQuestion`, `validateEvalInput`) in `lib/evals.ts` (unit-tested); server actions (`setGradingEval`, `getGradingEval`, `getQuestionEvals`, `getGradingEvals`, `requireStaff`-gated) in `app/(protected)/admissions/challenge/evals.ts`; reusable UI `components/evals/EvalTagger.tsx`. Per-question accuracy + symptom tally show in the by-question header. **Reusable base layer** — drop `<EvalTagger>` into any view that shows grader output; slice reporting by `context`.
+
 ### Team Tools — Scorecard Studio
 
 `app/(protected)/tools/` (sidebar **Tools**, staff+admin only — `requireStaff`; hidden for guests) is a home for team utilities. First tool: **Scorecard Studio**, three functions for SensAI grading rubrics ("scorecards"):

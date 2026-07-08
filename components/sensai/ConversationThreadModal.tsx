@@ -2,6 +2,16 @@
 
 import { type ChatMessage, type ScorecardCategory, scoreBadgeClass } from '@/lib/sensaiChat'
 import QuestionContext from './QuestionContext'
+import EvalTagger from '@/components/evals/EvalTagger'
+
+type EvalTarget = {
+  context: string
+  questionId: string
+  learnerEmail: string
+  aiScore?: string | null
+  aiFeedback?: string | null
+  scorecardSnapshot?: string | null
+}
 
 // Shared modal that renders a learner ↔ AI-grader conversation pulled from
 // sensai chat_history. Used by Learning → Deep Dive and Admissions → Challenge.
@@ -12,6 +22,7 @@ export default function ConversationThreadModal({
   messages,
   description,
   scorecard,
+  evalTarget,
   loading,
   onClose,
 }: {
@@ -20,6 +31,7 @@ export default function ConversationThreadModal({
   messages: ChatMessage[]
   description?: string
   scorecard?: ScorecardCategory[]
+  evalTarget?: EvalTarget
   loading?: boolean
   onClose: () => void
 }) {
@@ -97,6 +109,12 @@ export default function ConversationThreadModal({
           )}
           {loading && (
             <p className="py-8 text-center text-sm text-zinc-400">Loading conversation from BigQuery…</p>
+          )}
+
+          {evalTarget && messages.length > 0 && (
+            <div className="sticky bottom-0 -mx-6 -mb-6 border-t border-zinc-100 bg-white px-6 py-4">
+              <EvalTagger {...evalTarget} />
+            </div>
           )}
         </div>
       </div>

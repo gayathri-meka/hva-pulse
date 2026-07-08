@@ -9,6 +9,9 @@ import {
 } from '@/app/(protected)/admissions/challenge/actions'
 import { scoreBadgeClass } from '@/lib/sensaiChat'
 import QuestionContext from '@/components/sensai/QuestionContext'
+import EvalTagger from '@/components/evals/EvalTagger'
+import { getQuestionEvals } from '@/app/(protected)/admissions/challenge/evals'
+import { EVAL_CONTEXT_SCREENING, computeEvalStats, symptomLabel, type GradingEval } from '@/lib/evals'
 
 export type TaskCatalogDay = {
   ordering: number
@@ -154,11 +157,13 @@ export default function ChallengeQuestionsView({ days }: { days: TaskCatalogDay[
 function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string; title: string; taskTitle: string }) {
   const [data, setData] = useState<QuestionDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [labels, setLabels] = useState<Record<string, GradingEval>>({})
 
   useEffect(() => {
     let cancelled = false
     setData(null)
     setError(null)
+    setLabels({})
     getQuestionAnswers(questionId)
       .then((res) => {
         if (!cancelled) setData(res)
@@ -167,12 +172,20 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
         console.error(e)
         if (!cancelled) setError('Could not load answers from BigQuery.')
       })
+    getQuestionEvals(EVAL_CONTEXT_SCREENING, questionId)
+      .then((rows) => {
+        if (!cancelled) setLabels(Object.fromEntries(rows.map((r) => [r.learnerEmail, r])))
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
   }, [questionId])
 
   const answers = data?.answers
+  const stats = computeEvalStats(Object.values(labels))
+  // First (newest) row per learner = the latest attempt we tag.
+  const seen = new Set<string>()
 
   return (
     <div className="flex h-full flex-col">
@@ -189,6 +202,19 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
           {taskTitle}
           {answers ? ` · ${answers.length} recent answers` : ''}
         </p>
+        {stats.total > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            <span className="font-semibold text-zinc-700">
+              Grader accuracy: <span className={stats.accuracyPct! >= 80 ? 'text-emerald-600' : stats.accuracyPct! >= 50 ? 'text-amber-600' : 'text-red-600'}>{stats.accuracyPct}%</span>
+            </span>
+            <span className="text-zinc-400">{stats.correct} right · {stats.incorrect} wrong · {stats.total} labeled</span>
+            {Object.entries(stats.bySymptom)
+              .sort((a, b) => b[1] - a[1])
+              .map(([k, n]) => (
+                <span key={k} className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">{symptomLabel(k)} ×{n}</span>
+              ))}
+          </div>
+        )}
       </div>
       <div className="max-h-[calc(100vh-270px)] overflow-auto p-3">
         {error && <p className="px-1 py-2 text-xs text-red-500">{error}</p>}
@@ -203,23 +229,44 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
         {answers && answers.length === 0 && <p className="px-1 py-2 text-xs text-zinc-400">No answers yet.</p>}
         {answers && answers.length > 0 && (
           <ul className="space-y-2">
-            {answers.map((a, i) => (
-              <li key={i} className="rounded-lg border border-zinc-200 p-3">
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <span className="truncate text-xs font-semibold text-zinc-800">{a.name}</span>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {a.score && (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${scoreBadgeClass(a.score, a.correct)}`}>
-                        {a.score}
-                      </span>
-                    )}
-                    <span className="text-[10px] text-zinc-400">{fmtTs(a.at)}</span>
+            {answers.map((a, i) => {
+              // Tag only the newest attempt per learner (single label per learner/question).
+              const email = (a.email ?? '').trim().toLowerCase()
+              const isLatest = !!email && !seen.has(email)
+              if (isLatest) seen.add(email)
+              return (
+                <li key={i} className="rounded-lg border border-zinc-200 p-3">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-semibold text-zinc-800">{a.name}</span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {a.score && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${scoreBadgeClass(a.score, a.correct)}`}>
+                          {a.score}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-zinc-400">{fmtTs(a.at)}</span>
+                    </div>
                   </div>
-                </div>
-                <pre className="whitespace-pre-wrap break-words text-xs font-mono text-zinc-700">{a.answer || '—'}</pre>
-                {a.feedback && <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">{a.feedback}</p>}
-              </li>
-            ))}
+                  <pre className="whitespace-pre-wrap break-words text-xs font-mono text-zinc-700">{a.answer || '—'}</pre>
+                  {a.feedback && <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">{a.feedback}</p>}
+                  {isLatest && (
+                    <div className="mt-2.5">
+                      <EvalTagger
+                        context={EVAL_CONTEXT_SCREENING}
+                        questionId={questionId}
+                        learnerEmail={email}
+                        aiScore={a.score}
+                        aiFeedback={a.feedback}
+                        scorecardSnapshot={data?.scorecard?.length ? JSON.stringify(data.scorecard) : null}
+                        preloaded
+                        initial={labels[email] ?? null}
+                        onSaved={(e) => setLabels((prev) => ({ ...prev, [email]: e }))}
+                      />
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>

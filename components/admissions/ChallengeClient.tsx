@@ -27,6 +27,15 @@ export type ThreadView = {
   messages: ChatMessage[]
   description?: string
   scorecard?: ScorecardCategory[]
+  // When present, the modal shows the grading-eval tagger for this (question, learner).
+  evalTarget?: {
+    context: string
+    questionId: string
+    learnerEmail: string
+    aiScore?: string | null
+    aiFeedback?: string | null
+    scorecardSnapshot?: string | null
+  }
 }
 
 export type TaskState = 'not_started' | 'attempted' | 'completed'
@@ -361,6 +370,7 @@ export default function ChallengeClient({
           messages={thread.messages}
           description={thread.description}
           scorecard={thread.scorecard}
+          evalTarget={thread.evalTarget}
           onClose={() => setThread(null)}
         />
       )}

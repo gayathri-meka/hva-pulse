@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getLearnerTaskDetail, type LearnerQuestionThread } from '@/app/(protected)/admissions/challenge/actions'
 import { scoreBadgeClass } from '@/lib/sensaiChat'
+import { EVAL_CONTEXT_SCREENING } from '@/lib/evals'
 import type { ThreadView } from './ChallengeClient'
 
 // Feature 1 — when a quiz task is expanded for one learner, load every question
@@ -52,6 +53,11 @@ export default function LearnerTaskQuestions({
         // Score progression = the grader's score on each attempt, in order.
         const scores = q.messages.filter((m) => m.role === 'assistant')
         const answered = scores.length > 0
+        // Snapshot the latest grader output for the eval label.
+        const latest = scores[scores.length - 1]
+        const aiFeedback = latest
+          ? [latest.content, latest.feedback_correct, latest.feedback_wrong].filter(Boolean).join('\n')
+          : null
         return (
           <div key={q.questionId} className="flex items-start justify-between gap-3 px-1 py-2">
             <div className="min-w-0 flex-1">
@@ -81,6 +87,14 @@ export default function LearnerTaskQuestions({
                   messages: q.messages,
                   description: q.description,
                   scorecard: q.scorecard,
+                  evalTarget: {
+                    context: EVAL_CONTEXT_SCREENING,
+                    questionId: q.questionId,
+                    learnerEmail: email,
+                    aiScore: latest?.score ?? null,
+                    aiFeedback,
+                    scorecardSnapshot: q.scorecard?.length ? JSON.stringify(q.scorecard) : null,
+                  },
                 })
               }
               className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-40"
