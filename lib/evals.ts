@@ -24,6 +24,7 @@ export type EvalVerdict = 'correct' | 'incorrect'
 export type GradingEval = {
   questionId: string
   learnerEmail: string
+  attemptAt: string // the graded attempt's timestamp (ISO); '' = unspecified/legacy
   verdict: EvalVerdict
   symptoms: string[]
   comment: string | null

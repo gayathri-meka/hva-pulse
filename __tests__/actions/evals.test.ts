@@ -23,6 +23,7 @@ const base = {
   context: 'screening',
   questionId: 'q1',
   learnerEmail: 'L@x.com',
+  attemptAt: '2026-01-02T03:04:05.000Z',
   comment: 'x',
 }
 
@@ -58,7 +59,10 @@ describe('setGradingEval', () => {
     const row = q.upsert.mock.calls[0][0]
     expect(row.symptoms).toEqual([]) // cleared because verdict is correct
     expect(row.learner_email).toBe('l@x.com') // normalized
+    expect(row.attempt_at).toBe('2026-01-02T03:04:05.000Z') // per-attempt key
     expect(row.labeled_by).toBe('staff@x.com')
+    // upsert keyed per attempt, not just per (question, learner)
+    expect(q.upsert.mock.calls[0][1]).toEqual({ onConflict: 'context,question_id,learner_email,attempt_at' })
   })
 
   test('persists symptoms on an incorrect verdict', async () => {

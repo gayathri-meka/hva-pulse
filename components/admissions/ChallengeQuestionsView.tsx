@@ -174,7 +174,7 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
       })
     getQuestionEvals(EVAL_CONTEXT_SCREENING, questionId)
       .then((rows) => {
-        if (!cancelled) setLabels(Object.fromEntries(rows.map((r) => [r.learnerEmail, r])))
+        if (!cancelled) setLabels(Object.fromEntries(rows.map((r) => [`${r.learnerEmail}||${r.attemptAt}`, r])))
       })
       .catch(() => {})
     return () => {
@@ -184,8 +184,6 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
 
   const answers = data?.answers
   const stats = computeEvalStats(Object.values(labels))
-  // First (newest) row per learner = the latest attempt we tag.
-  const seen = new Set<string>()
 
   return (
     <div className="flex h-full flex-col">
@@ -230,10 +228,9 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
         {answers && answers.length > 0 && (
           <ul className="space-y-2">
             {answers.map((a, i) => {
-              // Tag only the newest attempt per learner (single label per learner/question).
+              // Every attempt is independently taggable, keyed by its timestamp.
               const email = (a.email ?? '').trim().toLowerCase()
-              const isLatest = !!email && !seen.has(email)
-              if (isLatest) seen.add(email)
+              const key = `${email}||${a.at}`
               return (
                 <li key={i} className="rounded-lg border border-zinc-200 p-3">
                   <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -249,18 +246,19 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
                   </div>
                   <pre className="whitespace-pre-wrap break-words text-xs font-mono text-zinc-700">{a.answer || '—'}</pre>
                   {a.feedback && <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">{a.feedback}</p>}
-                  {isLatest && (
+                  {email && (
                     <div className="mt-2.5">
                       <EvalTagger
                         context={EVAL_CONTEXT_SCREENING}
                         questionId={questionId}
                         learnerEmail={email}
+                        attemptAt={a.at}
                         aiScore={a.score}
                         aiFeedback={a.feedback}
                         scorecardSnapshot={data?.scorecard?.length ? JSON.stringify(data.scorecard) : null}
                         preloaded
-                        initial={labels[email] ?? null}
-                        onSaved={(e) => setLabels((prev) => ({ ...prev, [email]: e }))}
+                        initial={labels[key] ?? null}
+                        onSaved={(e) => setLabels((prev) => ({ ...prev, [key]: e }))}
                       />
                     </div>
                   )}

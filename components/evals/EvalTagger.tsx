@@ -11,6 +11,7 @@ export default function EvalTagger({
   context,
   questionId,
   learnerEmail,
+  attemptAt,
   aiScore,
   aiFeedback,
   scorecardSnapshot,
@@ -21,6 +22,7 @@ export default function EvalTagger({
   context: string
   questionId: string
   learnerEmail: string
+  attemptAt: string
   aiScore?: string | null
   aiFeedback?: string | null
   scorecardSnapshot?: string | null
@@ -49,7 +51,7 @@ export default function EvalTagger({
       return
     }
     let cancelled = false
-    getGradingEval(context, questionId, learnerEmail)
+    getGradingEval(context, questionId, learnerEmail, attemptAt)
       .then((e) => {
         if (!cancelled) apply(e)
       })
@@ -58,7 +60,7 @@ export default function EvalTagger({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [context, questionId, learnerEmail])
+  }, [context, questionId, learnerEmail, attemptAt])
 
   function toggleSymptom(key: string) {
     setSaved(false)
@@ -80,6 +82,7 @@ export default function EvalTagger({
         context,
         questionId,
         learnerEmail,
+        attemptAt,
         verdict,
         symptoms,
         comment,

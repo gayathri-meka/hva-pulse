@@ -8,8 +8,6 @@ type EvalTarget = {
   context: string
   questionId: string
   learnerEmail: string
-  aiScore?: string | null
-  aiFeedback?: string | null
   scorecardSnapshot?: string | null
 }
 
@@ -100,6 +98,17 @@ export default function ConversationThreadModal({
                       {msg.feedback_wrong}
                     </div>
                   )}
+                  {evalTarget && msg.timestamp && (
+                    <EvalTagger
+                      context={evalTarget.context}
+                      questionId={evalTarget.questionId}
+                      learnerEmail={evalTarget.learnerEmail}
+                      attemptAt={msg.timestamp}
+                      aiScore={msg.score}
+                      aiFeedback={[msg.content, msg.feedback_correct, msg.feedback_wrong].filter(Boolean).join('\n')}
+                      scorecardSnapshot={evalTarget.scorecardSnapshot ?? null}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -109,12 +118,6 @@ export default function ConversationThreadModal({
           )}
           {loading && (
             <p className="py-8 text-center text-sm text-zinc-400">Loading conversation from BigQuery…</p>
-          )}
-
-          {evalTarget && messages.length > 0 && (
-            <div className="sticky bottom-0 -mx-6 -mb-6 border-t border-zinc-100 bg-white px-6 py-4">
-              <EvalTagger {...evalTarget} />
-            </div>
           )}
         </div>
       </div>

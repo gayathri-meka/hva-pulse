@@ -21,6 +21,7 @@ export async function setGradingEval(input: {
   context: string
   questionId: string
   learnerEmail: string
+  attemptAt: string
   verdict: EvalVerdict
   symptoms: string[]
   comment?: string
@@ -32,6 +33,7 @@ export async function setGradingEval(input: {
   const questionId = input.questionId?.trim()
   const learnerEmail = norm(input.learnerEmail)
   const context = input.context?.trim()
+  const attemptAt = (input.attemptAt ?? '').trim()
   if (!context || !questionId || !learnerEmail) return { ok: false, error: 'Missing grading event.' }
 
   const valid = validateEvalInput({ verdict: input.verdict, symptoms: input.symptoms })
@@ -45,6 +47,7 @@ export async function setGradingEval(input: {
         context,
         question_id: questionId,
         learner_email: learnerEmail,
+        attempt_at: attemptAt,
         verdict: input.verdict,
         symptoms,
         comment: input.comment?.trim() || null,
@@ -55,28 +58,30 @@ export async function setGradingEval(input: {
         labeled_by_name: user.name ?? null,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'context,question_id,learner_email' },
+      { onConflict: 'context,question_id,learner_email,attempt_at' },
     )
-    .select('question_id, learner_email, verdict, symptoms, comment, labeled_by_name, updated_at')
+    .select('question_id, learner_email, attempt_at, verdict, symptoms, comment, labeled_by_name, updated_at')
     .single()
 
   if (error) return { ok: false, error: error.message }
   return { ok: true, data: rowToEval(data) }
 }
 
-/** The current label for one grading event, or null if not yet reviewed. */
+/** The current label for one graded attempt, or null if not yet reviewed. */
 export async function getGradingEval(
   context: string,
   questionId: string,
   learnerEmail: string,
+  attemptAt: string,
 ): Promise<GradingEval | null> {
   await requireStaff()
   const { data } = await adminClient()
     .from('sensai_grading_evals')
-    .select('question_id, learner_email, verdict, symptoms, comment, labeled_by_name, updated_at')
+    .select('question_id, learner_email, attempt_at, verdict, symptoms, comment, labeled_by_name, updated_at')
     .eq('context', context.trim())
     .eq('question_id', questionId.trim())
     .eq('learner_email', norm(learnerEmail))
+    .eq('attempt_at', (attemptAt ?? '').trim())
     .maybeSingle()
   return data ? rowToEval(data) : null
 }
@@ -86,7 +91,7 @@ export async function getQuestionEvals(context: string, questionId: string): Pro
   await requireStaff()
   const { data } = await adminClient()
     .from('sensai_grading_evals')
-    .select('question_id, learner_email, verdict, symptoms, comment, labeled_by_name, updated_at')
+    .select('question_id, learner_email, attempt_at, verdict, symptoms, comment, labeled_by_name, updated_at')
     .eq('context', context.trim())
     .eq('question_id', questionId.trim())
   return (data ?? []).map(rowToEval)
@@ -97,7 +102,7 @@ export async function getGradingEvals(context: string): Promise<GradingEval[]> {
   await requireStaff()
   const { data } = await adminClient()
     .from('sensai_grading_evals')
-    .select('question_id, learner_email, verdict, symptoms, comment, labeled_by_name, updated_at')
+    .select('question_id, learner_email, attempt_at, verdict, symptoms, comment, labeled_by_name, updated_at')
     .eq('context', context.trim())
   return (data ?? []).map(rowToEval)
 }
@@ -107,6 +112,7 @@ function rowToEval(r: any): GradingEval {
   return {
     questionId: r.question_id,
     learnerEmail: r.learner_email,
+    attemptAt: r.attempt_at ?? '',
     verdict: r.verdict,
     symptoms: r.symptoms ?? [],
     comment: r.comment ?? null,

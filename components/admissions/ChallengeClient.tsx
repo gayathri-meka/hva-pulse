@@ -27,13 +27,12 @@ export type ThreadView = {
   messages: ChatMessage[]
   description?: string
   scorecard?: ScorecardCategory[]
-  // When present, the modal shows the grading-eval tagger for this (question, learner).
+  // When present, the modal shows a grading-eval tagger under each grader response
+  // for this (question, learner) — one label per attempt.
   evalTarget?: {
     context: string
     questionId: string
     learnerEmail: string
-    aiScore?: string | null
-    aiFeedback?: string | null
     scorecardSnapshot?: string | null
   }
 }
