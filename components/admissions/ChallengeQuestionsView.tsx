@@ -10,7 +10,7 @@ import {
 import { scoreBadgeClass } from '@/lib/sensaiChat'
 import QuestionContext from '@/components/sensai/QuestionContext'
 import EvalTagger from '@/components/evals/EvalTagger'
-import { getQuestionEvals } from '@/app/(protected)/admissions/challenge/evals'
+import { getGradingEvals } from '@/app/(protected)/admissions/challenge/evals'
 import { EVAL_CONTEXT_SCREENING, computeEvalStats, symptomLabel, type GradingEval } from '@/lib/evals'
 
 export type TaskCatalogDay = {
@@ -39,11 +39,34 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
+// Key for one attempt's label: question + learner + attempt timestamp.
+const labelKey = (questionId: string, email: string, attemptAt: string) => `${questionId}||${email}||${attemptAt}`
+
 export default function ChallengeQuestionsView({ days }: { days: TaskCatalogDay[] }) {
   const [openDay, setOpenDay] = useState<number | null>(days[0]?.ordering ?? null)
   const [openTask, setOpenTask] = useState<string | null>(null)
   const [questions, setQuestions] = useState<Record<string, TaskQuestion[] | 'loading' | 'error'>>({})
   const [selected, setSelected] = useState<{ questionId: string; title: string; taskTitle: string } | null>(null)
+  // All grading-eval labels for the screening context, keyed per attempt — drives
+  // both the overall accuracy banner and each question's live stats.
+  const [labels, setLabels] = useState<Record<string, GradingEval>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    getGradingEvals(EVAL_CONTEXT_SCREENING)
+      .then((rows) => {
+        if (!cancelled) setLabels(Object.fromEntries(rows.map((r) => [labelKey(r.questionId, r.learnerEmail, r.attemptAt), r])))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const overall = computeEvalStats(Object.values(labels))
+  function onSaved(e: GradingEval) {
+    setLabels((prev) => ({ ...prev, [labelKey(e.questionId, e.learnerEmail, e.attemptAt)]: e }))
+  }
 
   function toggleTask(taskId: string) {
     const next = openTask === taskId ? null : taskId
@@ -60,6 +83,25 @@ export default function ChallengeQuestionsView({ days }: { days: TaskCatalogDay[
   }
 
   return (
+    <div className="space-y-3">
+      {/* Overall grader accuracy across everything labeled so far. */}
+      {overall.total > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm">
+          <span className="font-semibold text-zinc-800">Overall grader accuracy</span>
+          <span className={`text-lg font-bold ${overall.accuracyPct! >= 80 ? 'text-emerald-600' : overall.accuracyPct! >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+            {overall.accuracyPct}%
+          </span>
+          <span className="text-xs text-zinc-400">
+            {overall.correct} right · {overall.incorrect} wrong · {overall.total} responses labeled
+          </span>
+          {Object.entries(overall.bySymptom)
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, n]) => (
+              <span key={k} className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">{symptomLabel(k)} ×{n}</span>
+            ))}
+        </div>
+      )}
+
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
       {/* ── Left: day → task → question tree ─────────────────────────────── */}
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
@@ -143,7 +185,14 @@ export default function ChallengeQuestionsView({ days }: { days: TaskCatalogDay[
       {/* ── Right: answers for the selected question ─────────────────────── */}
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         {selected ? (
-          <QuestionAnswers key={selected.questionId} questionId={selected.questionId} title={selected.title} taskTitle={selected.taskTitle} />
+          <QuestionAnswers
+            key={selected.questionId}
+            questionId={selected.questionId}
+            title={selected.title}
+            taskTitle={selected.taskTitle}
+            labels={labels}
+            onSaved={onSaved}
+          />
         ) : (
           <div className="flex h-full min-h-[300px] items-center justify-center px-6 text-center">
             <p className="text-sm text-zinc-400">Select a question on the left to see how every learner answered it.</p>
@@ -151,19 +200,30 @@ export default function ChallengeQuestionsView({ days }: { days: TaskCatalogDay[
         )}
       </div>
     </div>
+    </div>
   )
 }
 
-function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string; title: string; taskTitle: string }) {
+function QuestionAnswers({
+  questionId,
+  title,
+  taskTitle,
+  labels,
+  onSaved,
+}: {
+  questionId: string
+  title: string
+  taskTitle: string
+  labels: Record<string, GradingEval>
+  onSaved: (e: GradingEval) => void
+}) {
   const [data, setData] = useState<QuestionDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [labels, setLabels] = useState<Record<string, GradingEval>>({})
 
   useEffect(() => {
     let cancelled = false
     setData(null)
     setError(null)
-    setLabels({})
     getQuestionAnswers(questionId)
       .then((res) => {
         if (!cancelled) setData(res)
@@ -172,18 +232,14 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
         console.error(e)
         if (!cancelled) setError('Could not load answers from BigQuery.')
       })
-    getQuestionEvals(EVAL_CONTEXT_SCREENING, questionId)
-      .then((rows) => {
-        if (!cancelled) setLabels(Object.fromEntries(rows.map((r) => [`${r.learnerEmail}||${r.attemptAt}`, r])))
-      })
-      .catch(() => {})
     return () => {
       cancelled = true
     }
   }, [questionId])
 
   const answers = data?.answers
-  const stats = computeEvalStats(Object.values(labels))
+  // Per-question stats = this question's slice of the shared label map.
+  const stats = computeEvalStats(Object.values(labels).filter((l) => l.questionId === questionId))
 
   return (
     <div className="flex h-full flex-col">
@@ -230,7 +286,7 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
             {answers.map((a, i) => {
               // Every attempt is independently taggable, keyed by its timestamp.
               const email = (a.email ?? '').trim().toLowerCase()
-              const key = `${email}||${a.at}`
+              const key = labelKey(questionId, email, a.at)
               return (
                 <li key={i} className="rounded-lg border border-zinc-200 p-3">
                   <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -258,7 +314,7 @@ function QuestionAnswers({ questionId, title, taskTitle }: { questionId: string;
                         scorecardSnapshot={data?.scorecard?.length ? JSON.stringify(data.scorecard) : null}
                         preloaded
                         initial={labels[key] ?? null}
-                        onSaved={(e) => setLabels((prev) => ({ ...prev, [key]: e }))}
+                        onSaved={onSaved}
                       />
                     </div>
                   )}
