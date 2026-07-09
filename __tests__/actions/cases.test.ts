@@ -12,7 +12,7 @@ vi.mock('@/lib/supabase-server', () => ({ createServerSupabaseClient: vi.fn() })
 vi.mock('@/lib/google',   () => ({ getSheetRaw: vi.fn(), getSheetRows: vi.fn() }))
 vi.mock('@/lib/bigquery', () => ({ runBigQuery: vi.fn() }))
 
-import { requireStaff }               from '@/lib/auth'
+import { getAppUser, requireStaff }   from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { revalidatePath }             from 'next/cache'
 import {
@@ -23,12 +23,15 @@ import {
   saveInterventions,
   updateDecisionDate,
   saveUpdate,
+  editUpdate,
+  deleteUpdate,
   closeCase,
   clearCaseStep1,
   deleteCase,
 } from '@/app/(protected)/learning/actions'
 
 const staffUser = { id: 'staff-1', role: 'admin' as const, name: 'Admin User', email: 'admin@test.com' }
+const nonAdminUser = { id: 'staff-2', role: 'staff' as const, name: 'Staff User', email: 'staff@test.com' }
 
 function mockSupabaseBuilder(opts: {
   selectResult?:   { data: unknown; error: null | { message: string } }
@@ -259,6 +262,154 @@ describe('saveUpdate', () => {
     await saveUpdate('iv-1', 'just a note', null)
     const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('decision_date')
+  })
+})
+
+describe('editUpdate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+  })
+
+  test('requires staff access', async () => {
+    vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
+    mockSupabaseBuilder()
+
+    await expect(editUpdate('iv-1', 0, 'updated', null)).rejects.toThrow('NEXT_REDIRECT:/dashboard')
+  })
+
+  test('rejects invalid input', async () => {
+    mockSupabaseBuilder()
+
+    await expect(editUpdate('iv-1', -1, 'updated', null)).rejects.toThrow('Invalid update')
+    await expect(editUpdate('iv-1', 0, '   ', null)).rejects.toThrow('Note is required')
+    await expect(editUpdate('iv-1', 0, 'updated', 'bad-date')).rejects.toThrow('Invalid date')
+  })
+
+  test('updates the selected log entry and recomputes decision_date from latest pushed entry', async () => {
+    const updateLog = [
+      { at: '2026-04-01T00:00:00Z', by: 'staff-1', by_name: 'Admin User', note: 'older', decision_date_pushed_to: '2026-05-01' },
+      { at: '2026-04-02T00:00:00Z', by: 'staff-2', by_name: 'Staff User', note: 'latest', decision_date_pushed_to: '2026-06-01' },
+    ]
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+    })
+
+    await editUpdate('iv-1', 0, 'older revised', '2026-05-15')
+
+    const payload = mockUpdate.mock.calls[0][0] as { update_log: any[]; decision_date: string }
+    expect(payload.update_log[0]).toMatchObject({
+      note:                    'older revised',
+      decision_date_pushed_to: '2026-05-15',
+      edited_by:               'staff-1',
+      edited_by_name:          'Admin User',
+    })
+    expect(payload.update_log[0].edited_at).toEqual(expect.any(String))
+    expect(payload.update_log[1]).toEqual(updateLog[1])
+    expect(payload.decision_date).toBe('2026-06-01')
+  })
+
+  test('clears decision_date when no remaining log entry pushes one', async () => {
+    const updateLog = [
+      { at: '2026-04-01T00:00:00Z', by: 'staff-1', by_name: 'Admin User', note: 'only push', decision_date_pushed_to: '2026-05-01' },
+    ]
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+    })
+
+    await editUpdate('iv-1', 0, 'push removed', null)
+
+    const payload = mockUpdate.mock.calls[0][0] as { update_log: any[]; decision_date: string | null }
+    expect(payload.update_log[0]).toMatchObject({
+      note:                    'push removed',
+      decision_date_pushed_to: null,
+    })
+    expect(payload.decision_date).toBeNull()
+  })
+
+  test('surfaces database update errors', async () => {
+    mockSupabaseBuilder({
+      selectResult: { data: { update_log: [{ note: 'x', decision_date_pushed_to: null }], learner_id: 'learner-1' }, error: null },
+      updateResult: { error: { message: 'update failed' } },
+    })
+
+    await expect(editUpdate('iv-1', 0, 'updated', null)).rejects.toThrow('update failed')
+  })
+
+  test('falls back to editor email when staff name is missing', async () => {
+    vi.mocked(requireStaff).mockResolvedValue({ ...staffUser, name: null })
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: [{ note: 'x', decision_date_pushed_to: null }], learner_id: 'learner-1' }, error: null },
+    })
+
+    await editUpdate('iv-1', 0, 'updated', null)
+
+    const payload = mockUpdate.mock.calls[0][0] as { update_log: any[] }
+    expect(payload.update_log[0]).toMatchObject({
+      edited_by_name: 'admin@test.com',
+    })
+  })
+})
+
+describe('deleteUpdate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getAppUser).mockResolvedValue(staffUser)
+  })
+
+  test('requires admin access', async () => {
+    vi.mocked(getAppUser).mockResolvedValue(nonAdminUser)
+    mockSupabaseBuilder()
+
+    await expect(deleteUpdate('iv-1', 0)).rejects.toThrow('Admin only')
+  })
+
+  test('rejects invalid index', async () => {
+    mockSupabaseBuilder()
+
+    await expect(deleteUpdate('iv-1', -1)).rejects.toThrow('Invalid update')
+  })
+
+  test('deletes the selected entry and recomputes decision_date from remaining log', async () => {
+    const updateLog = [
+      { at: '2026-04-01T00:00:00Z', note: 'first', decision_date_pushed_to: '2026-05-01' },
+      { at: '2026-04-02T00:00:00Z', note: 'second', decision_date_pushed_to: '2026-06-01' },
+    ]
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+    })
+
+    await deleteUpdate('iv-1', 1)
+
+    const payload = mockUpdate.mock.calls[0][0] as { update_log: any[]; decision_date: string }
+    expect(payload.update_log).toEqual([updateLog[0]])
+    expect(payload.decision_date).toBe('2026-05-01')
+    expect(revalidatePath).toHaveBeenCalledWith('/learning')
+    expect(revalidatePath).toHaveBeenCalledWith('/learning/learner-1')
+  })
+
+  test('clears decision_date after deleting the only pushed entry', async () => {
+    const updateLog = [
+      { at: '2026-04-01T00:00:00Z', note: 'only push', decision_date_pushed_to: '2026-05-01' },
+    ]
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+    })
+
+    await deleteUpdate('iv-1', 0)
+
+    const payload = mockUpdate.mock.calls[0][0] as { update_log: any[]; decision_date: string | null }
+    expect(payload.update_log).toEqual([])
+    expect(payload.decision_date).toBeNull()
+  })
+
+  test('surfaces database update errors', async () => {
+    mockSupabaseBuilder({
+      selectResult: { data: { update_log: [{ note: 'x', decision_date_pushed_to: null }], learner_id: 'learner-1' }, error: null },
+      updateResult: { error: { message: 'delete failed' } },
+    })
+
+    await expect(deleteUpdate('iv-1', 0)).rejects.toThrow('delete failed')
   })
 })
 

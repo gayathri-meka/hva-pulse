@@ -59,6 +59,8 @@ export type UpdateLogEntry = {
   note:                    string
   decision_date_pushed_to: string | null
   edited_at?:              string | null
+  edited_by?:              string | null
+  edited_by_name?:         string | null
 }
 
 // Trigger views as projected to the UI. Observations and metrics are joined
@@ -2170,9 +2172,16 @@ function Step4Card({
                   ) : (
                     <>
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-zinc-400">
-                          {fmtDate(entry.at)}{entry.by_name ? ` · ${entry.by_name}` : ''}{entry.edited_at ? ' · edited' : ''}
-                        </span>
+                        <div className="min-w-0 text-zinc-400">
+                          <div>
+                            {fmtDate(entry.at)}{entry.by_name ? ` · ${entry.by_name}` : ''}
+                          </div>
+                          {entry.edited_at && (
+                            <div className="mt-0.5">
+                              Edited {fmtDate(entry.edited_at)} · {entry.edited_by_name ?? 'Unknown user'}
+                            </div>
+                          )}
+                        </div>
                         {!editingDate && !showAddUpdate && !showClose && editingUpdateIndex === null && (
                           <div className="flex shrink-0 items-center gap-2">
                             <button
