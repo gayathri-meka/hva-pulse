@@ -97,14 +97,23 @@ export default function EvalTagger({
     })
   }
 
-  const btn = (v: EvalVerdict, label: string, activeCls: string) => (
+  const THUMB_UP =
+    'M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H14.23c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904M14.25 9h2.25M5.904 18.75c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 10.203 4.167 9.75 5 9.75h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z'
+  const THUMB_DOWN =
+    'M7.5 15h2.25m8.024-9.75c.011.05.028.1.052.148.591 1.2.924 2.55.924 3.977a8.96 8.96 0 0 1-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398C20.613 14.547 19.833 15 19 15h-1.053c-.472 0-.745-.556-.5-.96a8.95 8.95 0 0 0 .303-.54m.023-8.25H16.48a4.5 4.5 0 0 1-1.423-.23l-3.114-1.04a4.5 4.5 0 0 0-1.423-.23H6.504c-.618 0-1.217.247-1.605.729A11.95 11.95 0 0 0 2.25 12c0 .434.023.863.068 1.285.09.921 1.028 1.615 2.054 1.615h3.126c.618 0 .991.724.725 1.282A7.471 7.471 0 0 0 7.5 21a2.25 2.25 0 0 0 2.25 2.25c.414 0 .75-.336.75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.331 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08Z'
+  const thumb = (v: EvalVerdict, path: string, label: string, activeCls: string) => (
     <button
       onClick={() => pick(v)}
-      className={`rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ${
-        verdict === v ? activeCls : 'bg-white text-zinc-600 ring-zinc-200 hover:bg-zinc-50'
+      aria-label={label}
+      aria-pressed={verdict === v}
+      title={label}
+      className={`rounded-lg p-2 ring-1 ${
+        verdict === v ? activeCls : 'bg-white text-zinc-400 ring-zinc-200 hover:bg-zinc-50 hover:text-zinc-600'
       }`}
     >
-      {label}
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+        <path strokeLinecap="round" strokeLinejoin="round" d={path} />
+      </svg>
     </button>
   )
 
@@ -118,8 +127,8 @@ export default function EvalTagger({
       </div>
 
       <div className="mt-2 flex items-center gap-2">
-        {btn('correct', 'Looks right', 'bg-emerald-600 text-white ring-emerald-600')}
-        {btn('incorrect', 'Needs fixing', 'bg-red-600 text-white ring-red-600')}
+        {thumb('correct', THUMB_UP, 'Feedback looks right', 'bg-emerald-600 text-white ring-emerald-600')}
+        {thumb('incorrect', THUMB_DOWN, 'Feedback needs fixing', 'bg-red-600 text-white ring-red-600')}
       </div>
 
       {verdict === 'incorrect' && (
