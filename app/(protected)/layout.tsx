@@ -13,8 +13,9 @@ export default async function ProtectedLayout({
 
   if (!appUser) redirect('/candidate/welcome')
 
-  // Learner has their own route group — send them there
+  // Learner and interviewer have their own route groups — send them there
   if (appUser.role === 'learner') redirect('/learner')
+  if (appUser.role === 'interviewer') redirect('/interviewer')
 
   return (
     <PermissionsProvider role={appUser.role}>

@@ -6,7 +6,7 @@ export type AppUser = {
   id: string
   email: string
   name: string | null
-  role: 'admin' | 'staff' | 'guest' | 'learner'
+  role: 'admin' | 'staff' | 'guest' | 'learner' | 'interviewer'
 }
 
 export const getAppUser = cache(async (): Promise<AppUser | null> => {
@@ -30,6 +30,15 @@ export async function requireStaff(): Promise<AppUser> {
   const appUser = await getAppUser()
   if (!appUser || (appUser.role !== 'admin' && appUser.role !== 'staff')) {
     redirect('/dashboard')
+  }
+  return appUser
+}
+
+/** Throws/redirects if the current user is not an interviewer. Returns the user. */
+export async function requireInterviewer(): Promise<AppUser> {
+  const appUser = await getAppUser()
+  if (!appUser || appUser.role !== 'interviewer') {
+    redirect('/login')
   }
   return appUser
 }

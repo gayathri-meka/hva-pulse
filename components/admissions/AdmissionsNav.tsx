@@ -7,6 +7,7 @@ const TABS = [
   { href: '/admissions/learner-applications', label: 'Website hits' },
   { href: '/admissions/prospects',            label: 'Prospects' },
   { href: '/admissions/challenge',            label: 'Challenge' },
+  { href: '/admissions/interviews',           label: 'Interviews' },
   { href: '/admissions/analytics',            label: 'Analytics' },
 ]
 

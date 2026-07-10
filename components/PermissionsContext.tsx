@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect } from 'react'
 interface Permissions {
   canEdit: boolean
   canSeePII: boolean
-  role: 'admin' | 'staff' | 'guest' | 'learner'
+  role: 'admin' | 'staff' | 'guest' | 'learner' | 'interviewer'
 }
 
 const PermissionsContext = createContext<Permissions>({

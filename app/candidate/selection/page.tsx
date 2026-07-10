@@ -45,7 +45,7 @@ export default async function SelectionPage() {
       eyebrow: 'Selection',
       title: "You're through to the interview! 🎉",
       body:
-        "Great work on the challenge. You've been selected for the interview round. There's nothing you need to do right now — we'll reach out to schedule your interview soon.",
+        "Great work on the challenge. You've been selected for the interview round. Head to the Interview step to book your slots.",
     }
   } else if (status === 'rejected') {
     // Codified feedback: the failed criteria's messages, captured at decision time.

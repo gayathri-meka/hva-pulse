@@ -15,7 +15,7 @@ export function topLevelLearningTabs({
   role,
   lf,
 }: {
-  role?: 'admin' | 'staff' | 'guest' | 'learner'
+  role?: 'admin' | 'staff' | 'guest' | 'learner' | 'interviewer'
   lf?:   string | null
 } = {}): LearningTab[] {
   const qs = lf ? `&lf=${encodeURIComponent(lf)}` : ''
