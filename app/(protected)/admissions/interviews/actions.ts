@@ -69,13 +69,25 @@ export async function getInterviewOverview(): Promise<{
     a.from('interview_slots').select('*').order('starts_at'),
     a.from('interviews').select('*').order('scheduled_at', { ascending: false }),
   ])
-  const users = usersRes.data ?? []
+  const roleInterviewers = usersRes.data ?? []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slots: InterviewSlot[] = (slotsRes.data ?? []).map((r: any) => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawIv = (ivRes.data ?? []) as any[]
 
-  const nameByEmail = new Map(users.map((u) => [u.email, u.name as string | null]))
+  // Every email that acts as an interviewer = dedicated 'interviewer' users PLUS any
+  // admin/staff who published slots or conducted interviews. Resolve all their names.
+  const interviewerEmails = [...new Set([
+    ...roleInterviewers.map((u) => u.email),
+    ...slots.map((s) => s.interviewerEmail),
+    ...rawIv.map((r) => r.interviewer_email),
+  ])]
+  const nameByEmail = new Map<string, string | null>()
+  if (interviewerEmails.length) {
+    const { data } = await a.from('users').select('email, name').in('email', interviewerEmails)
+    for (const u of data ?? []) nameByEmail.set(u.email, (u.name as string | null) ?? null)
+  }
+
   const candEmails = [...new Set(rawIv.map((r) => r.candidate_email))]
   const candName = new Map<string, string>()
   if (candEmails.length) {
@@ -90,12 +102,15 @@ export async function getInterviewOverview(): Promise<{
     interviewerName: nameByEmail.get(r.interviewer_email) ?? null,
   }))
 
-  const interviewers: InterviewerRow[] = users.map((u) => ({
-    email: u.email,
-    name: u.name as string | null,
-    openSlots: slots.filter((s) => s.interviewerEmail === u.email && s.status === 'open').length,
-    booked: interviews.filter((i) => i.interviewerEmail === u.email && (i.status === 'booked' || i.status === 'confirmed')).length,
-    completed: interviews.filter((i) => i.interviewerEmail === u.email && i.status === 'completed').length,
+  // Show anyone who is a dedicated interviewer OR has published/conducted anything.
+  const activeEmails = new Set([...slots.map((s) => s.interviewerEmail), ...interviews.map((i) => i.interviewerEmail)])
+  const listedEmails = [...new Set([...roleInterviewers.map((u) => u.email), ...activeEmails])]
+  const interviewers: InterviewerRow[] = listedEmails.map((email) => ({
+    email,
+    name: nameByEmail.get(email) ?? null,
+    openSlots: slots.filter((s) => s.interviewerEmail === email && s.status === 'open').length,
+    booked: interviews.filter((i) => i.interviewerEmail === email && (i.status === 'booked' || i.status === 'confirmed')).length,
+    completed: interviews.filter((i) => i.interviewerEmail === email && i.status === 'completed').length,
   }))
 
   return { interviewers, slots, interviews }

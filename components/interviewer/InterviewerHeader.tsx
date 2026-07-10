@@ -1,9 +1,10 @@
 'use client'
 
-import { IconLogout } from '@tabler/icons-react'
+import Link from 'next/link'
+import { IconLogout, IconArrowLeft } from '@tabler/icons-react'
 import { createClient } from '@/lib/supabase'
 
-export default function InterviewerHeader({ name }: { name: string }) {
+export default function InterviewerHeader({ name, isStaff }: { name: string; isStaff?: boolean }) {
   async function signOut() {
     await createClient().auth.signOut()
     window.location.href = '/login'
@@ -15,12 +16,21 @@ export default function InterviewerHeader({ name }: { name: string }) {
           <div className="text-sm font-semibold text-zinc-900">HyperVerge Academy · Interviews</div>
           <div className="text-xs text-zinc-500">{name}</div>
         </div>
-        <button
-          onClick={signOut}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
-        >
-          <IconLogout size={14} /> Sign out
-        </button>
+        {isStaff ? (
+          <Link
+            href="/admissions/interviews"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+          >
+            <IconArrowLeft size={14} /> Back to Pulse
+          </Link>
+        ) : (
+          <button
+            onClick={signOut}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+          >
+            <IconLogout size={14} /> Sign out
+          </button>
+        )}
       </div>
     </header>
   )

@@ -34,10 +34,14 @@ export async function requireStaff(): Promise<AppUser> {
   return appUser
 }
 
-/** Throws/redirects if the current user is not an interviewer. Returns the user. */
+/**
+ * Throws/redirects unless the user can act as an interviewer. Admin + staff get
+ * interviewer privileges automatically (they can publish availability + conduct
+ * interviews); the dedicated 'interviewer' role is for people who ONLY interview.
+ */
 export async function requireInterviewer(): Promise<AppUser> {
   const appUser = await getAppUser()
-  if (!appUser || appUser.role !== 'interviewer') {
+  if (!appUser || !['interviewer', 'admin', 'staff'].includes(appUser.role)) {
     redirect('/login')
   }
   return appUser
