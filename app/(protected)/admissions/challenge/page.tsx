@@ -363,7 +363,7 @@ export default async function AdmissionsChallengePage() {
           { value: joined, label: 'joined' },
           { value: startedCount, label: 'started' },
           { value: attemptedAllCount, label: 'attempted all Qs' },
-          { value: completedCount, label: 'completed' },
+          { value: completedCount, label: 'completed all Qs' },
         ]}
       />
       {/* Challenge composition + sync, on one line. */}
