@@ -34,8 +34,15 @@ export const SES_RUBRIC: SesQuestion[] = [
     options: [{ letter: 'a', label: 'City', score: 2 }, { letter: 'b', label: 'Town', score: 3 }, { letter: 'c', label: 'Village', score: 4 }],
   },
   {
-    key: 'family_size', rawField: 'family_size_raw', label: 'Family size', defaultWeight: 3, variant: 'familySize',
-    options: [{ letter: '', label: '< 2', score: 1 }, { letter: '', label: '2–4', score: 2 }, { letter: '', label: '4–6', score: 3 }, { letter: '', label: '> 6', score: 4 }],
+    // Q34016: a=Female b=Male c=Transgender d=Prefer not to say. Per the rubric,
+    // Male/PNS = 2 (so PNS is scored explicitly as 2, NOT the options average).
+    key: 'gender', rawField: 'gender_raw', label: 'Gender', defaultWeight: 5,
+    options: [
+      { letter: 'a', label: 'Female', score: 3 },
+      { letter: 'b', label: 'Male', score: 2 },
+      { letter: 'c', label: 'Transgender', score: 4 },
+      { letter: 'd', label: 'Prefer not to say', score: 2 },
+    ],
   },
   {
     key: 'marital', rawField: 'marital_raw', label: 'Marital status', defaultWeight: 3, pnsLetter: 'e',

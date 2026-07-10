@@ -18,12 +18,11 @@ describe('optionScore', () => {
     expect(optionScore(q('social_category'), 'e')).toBe(2.5)
   })
 
-  it('bands family size (a number, not a letter)', () => {
-    expect(optionScore(q('family_size'), '1')).toBe(1)
-    expect(optionScore(q('family_size'), '3')).toBe(2)
-    expect(optionScore(q('family_size'), '5')).toBe(3)
-    expect(optionScore(q('family_size'), '8')).toBe(4)
-    expect(optionScore(q('family_size'), '')).toBeNull()
+  it('scores gender per the rubric (Male/PNS = 2, explicit not averaged)', () => {
+    expect(optionScore(q('gender'), 'a')).toBe(3) // Female
+    expect(optionScore(q('gender'), 'b')).toBe(2) // Male
+    expect(optionScore(q('gender'), 'c')).toBe(4) // Transgender
+    expect(optionScore(q('gender'), 'd')).toBe(2) // Prefer not to say
   })
 
   it('scores multi-select assets by the best (lowest-need) option held', () => {
@@ -48,7 +47,7 @@ describe('resolveAnswer (score + label for the breakdown)', () => {
   it('returns the chosen option label', () => {
     expect(resolveAnswer(q('social_category'), 'a')).toEqual({ score: 3, label: 'SC' })
     expect(resolveAnswer(q('marital'), 'e')).toEqual({ score: 2.5, label: 'Prefer not to say' })
-    expect(resolveAnswer(q('family_size'), '5')).toEqual({ score: 3, label: '4–6 (5)' })
+    expect(resolveAnswer(q('gender'), 'd')).toEqual({ score: 2, label: 'Prefer not to say' })
     expect(resolveAnswer(q('assets'), 'a, c')).toEqual({ score: 1, label: 'Insurance, FD / savings' })
   })
 })
