@@ -334,6 +334,8 @@ export default async function AdmissionsChallengePage() {
   const { joined, started: startedCount, completed: completedCount } = challengeFunnel(
     (rawRows ?? []) as { learner_id: string | null; dimensions: Record<string, string | null> | null }[],
   )
+  // Members who attempted every quiz question in the challenge.
+  const attemptedAllCount = members.filter((m) => totals.questions > 0 && m.attemptedQuestions >= totals.questions).length
 
   // Calendar axis for the Pace view: earliest activity date in the cohort → today
   // (IST), auto-extending. Computed server-side so SSR and client hydration agree.
@@ -360,6 +362,7 @@ export default async function AdmissionsChallengePage() {
         stats={[
           { value: joined, label: 'joined' },
           { value: startedCount, label: 'started' },
+          { value: attemptedAllCount, label: 'attempted all Qs' },
           { value: completedCount, label: 'completed' },
         ]}
       />
