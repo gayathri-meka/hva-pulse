@@ -28,12 +28,18 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
   const [weekOffset, setWeekOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  // Painted availability = all OPEN slot start times (ISO), kept in sync with props.
-  const [painted, setPainted] = useState<Set<string>>(() => new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt))))
+  // Painted availability = all OPEN slot start times (ISO). paintedRef is the
+  // synchronous source of truth (read on mouse-up); `painted` state drives render.
+  const initial = () => new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt)))
+  const [painted, setPaintedState] = useState<Set<string>>(initial)
   const paintedRef = useRef(painted)
-  useEffect(() => { paintedRef.current = painted }, [painted])
+  function setPainted(next: Set<string>) {
+    paintedRef.current = next
+    setPaintedState(next)
+  }
   useEffect(() => {
     setPainted(new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt))))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots])
 
   const bookedByIso = new Map<string, Iv>()
@@ -50,12 +56,10 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
     return new Date(weekStart.getTime() + dayIdx * DAY + row * HALF)
   }
   function apply(iso: string, mode: 'add' | 'erase') {
-    setPainted((prev) => {
-      const next = new Set(prev)
-      if (mode === 'add') next.add(iso)
-      else next.delete(iso)
-      return next
-    })
+    const next = new Set(paintedRef.current)
+    if (mode === 'add') next.add(iso)
+    else next.delete(iso)
+    setPainted(next)
   }
   function commitWeek(nextPainted: Set<string>) {
     const ws = weekStart.getTime()
