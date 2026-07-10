@@ -30,6 +30,8 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
 
   // Painted availability = all OPEN slot start times (ISO), kept in sync with props.
   const [painted, setPainted] = useState<Set<string>>(() => new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt))))
+  const paintedRef = useRef(painted)
+  useEffect(() => { paintedRef.current = painted }, [painted])
   useEffect(() => {
     setPainted(new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt))))
   }, [slots])
@@ -72,7 +74,7 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
     function up() {
       if (dragging.current) {
         dragging.current = false
-        setPainted((p) => { commitWeek(p); return p })
+        commitWeek(paintedRef.current)
       }
     }
     window.addEventListener('mouseup', up)
