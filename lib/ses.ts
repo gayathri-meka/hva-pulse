@@ -30,18 +30,13 @@ export type SesQuestion = {
 
 export const SES_RUBRIC: SesQuestion[] = [
   {
-    key: 'place', rawField: 'place_raw', label: 'Place you come from', defaultWeight: 3,
-    options: [{ letter: 'a', label: 'City', score: 2 }, { letter: 'b', label: 'Town', score: 3 }, { letter: 'c', label: 'Village', score: 4 }],
-  },
-  {
-    // Q34016: a=Female b=Male c=Transgender d=Prefer not to say. Per the rubric,
-    // Male/PNS = 2 (so PNS is scored explicitly as 2, NOT the options average).
-    key: 'gender', rawField: 'gender_raw', label: 'Gender', defaultWeight: 5,
+    // Q34016: a=Female b=Male c=Transgender d=Prefer not to say (scored as the average).
+    // "Place you come from" is dropped — home location already covers it.
+    key: 'gender', rawField: 'gender_raw', label: 'Gender', defaultWeight: 5, pnsLetter: 'd',
     options: [
       { letter: 'a', label: 'Female', score: 3 },
       { letter: 'b', label: 'Male', score: 2 },
       { letter: 'c', label: 'Transgender', score: 4 },
-      { letter: 'd', label: 'Prefer not to say', score: 2 },
     ],
   },
   {

@@ -22,7 +22,7 @@
 --   34160 "how many people are there in your family?" integer (per-capita denominator + SES)
 --   34168 "annual income of your family?"           free text (Indian format, "5,00,000")
 -- SES rubric option answers (letter answers; see lib/ses.ts for score maps):
---   34016 gender (a=Female b=Male c=Transgender d=PNS) · 34025 place · 34158 marital
+--   34016 gender (a=Female b=Male c=Transgender d=PNS) · 34158 marital
 --   34159 social category · 34164 parent education · 34165 family situation · 34166 health
 --   34170 house ownership · 34171 house condition · 34172 home location
 --   34173 formal loans · 34174 informal loans · 34175 assets
@@ -60,7 +60,7 @@ latest AS (
     AND question_id IN (
       34069, 34070, 34073, 34074, 34075, 34084, 34085, 34086, 34160, 34168,
       -- SES rubric questions:
-      34016, 34025, 34158, 34159, 34164, 34165, 34166, 34170, 34171, 34172, 34173, 34174, 34175
+      34016, 34158, 34159, 34164, 34165, 34166, 34170, 34171, 34172, 34173, 34174, 34175
     )
 ),
 pivoted AS (
@@ -77,7 +77,6 @@ pivoted AS (
     MAX(IF(question_id = 34160, content, NULL)) AS family_size_raw,
     MAX(IF(question_id = 34168, content, NULL)) AS family_income_raw,
     MAX(IF(question_id = 34016, content, NULL)) AS gender_raw,
-    MAX(IF(question_id = 34025, content, NULL)) AS place_raw,
     MAX(IF(question_id = 34158, content, NULL)) AS marital_raw,
     MAX(IF(question_id = 34159, content, NULL)) AS social_category_raw,
     MAX(IF(question_id = 34164, content, NULL)) AS parent_education_raw,
@@ -108,7 +107,6 @@ SELECT
   p.family_size_raw,
   p.family_income_raw,
   p.gender_raw,
-  p.place_raw,
   p.marital_raw,
   p.social_category_raw,
   p.parent_education_raw,
