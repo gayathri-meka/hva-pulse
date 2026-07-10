@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { IconCalendarPlus } from '@tabler/icons-react'
 import { addInterviewer, removeInterviewer, type InterviewerRow } from './actions'
 import { computeInterviewMetrics, type InterviewSlot, type Interview } from '@/lib/interviews'
 
@@ -69,14 +67,6 @@ export default function InterviewsAdmin({
 
   return (
     <div className="space-y-6">
-      {/* Entry to the interviewer view — admin/staff can interview too */}
-      <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3">
-        <div className="text-sm text-zinc-600">You can interview too — publish your own availability and conduct interviews.</div>
-        <Link href="/interviewer" className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800">
-          <IconCalendarPlus size={14} /> Open interviewer view
-        </Link>
-      </div>
-
       {/* Metrics */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
         <Metric label="Open slots" value={m.slotsOpen} />

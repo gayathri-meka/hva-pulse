@@ -2,7 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
-import { requireStaff, getAppUser } from '@/lib/auth'
+import { requireStaff, requireInterviewer, getAppUser } from '@/lib/auth'
 import { normEmail, type InterviewSlot, type Interview } from '@/lib/interviews'
 
 // Admin/staff view of the whole interview programme: interviewers, the slot pool,
@@ -51,6 +51,115 @@ export async function removeInterviewer(email: string): Promise<Ok | Err> {
   const { error } = await admin().from('users').delete().eq('email', e).eq('role', 'interviewer')
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admissions/interviews')
+  return { ok: true }
+}
+
+// ── Personal scheduling calendar (interviewer / admin / staff) ────────────────
+const SLOT_MINUTES = 30
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status })
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toInterview = (r: any): Interview => ({ id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id, interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null })
+
+/** The logged-in interviewer's own slots + interviews (for the paint-week grid). */
+export async function getMyCalendar(): Promise<{
+  slots: InterviewSlot[]
+  interviews: (Interview & { candidateName: string | null })[]
+}> {
+  const user = await requireInterviewer()
+  const email = normEmail(user.email)
+  const a = admin()
+  const [slotsRes, ivRes] = await Promise.all([
+    a.from('interview_slots').select('*').eq('interviewer_email', email).order('starts_at'),
+    a.from('interviews').select('*').eq('interviewer_email', email).neq('status', 'cancelled').order('scheduled_at'),
+  ])
+  const interviews = (ivRes.data ?? []).map(toInterview)
+  const candEmails = [...new Set(interviews.map((i) => i.candidateEmail))]
+  const candName = new Map<string, string>()
+  if (candEmails.length) {
+    const { data } = await a.from('prospects').select('email, name').in('email', candEmails)
+    for (const p of data ?? []) candName.set(p.email, (p.name as string) ?? p.email)
+  }
+  return {
+    slots: (slotsRes.data ?? []).map(toSlot),
+    interviews: interviews.map((i) => ({ ...i, candidateName: candName.get(i.candidateEmail) ?? null })),
+  }
+}
+
+/**
+ * Reconcile this interviewer's OPEN availability for one week to exactly the given
+ * set of 30-min slot start times. Creates missing open slots, deletes open slots no
+ * longer wanted; never touches booked slots. Past starts are ignored.
+ */
+export async function syncWeekAvailability(input: {
+  weekStartIso: string
+  starts: string[] // ISO start times of desired 30-min available slots
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireInterviewer()
+  const email = normEmail(user.email)
+  const a = admin()
+
+  const weekStart = new Date(input.weekStartIso)
+  const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60_000)
+  if (Number.isNaN(weekStart.getTime())) return { ok: false, error: 'Invalid week.' }
+
+  const now = Date.now()
+  const wanted = new Set(input.starts.filter((s) => new Date(s).getTime() > now))
+
+  // Existing slots for this interviewer in the week.
+  const { data: existing } = await a
+    .from('interview_slots')
+    .select('id, starts_at, status')
+    .eq('interviewer_email', email)
+    .gte('starts_at', weekStart.toISOString())
+    .lt('starts_at', weekEnd.toISOString())
+
+  const existingOpen = new Map<string, string>() // startISO → slotId
+  for (const s of existing ?? []) {
+    if (s.status === 'open') existingOpen.set(new Date(s.starts_at).toISOString(), s.id)
+  }
+
+  // Delete open slots no longer wanted.
+  const toDelete = [...existingOpen.entries()].filter(([iso]) => !wanted.has(iso)).map(([, id]) => id)
+  if (toDelete.length) await a.from('interview_slots').delete().in('id', toDelete)
+
+  // Insert newly wanted starts that don't already exist (open OR booked).
+  const existingAll = new Set((existing ?? []).map((s) => new Date(s.starts_at).toISOString()))
+  const toInsert = [...wanted]
+    .filter((iso) => !existingAll.has(iso))
+    .map((iso) => ({
+      interviewer_email: email,
+      starts_at: iso,
+      ends_at: new Date(new Date(iso).getTime() + SLOT_MINUTES * 60_000).toISOString(),
+      status: 'open' as const,
+    }))
+  if (toInsert.length) {
+    const { error } = await a.from('interview_slots').insert(toInsert)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/admissions/interviews/calendar')
+  return { ok: true }
+}
+
+/** Record the outcome of an interview the interviewer conducted. */
+export async function setInterviewOutcome(
+  interviewId: string,
+  outcome: 'completed' | 'no_show',
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireInterviewer()
+  const email = normEmail(user.email)
+  const { data, error } = await admin()
+    .from('interviews')
+    .update({ status: outcome, updated_at: new Date().toISOString() })
+    .eq('id', interviewId)
+    .eq('interviewer_email', email)
+    .in('status', ['booked', 'confirmed'])
+    .select('id')
+  if (error) return { ok: false, error: error.message }
+  if (!data?.length) return { ok: false, error: 'Interview not found or already closed.' }
+  revalidatePath('/admissions/interviews/calendar')
   return { ok: true }
 }
 

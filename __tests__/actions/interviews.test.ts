@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
 import { requireInterviewer } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { publishSlot } from '@/app/interviewer/actions'
+import { setInterviewOutcome } from '@/app/(protected)/admissions/interviews/actions'
 import { bookSlot } from '@/app/candidate/interview/actions'
 
 vi.mock('@/lib/auth', () => ({ requireInterviewer: vi.fn(), requireStaff: vi.fn(), getAppUser: vi.fn() }))
@@ -17,19 +17,19 @@ beforeEach(() => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'key'
 })
 
-describe('publishSlot', () => {
+describe('setInterviewOutcome', () => {
   test('redirects a non-interviewer', async () => {
     vi.mocked(requireInterviewer).mockRejectedValue(new Error('NEXT_REDIRECT:/login'))
-    await expect(publishSlot({ startsAt: '2030-01-01T10:00:00Z', endsAt: '2030-01-01T11:00:00Z' })).rejects.toThrow('NEXT_REDIRECT')
+    await expect(setInterviewOutcome('iv-1', 'completed')).rejects.toThrow('NEXT_REDIRECT')
   })
 
-  test('rejects a slot in the past (validation before insert)', async () => {
+  test('only closes an interviewer’s own open/confirmed interview', async () => {
     vi.mocked(requireInterviewer).mockResolvedValue({ id: 'u1', email: 'iv@x.com', name: 'IV', role: 'interviewer' })
-    // existing-slots query returns none
-    const q = { select: vi.fn(() => q), eq: vi.fn(() => q), neq: vi.fn(() => Promise.resolve({ data: [] })) }
+    const q = { update: vi.fn(() => q), eq: vi.fn(() => q), in: vi.fn(() => q), select: vi.fn(() => Promise.resolve({ data: [], error: null })) }
     vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
-    const res = await publishSlot({ startsAt: '2000-01-01T10:00:00Z', endsAt: '2000-01-01T11:00:00Z' })
-    expect(res).toEqual({ ok: false, error: expect.stringContaining('future') })
+    const res = await setInterviewOutcome('iv-1', 'no_show')
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('not found') })
+    expect(q.in).toHaveBeenCalledWith('status', ['booked', 'confirmed'])
   })
 })
 

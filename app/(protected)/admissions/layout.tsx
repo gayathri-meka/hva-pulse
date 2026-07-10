@@ -5,6 +5,9 @@ import AdmissionsNav from '@/components/admissions/AdmissionsNav'
 export default async function AdmissionsLayout({ children }: { children: React.ReactNode }) {
   const appUser = await getAppUser()
   if (!appUser) redirect('/login')
+  // Dedicated interviewers reach only the interviews calendar (the (protected)
+  // layout scopes them + gives them their own header) — render it bare here.
+  if (appUser.role === 'interviewer') return <>{children}</>
   if (appUser.role !== 'admin' && appUser.role !== 'staff') redirect('/dashboard')
 
   return (
