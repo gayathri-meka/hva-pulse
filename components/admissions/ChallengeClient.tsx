@@ -38,8 +38,16 @@ export type ThreadView = {
 }
 
 export type TaskState = 'not_started' | 'attempted' | 'completed'
-export type TaskItem = { taskId: string; title: string; type: string; ordering: number; state: TaskState }
-export type DayProgress = { ordering: number; name: string; tasks: TaskItem[]; completed: number; total: number }
+export type TaskItem = {
+  taskId: string; title: string; type: string; ordering: number; state: TaskState
+  totalQuestions: number; attemptedQuestions: number; passedQuestions: number
+}
+// completed/total = task counts; itemsX = item counts (reading tasks + questions).
+export type DayProgress = {
+  ordering: number; name: string; tasks: TaskItem[]
+  completed: number; total: number
+  itemsTotal: number; itemsAttempted: number; itemsCompleted: number
+}
 export type Member = {
   email: string
   name: string
@@ -48,6 +56,9 @@ export type Member = {
   totalTasks: number
   completedTasks: number
   attemptedTasks: number  // tasks with any activity (attempted or completed)
+  totalItems: number      // reading tasks + questions
+  attemptedItems: number
+  completedItems: number
   attemptedQuestions: number  // Σ questions attempted across all tasks
   passedQuestions: number     // Σ questions passed across all tasks
   keyQuestionScorePct?: number // % passed across "[Coding] Challenges" tasks (informational)
@@ -69,6 +80,7 @@ export type CohortDay = {
   ordering: number
   name: string
   totalTasks: number
+  totalItems: number
   avgPct: number
   fullyCompleted: number
   started: number
@@ -440,10 +452,10 @@ function DetailView({
               {/* Progress */}
               <div>
                 <div className="mb-1 flex items-center justify-between text-xs text-zinc-500">
-                  <span>{m.completedTasks}/{m.totalTasks} tasks</span>
-                  <span className="font-semibold text-zinc-700">{pct(m.completedTasks, m.totalTasks)}%</span>
+                  <span>{m.completedItems}/{m.totalItems} items</span>
+                  <span className="font-semibold text-zinc-700">{pct(m.completedItems, m.totalItems)}%</span>
                 </div>
-                <Bar value={pct(m.completedTasks, m.totalTasks)} />
+                <Bar value={pct(m.completedItems, m.totalItems)} />
               </div>
 
               {/* Started */}
@@ -478,9 +490,9 @@ function DetailView({
                         <Chevron open={dayOpen} />
                         <span className="w-28 shrink-0 text-sm font-medium text-zinc-800">{d.name}</span>
                         <div className="flex-1">
-                          <Bar value={pct(d.completed, d.total)} />
+                          <Bar value={pct(d.itemsCompleted, d.itemsTotal)} />
                         </div>
-                        <span className="w-20 shrink-0 text-right text-xs text-zinc-500">{d.completed}/{d.total} done</span>
+                        <span className="w-24 shrink-0 text-right text-xs text-zinc-500">{d.itemsCompleted}/{d.itemsTotal} items</span>
                       </button>
 
                       {dayOpen && (

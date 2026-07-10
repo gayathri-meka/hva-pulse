@@ -47,9 +47,10 @@ function dayOf(m: Member, ordering: number) {
   return m.days.find((d) => d.ordering === ordering)
 }
 function dayFrac(m: Member, ordering: number, fallbackTotal: number) {
+  // Item-based (reading tasks + questions), not task-based.
   const d = dayOf(m, ordering)
-  const completed = d?.completed ?? 0
-  const total = d?.total ?? fallbackTotal
+  const completed = d?.itemsCompleted ?? 0
+  const total = d?.itemsTotal ?? fallbackTotal
   return { completed, total }
 }
 
@@ -129,7 +130,7 @@ export default function ChallengeMatrixTable({
             </span>
           ),
       }),
-      col.accessor((m) => pct(m.completedTasks, m.totalTasks), {
+      col.accessor((m) => pct(m.completedItems, m.totalItems), {
         id: 'overall',
         header: 'Overall',
         size: 150,
@@ -146,20 +147,20 @@ export default function ChallengeMatrixTable({
           )
         },
       }),
-      col.accessor((m) => `${m.completedTasks}/${m.totalTasks}`, {
+      col.accessor((m) => `${m.completedItems}/${m.totalItems}`, {
         id: 'completed',
         header: 'Completed',
         size: 110,
         enableColumnFilter: false,
-        sortingFn: (a, b) => a.original.completedTasks - b.original.completedTasks,
+        sortingFn: (a, b) => a.original.completedItems - b.original.completedItems,
         cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
       }),
-      col.accessor((m) => `${m.attemptedTasks}/${m.totalTasks}`, {
+      col.accessor((m) => `${m.attemptedItems}/${m.totalItems}`, {
         id: 'attempted',
         header: 'Attempted',
         size: 110,
         enableColumnFilter: false,
-        sortingFn: (a, b) => a.original.attemptedTasks - b.original.attemptedTasks,
+        sortingFn: (a, b) => a.original.attemptedItems - b.original.attemptedItems,
         cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
       }),
       // One column per challenge day — heatmap X/Y cells, sortable by completion
@@ -178,13 +179,13 @@ export default function ChallengeMatrixTable({
           size: 110,
           filterFn: multiSelectFilter,
           sortingFn: (a, b) => {
-            const fa = dayFrac(a.original, cd.ordering, cd.totalTasks)
-            const fb = dayFrac(b.original, cd.ordering, cd.totalTasks)
+            const fa = dayFrac(a.original, cd.ordering, cd.totalItems)
+            const fb = dayFrac(b.original, cd.ordering, cd.totalItems)
             return (fa.total ? fa.completed / fa.total : 0) - (fb.total ? fb.completed / fb.total : 0)
           },
           cell: (info) => {
             const m = info.row.original
-            const { completed, total } = dayFrac(m, cd.ordering, cd.totalTasks)
+            const { completed, total } = dayFrac(m, cd.ordering, cd.totalItems)
             return (
               <button
                 type="button"

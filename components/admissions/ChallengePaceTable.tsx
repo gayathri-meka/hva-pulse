@@ -63,8 +63,8 @@ function Sparkline({ metrics }: { metrics: PaceMetrics }) {
 
 // One-line descriptions shown under the summary-column headers.
 const COL_DESC: Record<string, string> = {
-  completed: 'tasks completed',
-  attempted: 'tasks attempted',
+  completed: 'items completed',
+  attempted: 'items attempted',
   active:    'days with activity',
   span:      'first → last (days)',
   cramming:  'busiest day ÷ total tasks',
@@ -117,22 +117,22 @@ export default function ChallengePaceTable({
           </div>
         ),
       }),
-      col.accessor((r) => r.completedTasks, {
+      col.accessor((r) => r.completedItems, {
         id: 'completed',
         header: 'Completed',
         size: 116,
         cell: (info) => {
           const r = info.row.original
-          return <span className="font-medium text-zinc-800">{r.totalTasks ? `${r.completedTasks}/${r.totalTasks}` : '—'}</span>
+          return <span className="font-medium text-zinc-800">{r.totalItems ? `${r.completedItems}/${r.totalItems}` : '—'}</span>
         },
       }),
-      col.accessor((r) => r.attemptedTasks, {
+      col.accessor((r) => r.attemptedItems, {
         id: 'attempted',
         header: 'Attempted',
         size: 116,
         cell: (info) => {
           const r = info.row.original
-          return <span className="text-zinc-700">{r.totalTasks ? `${r.attemptedTasks}/${r.totalTasks}` : '—'}</span>
+          return <span className="text-zinc-700">{r.totalItems ? `${r.attemptedItems}/${r.totalItems}` : '—'}</span>
         },
       }),
       col.accessor((r) => r.metrics.activeDays, {
