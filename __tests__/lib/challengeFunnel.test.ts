@@ -32,7 +32,8 @@ describe('challengeFunnel', () => {
       row('c@x.com', 'completed', 't1'),
       row('c@x.com', 'completed', 't2'),
     ]
-    expect(challengeFunnel(rows)).toEqual({ joined: 3, started: 2, completed: 1 })
+    // c attempted all their items (both tasks touched) → attemptedAllItems 1.
+    expect(challengeFunnel(rows)).toEqual({ joined: 3, started: 2, completed: 1, attemptedAllItems: 1 })
   })
 
   test('uniform duplicate rows do not break the completed === total check', () => {
@@ -44,12 +45,26 @@ describe('challengeFunnel', () => {
       row('c@x.com', 'completed', 't2'),
       row('c@x.com', 'completed', 't2'), // dup
     ]
-    expect(challengeFunnel(rows)).toEqual({ joined: 1, started: 1, completed: 1 })
+    expect(challengeFunnel(rows)).toEqual({ joined: 1, started: 1, completed: 1, attemptedAllItems: 1 })
   })
 
   test('ignores blank emails', () => {
     const rows: ChallengeRawRow[] = [row('', 'completed', 't1'), row(null, 'completed', 't1')]
-    expect(challengeFunnel(rows)).toEqual({ joined: 0, started: 0, completed: 0 })
+    expect(challengeFunnel(rows)).toEqual({ joined: 0, started: 0, completed: 0, attemptedAllItems: 0 })
+  })
+
+  test('attemptedAllItems counts items (quiz questions + reading), not tasks', () => {
+    const rows: ChallengeRawRow[] = [
+      // p: attempted all items — reading done + all 10 quiz questions attempted (but not passed → not "completed")
+      row('p@x.com', 'completed', 'read', { task_type: 'learning_material' }),
+      row('p@x.com', 'attempted', 'quiz', { task_type: 'quiz', total_questions: '10', attempted_questions: '10' }),
+      // q: only 5 of 10 questions attempted → not all items
+      row('q@x.com', 'completed', 'read', { task_type: 'learning_material' }),
+      row('q@x.com', 'attempted', 'quiz', { task_type: 'quiz', total_questions: '10', attempted_questions: '5' }),
+    ]
+    const f = challengeFunnel(rows)
+    expect(f.attemptedAllItems).toBe(1) // only p
+    expect(f.completed).toBe(0) // neither completed every task
   })
 })
 

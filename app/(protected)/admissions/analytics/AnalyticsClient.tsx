@@ -199,7 +199,7 @@ export default function AnalyticsClient({
     () => ({
       joined:    weeklySeries(challengeDates.joined),
       started:   weeklySeries(challengeDates.started),
-      completed: weeklySeries(challengeDates.completed),
+      completed: weeklySeries(challengeDates.attemptedAllItems),
     }),
     [challengeDates],
   )
@@ -239,8 +239,8 @@ export default function AnalyticsClient({
           />
           <StatCard
             label="Completed"
-            value={challenge.completed}
-            sublabel={`${challenge.joined > 0 ? Math.round((challenge.completed / challenge.joined) * 100) : 0}% of joined`}
+            value={challenge.attemptedAllItems}
+            sublabel={`attempted all items · ${challenge.joined > 0 ? Math.round((challenge.attemptedAllItems / challenge.joined) * 100) : 0}% of joined`}
             series={challengeWeekly.completed}
             unit="completed"
           />

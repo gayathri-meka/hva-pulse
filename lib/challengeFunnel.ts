@@ -11,30 +11,48 @@ export type ChallengeRawRow = {
   dimensions: Record<string, string | null> | null
 }
 
-export type ChallengeFunnel = { joined: number; started: number; completed: number }
+// completed         — finished every TASK (state 'completed' on all)
+// attemptedAllItems — attempted 100% of all ITEMS (reading tasks + quiz questions)
+export type ChallengeFunnel = { joined: number; started: number; completed: number; attemptedAllItems: number }
+
+const num = (v: string | null | undefined) => (v == null || v === '' ? 0 : Number(v))
+
+// Per-task item counts: a quiz's items are its questions; a reading task is 1 item,
+// "attempted" iff it has any activity.
+function itemCounts(dim: Record<string, string | null>): { total: number; attempted: number } {
+  const state = dim.state ?? 'not_started'
+  if ((dim.task_type ?? '') === 'quiz') return { total: num(dim.total_questions), attempted: num(dim.attempted_questions) }
+  return { total: 1, attempted: state !== 'not_started' ? 1 : 0 }
+}
 
 export function challengeFunnel(rows: ChallengeRawRow[]): ChallengeFunnel {
-  const byEmail = new Map<string, { total: number; completed: number; anyStarted: boolean }>()
+  const byEmail = new Map<string, { total: number; completed: number; anyStarted: boolean; itemsTotal: number; itemsAttempted: number }>()
   for (const r of rows) {
     const email = (r.learner_id ?? '').trim().toLowerCase()
     if (!email) continue
-    const state = r.dimensions?.state ?? 'not_started'
-    const e = byEmail.get(email) ?? { total: 0, completed: 0, anyStarted: false }
+    const dim = r.dimensions ?? {}
+    const state = dim.state ?? 'not_started'
+    const e = byEmail.get(email) ?? { total: 0, completed: 0, anyStarted: false, itemsTotal: 0, itemsAttempted: 0 }
     e.total += 1
     if (state === 'completed') e.completed += 1
     if (state !== 'not_started') e.anyStarted = true
+    const ic = itemCounts(dim)
+    e.itemsTotal += ic.total
+    e.itemsAttempted += ic.attempted
     byEmail.set(email, e)
   }
 
   let joined = 0
   let started = 0
   let completed = 0
+  let attemptedAllItems = 0
   for (const e of byEmail.values()) {
     joined += 1
     if (e.anyStarted) started += 1
     if (e.total > 0 && e.completed === e.total) completed += 1
+    if (e.itemsTotal > 0 && e.itemsAttempted >= e.itemsTotal) attemptedAllItems += 1
   }
-  return { joined, started, completed }
+  return { joined, started, completed, attemptedAllItems }
 }
 
 // BigQuery TIMESTAMPs land in metric_raw_rows as epoch-SECONDS strings, often in
@@ -53,13 +71,15 @@ function epochMs(v: string | null | undefined): number | null {
 //   completed — when they finished (latest activity, only if all tasks completed)
 // `joined` is empty until the BQ view exposing joined_at (migrations/bq/004) is
 // re-applied and re-synced; the headline counts stay correct regardless.
-export type ChallengeEventDates = { joined: string[]; started: string[]; completed: string[] }
+export type ChallengeEventDates = { joined: string[]; started: string[]; completed: string[]; attemptedAllItems: string[] }
 
 export function challengeEventDates(rows: ChallengeRawRow[]): ChallengeEventDates {
   type Agg = {
     total: number
     completed: number
     anyStarted: boolean
+    itemsTotal: number
+    itemsAttempted: number
     joinedAt: number | null
     firstActivity: number | null
     lastActivity: number | null
@@ -77,9 +97,12 @@ export function challengeEventDates(rows: ChallengeRawRow[]): ChallengeEventDate
     const state = dim.state ?? 'not_started'
     const e =
       byEmail.get(email) ??
-      { total: 0, completed: 0, anyStarted: false, joinedAt: null, firstActivity: null, lastActivity: null }
+      { total: 0, completed: 0, anyStarted: false, itemsTotal: 0, itemsAttempted: 0, joinedAt: null, firstActivity: null, lastActivity: null }
     e.total += 1
     if (state === 'completed') e.completed += 1
+    const ic = itemCounts(dim)
+    e.itemsTotal += ic.total
+    e.itemsAttempted += ic.attempted
     const joined = epochMs(dim.joined_at)
     if (joined != null) e.joinedAt = e.joinedAt == null ? joined : Math.min(e.joinedAt, joined)
     if (state !== 'not_started') {
@@ -93,12 +116,14 @@ export function challengeEventDates(rows: ChallengeRawRow[]): ChallengeEventDate
     byEmail.set(email, e)
   }
 
-  const out: ChallengeEventDates = { joined: [], started: [], completed: [] }
+  const out: ChallengeEventDates = { joined: [], started: [], completed: [], attemptedAllItems: [] }
   for (const e of byEmail.values()) {
     if (e.joinedAt != null) out.joined.push(new Date(e.joinedAt).toISOString())
     if (e.anyStarted && e.firstActivity != null) out.started.push(new Date(e.firstActivity).toISOString())
     if (e.total > 0 && e.completed === e.total && e.lastActivity != null)
       out.completed.push(new Date(e.lastActivity).toISOString())
+    if (e.itemsTotal > 0 && e.itemsAttempted >= e.itemsTotal && e.lastActivity != null)
+      out.attemptedAllItems.push(new Date(e.lastActivity).toISOString())
   }
   return out
 }
