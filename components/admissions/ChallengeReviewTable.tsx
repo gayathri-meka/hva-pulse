@@ -8,6 +8,7 @@ import Modal from '@/components/placements/Modal'
 import EmailCampaignButton from '@/components/email/EmailCampaignButton'
 import { sendEmailCampaign } from '@/app/(protected)/admissions/actions'
 import ChallengeReviewDrawer from './ChallengeReviewDrawer'
+import { paceMetrics } from '@/lib/challengePace'
 import {
   REVIEW_DECISIONS_ENABLED,
   type CandidateSignals,
@@ -114,19 +115,20 @@ function heat(count: number): string {
   if (count <= 6) return 'bg-emerald-200 text-emerald-900'
   return 'bg-emerald-400 text-white'
 }
-// Mini bar chart of items done per calendar date across the challenge window.
-function ActivitySparkline({ activityByDate, dates }: { activityByDate: Record<string, number>; dates: string[] }) {
-  const counts = dates.map((d) => activityByDate[d] ?? 0)
-  if (!counts.some((c) => c > 0)) return <span className="text-zinc-300">—</span>
-  const max = Math.max(...counts, 1)
+// Mini bar chart of items done per day across the MEMBER's own first→last window
+// (their day 1 →), exactly like the retired Pace sparkline.
+function ActivitySparkline({ activityByDate }: { activityByDate: Record<string, number> }) {
+  const { series } = paceMetrics(activityByDate)
+  if (!series.length) return <span className="text-zinc-300">—</span>
+  const max = Math.max(...series.map((s) => s.count), 1)
   return (
     <div className="flex h-6 items-end gap-px">
-      {dates.map((d, i) => (
+      {series.map((s) => (
         <div
-          key={d}
-          title={`${dateLabel(d)} — ${counts[i]} item${counts[i] === 1 ? '' : 's'}`}
-          className={`min-w-[2px] flex-1 rounded-sm ${counts[i] ? 'bg-[#5BAE5B]' : 'bg-zinc-100'}`}
-          style={{ height: counts[i] ? `${Math.max(12, (counts[i] / max) * 100)}%` : '2px' }}
+          key={s.day}
+          title={`Day ${s.day} · ${dateLabel(s.date)} — ${s.count} item${s.count === 1 ? '' : 's'}`}
+          className={`min-w-[2px] flex-1 rounded-sm ${s.count ? 'bg-[#5BAE5B]' : 'bg-zinc-100'}`}
+          style={{ height: s.count ? `${Math.max(12, (s.count / max) * 100)}%` : '2px' }}
         />
       ))}
     </div>
@@ -283,19 +285,21 @@ export default function ChallengeReviewTable({
         id: 'activity',
         header: 'Activity',
         size: 150,
-        cell: (info) => <ActivitySparkline activityByDate={info.row.original.activityByDate} dates={calendarDates} />,
+        cell: (info) => <ActivitySparkline activityByDate={info.row.original.activityByDate} />,
       }),
       // Per-date heat columns — granular, default-hidden (toggle via the column menu).
+      // `compact` gives them tight padding + a readable "16 Jun" header.
       ...calendarDates.map((date) =>
         col.accessor((r) => r.activityByDate[date] ?? 0, {
           id: `d_${date}`,
           header: dateLabel(date),
-          size: 40,
+          size: 56,
           enableSorting: false,
           enableColumnFilter: false,
+          meta: { compact: true },
           cell: (info) => {
             const v = info.getValue() as number
-            return <div className={`mx-auto h-6 w-6 rounded text-center text-[11px] leading-6 ${heat(v)}`}>{v || ''}</div>
+            return <div className={`mx-auto h-6 w-7 rounded text-center text-[11px] leading-6 ${heat(v)}`}>{v || ''}</div>
           },
         }),
       ),

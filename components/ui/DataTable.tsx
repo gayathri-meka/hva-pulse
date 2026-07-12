@@ -306,21 +306,22 @@ export default function DataTable<T>({
                     const isLastPinned = pinned && header.column.getIsLastColumn('left')
                     const left = pinned ? header.column.getStart('left') : undefined
                     const isSelect = header.column.id === '__select'
+                    const compact = (header.column.columnDef.meta as { compact?: boolean } | undefined)?.compact
                     return (
                       <th
                         key={header.id}
                         style={{ width: header.getSize(), left }}
-                        className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${isSelect ? 'px-3 text-center' : 'px-6'} ${pinned ? 'z-20' : 'z-10'} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                        className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${isSelect ? 'px-3 text-center' : compact ? 'px-1 text-center' : 'px-6'} ${pinned ? 'z-20' : 'z-10'} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                       >
                         {isSelect ? (
                           flexRender(header.column.columnDef.header, header.getContext())
                         ) : (
                         <div className="flex flex-col gap-1">
                           <div
-                            className={`flex items-center gap-1 ${header.column.getCanSort() ? 'cursor-pointer' : ''}`}
+                            className={`flex items-center gap-1 ${compact ? 'justify-center' : ''} ${header.column.getCanSort() ? 'cursor-pointer' : ''}`}
                             onClick={header.column.getToggleSortingHandler()}
                           >
-                            <span className="truncate">{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                            <span className={compact ? 'whitespace-nowrap' : 'truncate'}>{flexRender(header.column.columnDef.header, header.getContext())}</span>
                             {header.column.getIsSorted() === 'asc' && <span>↑</span>}
                             {header.column.getIsSorted() === 'desc' && <span>↓</span>}
                           </div>
@@ -352,6 +353,7 @@ export default function DataTable<T>({
                       const isLastPinned = pinned && cell.column.getIsLastColumn('left')
                       const left = pinned ? cell.column.getStart('left') : undefined
                       const isSelect = cell.column.id === '__select'
+                      const compact = (cell.column.columnDef.meta as { compact?: boolean } | undefined)?.compact
                       const raw = cell.getValue()
                       const title = !isSelect && typeof raw === 'string' && raw ? raw : undefined
                       return (
@@ -359,7 +361,7 @@ export default function DataTable<T>({
                           key={cell.id}
                           title={title}
                           style={{ width: cell.column.getSize(), left }}
-                          className={`border-b border-zinc-100 py-3.5 ${isSelect ? 'px-3 text-center' : 'truncate px-6'} ${pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                          className={`border-b border-zinc-100 py-3.5 ${isSelect ? 'px-3 text-center' : compact ? 'px-1' : 'truncate px-6'} ${pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
