@@ -307,12 +307,6 @@ export default function ChallengeReviewTable({
     [calendarDates],
   )
 
-  // Per-date heat columns hidden by default (the sparkline covers the eyeball view).
-  const initialColumnVisibility = useMemo(
-    () => Object.fromEntries(calendarDates.map((d) => [`d_${d}`, false])),
-    [calendarDates],
-  )
-
   function runBulk() {
     if (!bulkRows || !REVIEW_DECISIONS_ENABLED) return
     startTransition(async () => {
@@ -384,7 +378,6 @@ export default function ChallengeReviewTable({
         columns={columns}
         storageKey="challenge-review"
         initialSorting={[{ id: 'name', desc: false }]}
-        initialColumnVisibility={initialColumnVisibility}
         getRowId={(r) => r.email}
         enableRowSelection={canReview}
         pinnedLeft={['name']}
