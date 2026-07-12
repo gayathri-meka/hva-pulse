@@ -57,7 +57,7 @@ export const GATING_RULES: { key: string; label: string }[] = [
   { key: 'active_days', label: 'Active days' },
   { key: 'span', label: 'Span' },
   { key: 'cramming', label: 'Cramming' },
-  { key: 'consistency', label: 'Consistency (gap days)' },
+  { key: 'consistency', label: 'Gap days' },
 ]
 
 // Short label for a course type (for the criterion value display).
@@ -403,7 +403,7 @@ export function evaluateCandidate(
     {
       // Consistency = idle days between first and last activity (span − active days).
       key: 'consistency',
-      label: 'Consistency',
+      label: 'Gap days',
       group: 'engagement',
       placeholder: false,
       status: gapDays < thresholds.maxGapDays ? 'pass' : 'fail',

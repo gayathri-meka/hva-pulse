@@ -56,7 +56,7 @@ const CRITERIA_COLS: { key: string; label: string }[] = [
   { key: 'active_days', label: 'Active' },
   { key: 'span', label: 'Span' },
   { key: 'cramming', label: 'Cramming' },
-  { key: 'consistency', label: 'Consistency' },
+  { key: 'consistency', label: 'Gap days' },
   { key: 'key_question_score', label: 'Challenge' },
 ]
 
