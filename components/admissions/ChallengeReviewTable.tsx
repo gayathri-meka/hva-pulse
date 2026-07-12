@@ -39,6 +39,10 @@ export type ChallengeReviewRow = {
   decidedAt: string | null
   systemChanged: boolean
   published: boolean // decision released to the candidate portal
+  // Activity + progress (folded in from the retired Pace tab).
+  completedItems: number
+  totalItems: number
+  activityByDate: Record<string, number> // IST date → items done that day
 }
 
 // Which criteria get their own column, and the short header for each. Eligibility
@@ -99,6 +103,36 @@ function DecisionBadge({ decision }: { decision: SystemDecision }) {
   return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">REJECT</span>
 }
 
+// Activity helpers (folded in from the retired Pace tab).
+function dateLabel(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+}
+function heat(count: number): string {
+  if (count <= 0) return 'text-zinc-300'
+  if (count === 1) return 'bg-emerald-50 text-emerald-700'
+  if (count <= 3) return 'bg-emerald-100 text-emerald-800'
+  if (count <= 6) return 'bg-emerald-200 text-emerald-900'
+  return 'bg-emerald-400 text-white'
+}
+// Mini bar chart of items done per calendar date across the challenge window.
+function ActivitySparkline({ activityByDate, dates }: { activityByDate: Record<string, number>; dates: string[] }) {
+  const counts = dates.map((d) => activityByDate[d] ?? 0)
+  if (!counts.some((c) => c > 0)) return <span className="text-zinc-300">—</span>
+  const max = Math.max(...counts, 1)
+  return (
+    <div className="flex h-6 items-end gap-px">
+      {dates.map((d, i) => (
+        <div
+          key={d}
+          title={`${dateLabel(d)} — ${counts[i]} item${counts[i] === 1 ? '' : 's'}`}
+          className={`min-w-[2px] flex-1 rounded-sm ${counts[i] ? 'bg-[#5BAE5B]' : 'bg-zinc-100'}`}
+          style={{ height: counts[i] ? `${Math.max(12, (counts[i] / max) * 100)}%` : '2px' }}
+        />
+      ))}
+    </div>
+  )
+}
+
 const col = createColumnHelper<ChallengeReviewRow>()
 
 export default function ChallengeReviewTable({
@@ -109,6 +143,7 @@ export default function ChallengeReviewTable({
   canReview,
   isAdmin,
   currentUserEmail,
+  calendarDates,
 }: {
   rows: ChallengeReviewRow[]
   thresholds: ReviewThresholds
@@ -117,6 +152,7 @@ export default function ChallengeReviewTable({
   canReview: boolean
   isAdmin: boolean
   currentUserEmail: string
+  calendarDates: string[]
 }) {
   const router = useRouter()
   const [openEmail, setOpenEmail] = useState<string | null>(null)
@@ -232,8 +268,45 @@ export default function ChallengeReviewTable({
           },
         }),
       ),
+      // ── Progress + activity (folded in from the retired Pace tab) ──────────
+      col.accessor((r) => (r.totalItems ? Math.round((r.completedItems / r.totalItems) * 100) : 0), {
+        id: 'completed',
+        header: 'Completed',
+        size: 110,
+        enableColumnFilter: false,
+        cell: (info) => {
+          const r = info.row.original
+          return <span className="text-xs text-zinc-600">{r.totalItems ? `${r.completedItems}/${r.totalItems}` : '—'}</span>
+        },
+      }),
+      col.display({
+        id: 'activity',
+        header: 'Activity',
+        size: 150,
+        cell: (info) => <ActivitySparkline activityByDate={info.row.original.activityByDate} dates={calendarDates} />,
+      }),
+      // Per-date heat columns — granular, default-hidden (toggle via the column menu).
+      ...calendarDates.map((date) =>
+        col.accessor((r) => r.activityByDate[date] ?? 0, {
+          id: `d_${date}`,
+          header: dateLabel(date),
+          size: 40,
+          enableSorting: false,
+          enableColumnFilter: false,
+          cell: (info) => {
+            const v = info.getValue() as number
+            return <div className={`mx-auto h-6 w-6 rounded text-center text-[11px] leading-6 ${heat(v)}`}>{v || ''}</div>
+          },
+        }),
+      ),
     ],
-    [],
+    [calendarDates],
+  )
+
+  // Per-date heat columns hidden by default (the sparkline covers the eyeball view).
+  const initialColumnVisibility = useMemo(
+    () => Object.fromEntries(calendarDates.map((d) => [`d_${d}`, false])),
+    [calendarDates],
   )
 
   function runBulk() {
@@ -307,6 +380,7 @@ export default function ChallengeReviewTable({
         columns={columns}
         storageKey="challenge-review"
         initialSorting={[{ id: 'name', desc: false }]}
+        initialColumnVisibility={initialColumnVisibility}
         getRowId={(r) => r.email}
         enableRowSelection={canReview}
         pinnedLeft={['name']}

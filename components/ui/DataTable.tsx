@@ -42,6 +42,8 @@ export type DataTableProps<T> = {
   /** Columns pinned to the left ON DESKTOP ONLY (auto-unpinned on mobile). */
   pinnedLeft?: string[]
   initialSorting?: SortingState
+  /** Columns hidden by default (keyed by column id). User can show them; choice persists. */
+  initialColumnVisibility?: VisibilityState
   /** Enables the search box; rows match if any of these fields contains the query. */
   searchKeys?: (keyof T | string)[]
   searchPlaceholder?: string
@@ -83,6 +85,7 @@ export default function DataTable<T>({
   getRowId,
   pinnedLeft = [],
   initialSorting = [],
+  initialColumnVisibility = {},
   searchKeys,
   searchPlaceholder = 'Search…',
   csvFilename,
@@ -99,7 +102,7 @@ export default function DataTable<T>({
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [search, setSearch] = useState('')
   const [showColMenu, setShowColMenu] = useState(false)

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ChallengeMatrixTable from './ChallengeMatrixTable'
-import ChallengePaceTable from './ChallengePaceTable'
 import ChallengeQuestionsView, { type TaskCatalogDay } from './ChallengeQuestionsView'
 import ChallengeReviewTable, { type ChallengeReviewRow } from './ChallengeReviewTable'
 import type { ReviewThresholds } from '@/lib/challengeReview'
@@ -143,7 +142,7 @@ export default function ChallengeClient({
   isAdmin: boolean
   currentUserEmail: string
 }) {
-  const [view, setView] = useState<'detail' | 'matrix' | 'pace' | 'questions' | 'review'>('review')
+  const [view, setView] = useState<'detail' | 'matrix' | 'questions' | 'review'>('review')
   const [progressOpen, setProgressOpen] = useState(false)
 
   // Per-member summary + a sync action shared by the Day-by-day and Score tables.
@@ -171,25 +170,6 @@ export default function ChallengeClient({
       rows: syncRows,
     })
 
-  // Pace sync: the sparkline can't go to a sheet, but the underlying per-day task
-  // counts can — one column per calendar date (IST), value = tasks done that day.
-  const paceSyncAction = (url: string, tab: string) =>
-    syncRowsToSheet({
-      sheetUrl: url,
-      tab,
-      keyHeader: 'Email',
-      keyField: 'email',
-      columns: [
-        { header: 'Name', field: 'name' },
-        { header: 'Email', field: 'email' },
-        ...calendarDates.map((d) => ({ header: d, field: d })),
-      ],
-      rows: members.map((m) => ({
-        name: m.name,
-        email: m.email,
-        ...Object.fromEntries(calendarDates.map((d) => [d, m.activityByDate[d] ?? 0])),
-      })),
-    })
   const [openMember, setOpenMember] = useState<string | null>(null)
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -288,7 +268,6 @@ export default function ChallengeClient({
               ['review', 'Review'],
               ['matrix', 'Day-by-day'],
               ['detail', 'Detailed'],
-              ['pace', 'Pace'],
               ['questions', 'By question'],
             ] as const).map(([key, label]) => (
               <button
@@ -313,11 +292,10 @@ export default function ChallengeClient({
             canReview={canReview}
             isAdmin={isAdmin}
             currentUserEmail={currentUserEmail}
+            calendarDates={calendarDates}
           />
         ) : view === 'questions' ? (
           <ChallengeQuestionsView days={taskCatalog} />
-        ) : view === 'pace' ? (
-          <ChallengePaceTable members={members} calendarDates={calendarDates} syncAction={paceSyncAction} serviceAccountEmail={serviceAccountEmail} />
         ) : view === 'matrix' ? (
           <ChallengeMatrixTable
             members={members}
