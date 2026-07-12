@@ -16,6 +16,10 @@
 // question's other options (neutral — neither least- nor most-needy). Gender is
 // intentionally omitted (not asked in the challenge).
 
+// "Prefer not to say" is scored as 1 (lowest need) on every question that offers it
+// (gender, marital, social category, family situation).
+export const PNS_SCORE = 1
+
 export type SesOption = { letter: string; label: string; score: number }
 
 export type SesQuestion = {
@@ -125,8 +129,8 @@ export function resolveAnswer(q: SesQuestion, raw: string | null | undefined): {
   const letter = /^[a-z]$/.test(s) ? s : null
   if (!letter) return null
   if (q.pnsLetter && letter === q.pnsLetter) {
-    // Prefer-not-to-say → average of the real options (neutral).
-    return { score: q.options.reduce((a, o) => a + o.score, 0) / q.options.length, label: 'Prefer not to say' }
+    // Prefer-not-to-say scores as PNS_SCORE (lowest-need) across all PNS questions.
+    return { score: PNS_SCORE, label: 'Prefer not to say' }
   }
   const opt = q.options.find((o) => o.letter === letter)
   return opt ? { score: opt.score, label: opt.label } : null

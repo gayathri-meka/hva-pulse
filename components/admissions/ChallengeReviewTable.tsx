@@ -15,7 +15,7 @@ import {
   type SystemDecision,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
-import { SES_RUBRIC, sesMaxScore, effectiveWeight } from '@/lib/ses'
+import { SES_RUBRIC, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
 import {
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
@@ -615,7 +615,7 @@ function EditRulesModal({
         />
       </label>
       <p className="mb-1.5 text-[11px] text-zinc-400">
-        Columns 0–4 are the fixed score each option earns. &ldquo;PNS&rdquo; = prefer not to say (scored as the average).
+        Columns 0–4 are the fixed score each option earns. &ldquo;PNS&rdquo; = prefer not to say (scored as {PNS_SCORE}).
         Only the <span className="font-medium text-zinc-600">Weight</span> column is editable.
       </p>
       <div className="overflow-x-auto rounded-lg border border-zinc-200">
@@ -632,9 +632,7 @@ function EditRulesModal({
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {SES_RUBRIC.map((q) => {
-              const pnsAvg = q.pnsLetter
-                ? Math.round((q.options.reduce((a, o) => a + o.score, 0) / q.options.length) * 10) / 10
-                : null
+              const pnsAvg = q.pnsLetter ? PNS_SCORE : null
               return (
                 <tr key={q.key} className="align-middle">
                   <td className="px-2 py-1.5 text-zinc-700">{q.label}</td>

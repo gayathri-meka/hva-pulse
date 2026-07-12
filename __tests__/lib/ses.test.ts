@@ -11,18 +11,18 @@ describe('optionScore', () => {
     expect(optionScore(q('social_category'), 'b')).toBe(4)
   })
 
-  it('scores prefer-not-to-say as the average of the options', () => {
-    // marital options 1,2,3,4 → avg 2.5.
-    expect(optionScore(q('marital'), 'e')).toBe(2.5)
-    // social 3,4,2,1 → avg 2.5.
-    expect(optionScore(q('social_category'), 'e')).toBe(2.5)
+  it('scores prefer-not-to-say as 1 (lowest need) on every PNS question', () => {
+    expect(optionScore(q('marital'), 'e')).toBe(1)
+    expect(optionScore(q('social_category'), 'e')).toBe(1)
+    expect(optionScore(q('family_situation'), 'e')).toBe(1)
+    expect(optionScore(q('gender'), 'd')).toBe(1)
   })
 
   it('scores gender, with PNS as the options average', () => {
     expect(optionScore(q('gender'), 'a')).toBe(3) // Female
     expect(optionScore(q('gender'), 'b')).toBe(2) // Male
     expect(optionScore(q('gender'), 'c')).toBe(4) // Transgender
-    expect(optionScore(q('gender'), 'd')).toBe(3) // PNS = avg(3,2,4)
+    expect(optionScore(q('gender'), 'd')).toBe(1) // PNS = 1
   })
 
   it('scores multi-select assets by the best (lowest-need) option held', () => {
@@ -46,8 +46,8 @@ describe('optionScore', () => {
 describe('resolveAnswer (score + label for the breakdown)', () => {
   it('returns the chosen option label', () => {
     expect(resolveAnswer(q('social_category'), 'a')).toEqual({ score: 3, label: 'SC' })
-    expect(resolveAnswer(q('marital'), 'e')).toEqual({ score: 2.5, label: 'Prefer not to say' })
-    expect(resolveAnswer(q('gender'), 'd')).toEqual({ score: 3, label: 'Prefer not to say' })
+    expect(resolveAnswer(q('marital'), 'e')).toEqual({ score: 1, label: 'Prefer not to say' })
+    expect(resolveAnswer(q('gender'), 'd')).toEqual({ score: 1, label: 'Prefer not to say' })
     expect(resolveAnswer(q('assets'), 'a, c')).toEqual({ score: 1, label: 'Insurance, FD / savings' })
   })
 })
