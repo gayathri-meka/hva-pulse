@@ -139,6 +139,18 @@ describe('evaluateCandidate', () => {
     expect(r.status).toBe('na')
   })
 
+  it('exposes numeric sortValue so columns sort by value (income least→highest), na undefined', () => {
+    const r = evaluateCandidate({ ...passing, familyAnnualIncomeInr: 400_000, familySize: 4, activeDays: 12 })
+    // Per-capita income sorts by the actual ₹/yr per person (100k here), not pass/fail.
+    expect(get(r, 'per_capita_income').sortValue).toBe(100_000)
+    expect(get(r, 'active_days').sortValue).toBe(12)
+    expect(get(r, 'span').sortValue).toBe(passing.spanDays)
+    // No income data → sortValue undefined (sorts to the end).
+    expect(get(evaluateCandidate({ ...passing, familyAnnualIncomeInr: undefined }), 'per_capita_income').sortValue).toBeUndefined()
+    // Non-numeric gates carry no sortValue.
+    expect(get(r, 'college').sortValue).toBeUndefined()
+  })
+
   it('groups criteria into need, work & availability, and engagement', () => {
     const r = evaluateCandidate(passing)
     expect(get(r, 'ses').group).toBe('need')

@@ -147,6 +147,7 @@ export type CriterionResult = {
   failFeedback?: string  // shown on a fail (to the team always; to the candidate unless internalOnly)
   informational?: boolean // shown for context only — NEVER affects the system decision
   sesBreakdown?: SesBreakdownRow[] // SES criterion only — per-question answer/score/weight for drill-down
+  sortValue?: number     // numeric criteria only — the raw value to sort the column by (undefined = no data)
 }
 
 export type SystemDecision = 'selected' | 'rejected'
@@ -250,6 +251,7 @@ export function evaluateCandidate(
       internalOnly: true,
       failFeedback: 'Our socio-economic assessment did not establish sufficient financial need.',
       sesBreakdown: ses?.breakdown,
+      sortValue: ses && ses.answered ? ses.score : undefined,
     },
     {
       key: 'college',
@@ -283,6 +285,7 @@ export function evaluateCandidate(
           : `Family income ÷ family size below ₹${thresholds.maxPerCapitaIncomeAnnual.toLocaleString('en-IN')} per person / year`,
       internalOnly: true,
       failFeedback: 'Your family’s per-capita income is above the level this programme is aimed at.',
+      sortValue: perCapitaIncome,
     },
     {
       key: 'graduation_timeline',
@@ -324,6 +327,7 @@ export function evaluateCandidate(
       value: `${questionsAttemptedPct}% (${signals.attemptedQuestions}/${signals.totalQuestions})`,
       threshold: `At least ${thresholds.minQuestionsAttemptedPct}% of all quiz questions attempted`,
       failFeedback: `You attempted ${questionsAttemptedPct}% of the challenge questions; we look for at least ${thresholds.minQuestionsAttemptedPct}%.`,
+      sortValue: questionsAttemptedPct,
     },
     {
       key: 'active_days',
@@ -334,6 +338,7 @@ export function evaluateCandidate(
       value: `${signals.activeDays} days`,
       threshold: `Active on more than ${thresholds.minActiveDays} days`,
       failFeedback: `You were active on ${signals.activeDays} days; we look for more than ${thresholds.minActiveDays}.`,
+      sortValue: signals.activeDays,
     },
     {
       key: 'span',
@@ -344,6 +349,7 @@ export function evaluateCandidate(
       value: `${signals.spanDays} days`,
       threshold: `First-to-last activity spans at least ${thresholds.minSpanDays} days`,
       failFeedback: `You worked across ${signals.spanDays} days; we look for consistency over at least ${thresholds.minSpanDays} days.`,
+      sortValue: signals.spanDays,
     },
     {
       key: 'cramming',
@@ -354,6 +360,7 @@ export function evaluateCandidate(
       value: `${signals.crammingPct}%`,
       threshold: `Under ${thresholds.maxCrammingPct}% of all work done on the single busiest day`,
       failFeedback: `Too much of your work was crammed into one day (${signals.crammingPct}%); we look for steadier effort.`,
+      sortValue: signals.crammingPct,
     },
     // Challenge-question score — INFORMATIONAL only. % of questions passed across
     // the "[Coding] Challenges" tasks. Shown for context; never gates a decision.
@@ -371,6 +378,7 @@ export function evaluateCandidate(
             ? `avg ${signals.keyQuestionAvgScore}/4 · ${signals.keyQuestionScorePct}% passed`
             : `${signals.keyQuestionScorePct}% passed`,
       threshold: 'For information only — not used to select or reject',
+      sortValue: signals.keyQuestionAvgScore ?? signals.keyQuestionScorePct,
     },
   ]
 

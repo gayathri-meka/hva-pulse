@@ -207,6 +207,19 @@ export default function ChallengeReviewTable({
           header: cc.label,
           size: 120,
           cell: (info) => <CriterionChip c={criterion(info.row.original, cc.key)} />,
+          // Numeric criteria (income, SES, % attempted, active days, span, cramming,
+          // challenge score) sort by their actual value — least → highest — with
+          // no-data rows last. Non-numeric gates fall back to pass/fail/na order.
+          sortingFn: (a, b) => {
+            const ca = criterion(a.original, cc.key)
+            const cb = criterion(b.original, cc.key)
+            const va = ca?.sortValue
+            const vb = cb?.sortValue
+            if (va != null && vb != null) return va === vb ? 0 : va < vb ? -1 : 1
+            if (va != null) return -1 // rows with a value sort before no-data rows
+            if (vb != null) return 1
+            return statusWord(ca?.status).localeCompare(statusWord(cb?.status))
+          },
         }),
       ),
     ],
