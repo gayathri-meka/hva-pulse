@@ -124,11 +124,14 @@ export default function ChallengeReviewDrawer({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const systemLabel = row.systemDecision === 'selected' ? 'SELECT' : 'REJECT'
+  const systemLabel =
+    row.systemDecision === 'selected' ? 'SELECT' : row.systemDecision === 'review' ? 'NEEDS REVIEW' : 'REJECT'
   const systemTone =
     row.systemDecision === 'selected'
       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : 'border-red-200 bg-red-50 text-red-800'
+      : row.systemDecision === 'review'
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-red-200 bg-red-50 text-red-800'
 
   function decide(decision: 'selected' | 'rejected') {
     setError(null)

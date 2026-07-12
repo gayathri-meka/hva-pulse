@@ -148,9 +148,15 @@ export type CriterionResult = {
   informational?: boolean // shown for context only — NEVER affects the system decision
   sesBreakdown?: SesBreakdownRow[] // SES criterion only — per-question answer/score/weight for drill-down
   sortValue?: number     // numeric criteria only — the raw value to sort the column by (undefined = no data)
+  // true = na because the gate is ACTIVE but this candidate's own data is missing /
+  // unparseable (vs na because the gate isn't configured). Blocks auto-select →
+  // 'review'. A not-yet-configured gate is NOT undetermined (stays neutral).
+  undetermined?: boolean
 }
 
-export type SystemDecision = 'selected' | 'rejected'
+// 'review' = can't auto-decide: no hard fail, but ≥1 gate is undetermined for this
+// candidate (their data is missing), so we don't auto-select — a human resolves it.
+export type SystemDecision = 'selected' | 'rejected' | 'review'
 
 export type ReviewEvaluation = {
   criteria: CriterionResult[]
@@ -252,6 +258,8 @@ export function evaluateCandidate(
       failFeedback: 'Our socio-economic assessment did not establish sufficient financial need.',
       sesBreakdown: ses?.breakdown,
       sortValue: ses && ses.answered ? ses.score : undefined,
+      // Cutoff set but no SES answers → data missing → blocks auto-select.
+      undetermined: sesStatus === 'na' && thresholds.sesCutoff !== undefined,
     },
     {
       key: 'college',
@@ -263,6 +271,8 @@ export function evaluateCandidate(
       threshold: 'College is not on the excluded-colleges list',
       internalOnly: true,
       failFeedback: 'Based on your current institution, this programme isn’t the right fit for you.',
+      // Excluded list configured but no college answer → data missing → blocks auto-select.
+      undetermined: collegeStatus === 'na' && excluded.length > 0,
     },
     {
       key: 'per_capita_income',
@@ -286,6 +296,8 @@ export function evaluateCandidate(
       internalOnly: true,
       failFeedback: 'Your family’s per-capita income is above the level this programme is aimed at.',
       sortValue: perCapitaIncome,
+      // Threshold set but income/size missing → data missing → blocks auto-select.
+      undetermined: perCapitaIncome === undefined && thresholds.maxPerCapitaIncomeAnnual !== undefined,
     },
     {
       key: 'graduation_timeline',
@@ -299,6 +311,7 @@ export function evaluateCandidate(
           : `${signals.graduationYear ?? 'n/a'}${courseTypeShort(signals.courseType) ? ` · ${courseTypeShort(signals.courseType)}` : ''}`,
       threshold: `Distance/online: any year. Full-time/part-time: must finish by ${GRAD_LATEST_YEAR}`,
       failFeedback: `You’re a full-time/part-time student finishing after ${GRAD_LATEST_YEAR}, so you can’t commit to the programme in time.`,
+      undetermined: gradStatus === 'na', // no config gate — any na is missing candidate data
     },
     {
       key: 'work_commitment',
@@ -316,6 +329,7 @@ export function evaluateCandidate(
               }`,
       threshold: `Not working — or working, earning ≤ ${lpa(thresholds.maxWorkIncomeAnnual)} LPA, and willing to quit`,
       failFeedback: 'Fully committing to HVA means stepping away from other work, which wasn’t possible based on your answers.',
+      undetermined: workStatus === 'na', // no config gate — any na is missing candidate data
     },
     // ── Engagement (challenge effort + performance) ───────────────────────────
     {
@@ -383,8 +397,16 @@ export function evaluateCandidate(
   ]
 
   // Informational criteria are shown for context but NEVER affect the decision.
-  const graded = criteria.filter((c) => c.status !== 'na' && !c.informational)
-  const systemDecision: SystemDecision = graded.every((c) => c.status === 'pass') ? 'selected' : 'rejected'
+  // Decision precedence: a hard FAIL rejects; otherwise an UNDETERMINED gate (the
+  // candidate's own data is missing on an active gate) blocks auto-select → 'review';
+  // otherwise every gate passes → 'selected'. A not-yet-configured gate ('na' but not
+  // undetermined) stays neutral, so unconfigured gates don't flag everyone.
+  const gating = criteria.filter((c) => !c.informational)
+  const systemDecision: SystemDecision = gating.some((c) => c.status === 'fail')
+    ? 'rejected'
+    : gating.some((c) => c.undetermined)
+      ? 'review'
+      : 'selected'
   const failReasons = criteria
     .filter((c) => c.status === 'fail' && !c.informational && c.failFeedback)
     .map((c) => c.failFeedback!)

@@ -353,7 +353,8 @@ export async function bulkConfirmChallengeDecisions(input: {
 
   const now = new Date().toISOString()
   const rows = input.items
-    .filter((it) => normEmail(it.email))
+    // 'review' isn't a confirmable verdict — those need a human to decide individually.
+    .filter((it) => normEmail(it.email) && it.systemDecision !== 'review')
     .map((it) => ({
       email: normEmail(it.email),
       cohort_id: input.cohortId,
@@ -369,7 +370,7 @@ export async function bulkConfirmChallengeDecisions(input: {
       updated_at: now,
     }))
 
-  if (rows.length === 0) return { ok: false, error: 'No candidates to confirm.' }
+  if (rows.length === 0) return { ok: false, error: 'Nothing to confirm — these candidates need a manual decision.' }
 
   const { error } = await adminClient()
     .from('challenge_decisions')

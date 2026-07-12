@@ -83,11 +83,11 @@ function CriterionChip({ c }: { c: CriterionResult | undefined }) {
 }
 
 function DecisionBadge({ decision }: { decision: SystemDecision }) {
-  return decision === 'selected' ? (
-    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">SELECT</span>
-  ) : (
-    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">REJECT</span>
-  )
+  if (decision === 'selected')
+    return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">SELECT</span>
+  if (decision === 'review')
+    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">REVIEW</span>
+  return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">REJECT</span>
 }
 
 const col = createColumnHelper<ChallengeReviewRow>()
@@ -122,6 +122,7 @@ export default function ChallengeReviewTable({
   const rejectedCount = rows.filter((r) => r.finalDecision === 'rejected').length
   const publishedCount = rows.filter((r) => r.published).length
   const sysSelected = rows.filter((r) => r.systemDecision === 'selected').length
+  const sysReview = rows.filter((r) => r.systemDecision === 'review').length
 
   const openRow = openEmail ? rows.find((r) => r.email === openEmail) ?? null : null
 
@@ -141,7 +142,7 @@ export default function ChallengeReviewTable({
           </button>
         ),
       }),
-      col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : 'Reject'), {
+      col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : r.systemDecision === 'review' ? 'Review' : 'Reject'), {
         id: 'system',
         header: 'System',
         size: 100,
@@ -288,6 +289,7 @@ export default function ChallengeReviewTable({
         <span className="h-4 w-px bg-zinc-200" aria-hidden />
         <span className="text-zinc-400">
           System suggests <strong className="text-emerald-600">{sysSelected}</strong> select
+          {sysReview > 0 && <> · <strong className="text-amber-600">{sysReview}</strong> need review</>}
         </span>
       </div>
 
@@ -373,12 +375,19 @@ export default function ChallengeReviewTable({
       {bulkRows && (
         <Modal title="Confirm system verdict" onClose={() => setBulkRows(null)}>
           <p className="text-sm text-zinc-600">
-            Record the system&apos;s verdict for <strong>{bulkRows.length}</strong> candidate
-            {bulkRows.length === 1 ? '' : 's'}?{' '}
+            Record the system&apos;s verdict?{' '}
             {bulkRows.filter((r) => r.systemDecision === 'selected').length} will be marked{' '}
             <strong className="text-emerald-700">selected</strong> and{' '}
             {bulkRows.filter((r) => r.systemDecision === 'rejected').length}{' '}
-            <strong className="text-red-700">rejected</strong>. Overrides must be done one at a time in the drawer.
+            <strong className="text-red-700">rejected</strong>.
+            {bulkRows.filter((r) => r.systemDecision === 'review').length > 0 && (
+              <>
+                {' '}
+                <strong className="text-amber-700">{bulkRows.filter((r) => r.systemDecision === 'review').length}</strong> flagged{' '}
+                <strong className="text-amber-700">needs review</strong> will be skipped — decide those in the drawer.
+              </>
+            )}{' '}
+            Overrides must be done one at a time in the drawer.
           </p>
           <div className="mt-5 flex justify-end gap-2">
             <button

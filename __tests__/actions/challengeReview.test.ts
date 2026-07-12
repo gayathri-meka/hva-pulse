@@ -149,7 +149,24 @@ describe('bulkConfirmChallengeDecisions', () => {
       courseId: 587,
       items: [{ email: '  ', systemDecision: 'rejected', criteriaSnapshot: snapshot }],
     })
-    expect(res).toEqual({ ok: false, error: expect.stringContaining('No candidates') })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('Nothing to confirm') })
+  })
+
+  test('skips review-flagged candidates (not a confirmable verdict)', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert } = mockUpsertClient({ error: null })
+    await bulkConfirmChallengeDecisions({
+      cohortId: 214,
+      courseId: 587,
+      items: [
+        { email: 'a@x.com', systemDecision: 'selected', criteriaSnapshot: snapshot },
+        { email: 'b@x.com', systemDecision: 'review', criteriaSnapshot: snapshot },
+        { email: 'c@x.com', systemDecision: 'rejected', criteriaSnapshot: snapshot },
+      ],
+    })
+    const rows = upsert.mock.calls[0][0] as { email: string; final_decision: string }[]
+    expect(rows.map((r) => r.email)).toEqual(['a@x.com', 'c@x.com']) // review skipped
+    expect(rows.every((r) => r.final_decision !== 'review')).toBe(true)
   })
 })
 

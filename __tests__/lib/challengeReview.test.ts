@@ -37,6 +37,9 @@ const passing: CandidateSignals = {
   activeDays: 12,
   spanDays: 14,
   crammingPct: 20,
+  // Determinable eligibility so nothing is 'undetermined' → not a 'review' by default.
+  currentlyStudying: false, // graduation gate passes (available now)
+  working: false, // work gate passes (not working)
 }
 
 const get = (r: ReturnType<typeof evaluateCandidate>, key: string) =>
@@ -112,12 +115,23 @@ describe('evaluateCandidate', () => {
     expect(get(r, 'key_question_score').value).toBe('avg 3.2/4 · 60% passed')
   })
 
-  it('leaves every intake criterion na (and out of the decision) when no intake data is present', () => {
+  it('config-inactive na gates (unset thresholds) stay neutral → still selected', () => {
+    // passing has determinable work/graduation; ses/college/per-capita are na because
+    // their gates aren't configured (DEFAULT_THRESHOLDS) — those must NOT block.
     const r = evaluateCandidate(passing)
-    for (const key of ['ses', 'college', 'per_capita_income', 'graduation_timeline', 'work_commitment', 'key_question_score']) {
+    for (const key of ['ses', 'college', 'per_capita_income']) {
       expect(get(r, key).status).toBe('na')
+      expect(get(r, key).undetermined).toBeFalsy()
     }
     expect(r.systemDecision).toBe('selected')
+  })
+
+  it('undetermined candidate data (missing work/graduation) → needs review, not selected', () => {
+    // No work/study signal → both na AND undetermined (no config gate involved).
+    const r = evaluateCandidate({ attemptedQuestions: 150, totalQuestions: 200, activeDays: 12, spanDays: 14, crammingPct: 20 })
+    expect(get(r, 'work_commitment').undetermined).toBe(true)
+    expect(get(r, 'graduation_timeline').undetermined).toBe(true)
+    expect(r.systemDecision).toBe('review')
   })
 
   it('gates per-capita income (annual income ÷ family size) against the configured threshold', () => {
@@ -233,7 +247,7 @@ describe('evaluateCandidate', () => {
 
   it('honours custom thresholds', () => {
     const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90, maxWorkIncomeAnnual: 600_000 }
-    const weak: CandidateSignals = { attemptedQuestions: 6, totalQuestions: 200, activeDays: 2, spanDays: 2, crammingPct: 80 }
+    const weak: CandidateSignals = { attemptedQuestions: 6, totalQuestions: 200, activeDays: 2, spanDays: 2, crammingPct: 80, currentlyStudying: false, working: false }
     expect(evaluateCandidate(weak, lenient).systemDecision).toBe('selected')
     expect(evaluateCandidate(weak, DEFAULT_THRESHOLDS).systemDecision).toBe('rejected')
   })
