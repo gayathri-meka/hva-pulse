@@ -151,6 +151,13 @@ describe('evaluateCandidate', () => {
     expect(get(r, 'college').sortValue).toBeUndefined()
   })
 
+  it('SES criterion exposes its score as sortValue (so the column sorts by score)', () => {
+    // social_category 'a' = SC = 3 × default weight 5 = 15.
+    const r = evaluateCandidate({ ...passing, sesAnswers: { social_category_raw: 'a' } }, { ...DEFAULT_THRESHOLDS, sesCutoff: 10 })
+    expect(get(r, 'ses').value).toContain('15')
+    expect(get(r, 'ses').sortValue).toBe(15)
+  })
+
   it('groups criteria into need, work & availability, and engagement', () => {
     const r = evaluateCandidate(passing)
     expect(get(r, 'ses').group).toBe('need')
