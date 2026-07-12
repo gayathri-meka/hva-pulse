@@ -57,11 +57,12 @@ describe('evaluateCandidate', () => {
   })
 
   it('rejects and surfaces feedback when a single criterion fails', () => {
-    const r = evaluateCandidate({ ...passing, activeDays: 5 })
+    // Cramming is independent of the active/span/gap cluster, so it isolates cleanly.
+    const r = evaluateCandidate({ ...passing, crammingPct: 40 })
     expect(r.systemDecision).toBe('rejected')
-    expect(get(r, 'active_days').status).toBe('fail')
+    expect(get(r, 'cramming').status).toBe('fail')
     expect(r.failReasons).toHaveLength(1)
-    expect(r.failReasons[0]).toMatch(/active on 5 days/i)
+    expect(r.failReasons[0]).toMatch(/crammed/i)
   })
 
   it('collects feedback for every failed criterion', () => {
@@ -92,6 +93,23 @@ describe('evaluateCandidate', () => {
   it('treats cramming as strictly less than the threshold', () => {
     expect(get(evaluateCandidate({ ...passing, crammingPct: 30 }), 'cramming').status).toBe('fail')
     expect(get(evaluateCandidate({ ...passing, crammingPct: 29 }), 'cramming').status).toBe('pass')
+  })
+
+  it('consistency gates on gap days (span − active) < maxGapDays', () => {
+    // gap 2 (14 − 12) < 4 → pass; gap 5 (20 − 15) ≥ 4 → fail (other gates still pass).
+    expect(get(evaluateCandidate({ ...passing, spanDays: 14, activeDays: 12 }), 'consistency').status).toBe('pass')
+    const gappy = evaluateCandidate({ ...passing, spanDays: 20, activeDays: 15 })
+    expect(get(gappy, 'consistency').value).toBe('5 gap days')
+    expect(get(gappy, 'consistency').status).toBe('fail')
+    expect(gappy.systemDecision).toBe('rejected')
+  })
+
+  it('a disabled rule is shown but does not gate the decision', () => {
+    // Same gappy candidate, but with consistency turned off → no longer rejects.
+    const r = evaluateCandidate({ ...passing, spanDays: 20, activeDays: 15 }, { ...DEFAULT_THRESHOLDS, disabledRules: ['consistency'] })
+    expect(get(r, 'consistency').disabled).toBe(true)
+    expect(get(r, 'consistency').status).toBe('fail') // still computed/shown
+    expect(r.systemDecision).toBe('selected') // but not gating
   })
 
   it('has no unbuilt placeholders left; key-Q is informational', () => {
@@ -246,7 +264,7 @@ describe('evaluateCandidate', () => {
   })
 
   it('honours custom thresholds', () => {
-    const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90, maxWorkIncomeAnnual: 600_000 }
+    const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90, maxGapDays: 4, maxWorkIncomeAnnual: 600_000 }
     const weak: CandidateSignals = { attemptedQuestions: 6, totalQuestions: 200, activeDays: 2, spanDays: 2, crammingPct: 80, currentlyStudying: false, working: false }
     expect(evaluateCandidate(weak, lenient).systemDecision).toBe('selected')
     expect(evaluateCandidate(weak, DEFAULT_THRESHOLDS).systemDecision).toBe('rejected')

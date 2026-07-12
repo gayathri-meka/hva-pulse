@@ -447,7 +447,7 @@ export async function updateChallengeReviewConfig(input: {
 }): Promise<DecisionResult> {
   const user = await requireStaff()
   const t = input.thresholds
-  const bounds = [t.minQuestionsAttemptedPct, t.minActiveDays, t.minSpanDays, t.maxCrammingPct, t.maxWorkIncomeAnnual]
+  const bounds = [t.minQuestionsAttemptedPct, t.minActiveDays, t.minSpanDays, t.maxCrammingPct, t.maxGapDays, t.maxWorkIncomeAnnual]
   if (bounds.some((n) => !Number.isInteger(n) || n < 0))
     return { ok: false, error: 'Thresholds must be whole numbers (0 or greater).' }
   if (t.maxCrammingPct > 100) return { ok: false, error: 'Cramming % cannot exceed 100.' }
@@ -486,6 +486,8 @@ export async function updateChallengeReviewConfig(input: {
         min_active_days: t.minActiveDays,
         min_span_days: t.minSpanDays,
         max_cramming_pct: t.maxCrammingPct,
+        max_gap_days: t.maxGapDays,
+        disabled_rules: t.disabledRules ?? [],
         max_work_income_annual: t.maxWorkIncomeAnnual,
         max_per_capita_income_annual: perCapita ?? null,
         excluded_colleges: excludedColleges,

@@ -26,6 +26,9 @@ export type ReviewThresholds = {
   minActiveDays: number         // active days must be > this
   minSpanDays: number           // span (first→last, inclusive) must be >= this
   maxCrammingPct: number        // cramming % must be < this
+  // Consistency: (span − active days) must be < this — at most (N−1) idle days
+  // between first and last activity.
+  maxGapDays: number
   // A working candidate earning MORE than this per year is rejected regardless of
   // willingness to quit (their own annual salary). Editable "6 LPA" bar.
   maxWorkIncomeAnnual: number
@@ -39,7 +42,23 @@ export type ReviewThresholds = {
   // undefined = not configured → the SES criterion stays 'na'.
   sesWeights?: SesWeights
   sesCutoff?: number
+  // Criterion keys switched OFF — a disabled rule is shown but does NOT gate.
+  disabledRules?: string[]
 }
+
+// The gating criteria the team can toggle on/off (informational ones excluded).
+export const GATING_RULES: { key: string; label: string }[] = [
+  { key: 'ses', label: 'Financial need (SES)' },
+  { key: 'college', label: 'College' },
+  { key: 'per_capita_income', label: 'Per-capita income' },
+  { key: 'graduation_timeline', label: 'Graduation timeline' },
+  { key: 'work_commitment', label: 'Work commitment' },
+  { key: 'attempted_questions', label: 'Questions attempted' },
+  { key: 'active_days', label: 'Active days' },
+  { key: 'span', label: 'Span' },
+  { key: 'cramming', label: 'Cramming' },
+  { key: 'consistency', label: 'Consistency (gap days)' },
+]
 
 // Short label for a course type (for the criterion value display).
 function courseTypeShort(c: CandidateSignals['courseType']): string {
@@ -96,6 +115,7 @@ export const DEFAULT_THRESHOLDS: ReviewThresholds = {
   minActiveDays: 10,
   minSpanDays: 14,
   maxCrammingPct: 30,
+  maxGapDays: 4, // span − active < 4 → at most 3 idle days
   maxWorkIncomeAnnual: 600_000, // 6 LPA
 }
 
@@ -152,6 +172,7 @@ export type CriterionResult = {
   // unparseable (vs na because the gate isn't configured). Blocks auto-select →
   // 'review'. A not-yet-configured gate is NOT undetermined (stays neutral).
   undetermined?: boolean
+  disabled?: boolean // rule switched off in config — shown but does NOT gate
 }
 
 // 'review' = can't auto-decide: no hard fail, but ≥1 gate is undetermined for this
@@ -224,6 +245,9 @@ export function evaluateCandidate(
   // Share of the challenge's quiz questions this candidate attempted.
   const questionsAttemptedPct =
     signals.totalQuestions > 0 ? Math.round((signals.attemptedQuestions / signals.totalQuestions) * 100) : 0
+
+  // Consistency: idle days between first and last activity.
+  const gapDays = Math.max(0, signals.spanDays - signals.activeDays)
 
   // SES: weighted socio-economic need score (higher = more needy). Pass when ≥ cutoff.
   const ses = signals.sesAnswers ? computeSes(signals.sesAnswers, thresholds.sesWeights) : null
@@ -376,6 +400,18 @@ export function evaluateCandidate(
       failFeedback: `Too much of your work was crammed into one day (${signals.crammingPct}%); we look for steadier effort.`,
       sortValue: signals.crammingPct,
     },
+    {
+      // Consistency = idle days between first and last activity (span − active days).
+      key: 'consistency',
+      label: 'Consistency',
+      group: 'engagement',
+      placeholder: false,
+      status: gapDays < thresholds.maxGapDays ? 'pass' : 'fail',
+      value: `${gapDays} gap days`,
+      threshold: `Fewer than ${thresholds.maxGapDays} idle days between first and last activity`,
+      failFeedback: `Your activity had ${gapDays} idle days between sessions; we look for steadier day-to-day engagement.`,
+      sortValue: gapDays,
+    },
     // Challenge-question score — INFORMATIONAL only. % of questions passed across
     // the "[Coding] Challenges" tasks. Shown for context; never gates a decision.
     {
@@ -396,19 +432,23 @@ export function evaluateCandidate(
     },
   ]
 
-  // Informational criteria are shown for context but NEVER affect the decision.
-  // Decision precedence: a hard FAIL rejects; otherwise an UNDETERMINED gate (the
+  // Mark rules the team switched off — shown but non-gating.
+  const disabledSet = new Set(thresholds.disabledRules ?? [])
+  for (const c of criteria) if (disabledSet.has(c.key)) c.disabled = true
+
+  // Informational + disabled criteria are shown for context but NEVER affect the
+  // decision. Precedence: a hard FAIL rejects; otherwise an UNDETERMINED gate (the
   // candidate's own data is missing on an active gate) blocks auto-select → 'review';
   // otherwise every gate passes → 'selected'. A not-yet-configured gate ('na' but not
   // undetermined) stays neutral, so unconfigured gates don't flag everyone.
-  const gating = criteria.filter((c) => !c.informational)
+  const gating = criteria.filter((c) => !c.informational && !c.disabled)
   const systemDecision: SystemDecision = gating.some((c) => c.status === 'fail')
     ? 'rejected'
     : gating.some((c) => c.undetermined)
       ? 'review'
       : 'selected'
   const failReasons = criteria
-    .filter((c) => c.status === 'fail' && !c.informational && c.failFeedback)
+    .filter((c) => c.status === 'fail' && !c.informational && !c.disabled && c.failFeedback)
     .map((c) => c.failFeedback!)
 
   return { criteria, systemDecision, failReasons }

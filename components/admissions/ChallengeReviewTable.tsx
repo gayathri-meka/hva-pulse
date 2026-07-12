@@ -16,6 +16,7 @@ import {
   type ReviewThresholds,
 } from '@/lib/challengeReview'
 import { SES_RUBRIC, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
+import { GATING_RULES } from '@/lib/challengeReview'
 import {
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
@@ -55,6 +56,7 @@ const CRITERIA_COLS: { key: string; label: string }[] = [
   { key: 'active_days', label: 'Active' },
   { key: 'span', label: 'Span' },
   { key: 'cramming', label: 'Cramming' },
+  { key: 'consistency', label: 'Consistency' },
   { key: 'key_question_score', label: 'Challenge' },
 ]
 
@@ -65,6 +67,13 @@ const statusWord = (s: CriterionResult['status'] | undefined) =>
 function CriterionChip({ c }: { c: CriterionResult | undefined }) {
   if (!c || c.status === 'na')
     return <span className="text-zinc-300">—</span>
+  // Disabled rule — show the value muted + struck so it's clear it isn't gating.
+  if (c.disabled)
+    return (
+      <span title="Rule disabled — not gating the decision" className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-400 line-through">
+        {c.value}
+      </span>
+    )
   if (c.informational)
     return (
       <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-600 ring-1 ring-sky-200">
@@ -537,11 +546,52 @@ function EditRulesModal({
         Thresholds the system uses to recommend select vs reject. Operators are fixed; only the numbers are editable.
         Changing these re-evaluates every candidate.
       </p>
+
+      {/* Enable / disable rules */}
+      <div className="mb-4 rounded-lg border border-zinc-200 p-3">
+        <div className="text-sm font-medium text-zinc-700">Active rules</div>
+        <p className="mb-2 mt-0.5 text-[11px] text-zinc-400">Turn a rule off to stop it gating the decision (it still shows in the table, greyed out).</p>
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {GATING_RULES.map((r) => {
+            const disabled = (t.disabledRules ?? []).includes(r.key)
+            return (
+              <label key={r.key} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={!disabled}
+                  onChange={() => {
+                    const cur = t.disabledRules ?? []
+                    setT({ ...t, disabledRules: disabled ? cur.filter((k) => k !== r.key) : [...cur, r.key] })
+                  }}
+                  className="h-3.5 w-3.5 rounded border-zinc-300 accent-[#5BAE5B]"
+                />
+                <span className={disabled ? 'text-zinc-400 line-through' : ''}>{r.label}</span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
       <div className="divide-y divide-zinc-100">
         {field('minQuestionsAttemptedPct', 'Questions attempted must be at least', '%')}
         {field('minActiveDays', 'Active days must be greater than', 'days')}
         {field('minSpanDays', 'Span must be at least', 'days')}
         {field('maxCrammingPct', 'Cramming must be under', '%')}
+        <label className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm text-zinc-700">
+            Gap days (span − active) must be under
+            <span className="mt-0.5 block text-[11px] text-zinc-400">idle days between first and last activity · under 4 = at most 3 gaps</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <input
+              type="number"
+              value={t.maxGapDays}
+              onChange={(e) => setT({ ...t, maxGapDays: Number(e.target.value) })}
+              className="w-24 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+            />
+            <span className="text-xs text-zinc-400">days</span>
+          </span>
+        </label>
         <label className="flex items-center justify-between gap-3 py-2">
           <span className="text-sm text-zinc-700">
             Reject a working candidate earning over

@@ -171,7 +171,7 @@ describe('bulkConfirmChallengeDecisions', () => {
 })
 
 describe('updateChallengeReviewConfig', () => {
-  const good = { minQuestionsAttemptedPct: 40, minActiveDays: 10, minSpanDays: 14, maxCrammingPct: 30, maxWorkIncomeAnnual: 600_000 }
+  const good = { minQuestionsAttemptedPct: 40, minActiveDays: 10, minSpanDays: 14, maxCrammingPct: 30, maxGapDays: 4, maxWorkIncomeAnnual: 600_000 }
 
   test('rejects a non-staff caller', async () => {
     vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))

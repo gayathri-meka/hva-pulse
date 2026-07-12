@@ -270,11 +270,13 @@ export default async function AdmissionsChallengePage() {
         minActiveDays: cfg.min_active_days,
         minSpanDays: cfg.min_span_days,
         maxCrammingPct: cfg.max_cramming_pct,
+        maxGapDays: cfg.max_gap_days ?? DEFAULT_THRESHOLDS.maxGapDays,
         maxWorkIncomeAnnual: cfg.max_work_income_annual ?? DEFAULT_THRESHOLDS.maxWorkIncomeAnnual,
         maxPerCapitaIncomeAnnual: cfg.max_per_capita_income_annual ?? undefined,
         excludedColleges: cfg.excluded_colleges ?? [],
         sesWeights: (cfg.ses_weights ?? {}) as Record<string, number>,
         sesCutoff: cfg.ses_cutoff ?? undefined,
+        disabledRules: cfg.disabled_rules ?? [],
       }
     : DEFAULT_THRESHOLDS
 
