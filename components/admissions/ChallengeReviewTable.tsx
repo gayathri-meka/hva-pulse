@@ -282,6 +282,7 @@ export default function ChallengeReviewTable({
         data={rows}
         columns={columns}
         storageKey="challenge-review"
+        initialSorting={[{ id: 'name', desc: false }]}
         getRowId={(r) => r.email}
         enableRowSelection={canReview}
         pinnedLeft={['name']}
