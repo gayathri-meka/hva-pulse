@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { requireInterviewer } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { setInterviewOutcome } from '@/app/(protected)/admissions/interviews/actions'
-import { bookSlot } from '@/app/candidate/interview/actions'
+import { bookSlot, cancelMyInterview } from '@/app/candidate/interview/actions'
 
 vi.mock('@/lib/auth', () => ({ requireInterviewer: vi.fn(), requireStaff: vi.fn(), getAppUser: vi.fn() }))
 vi.mock('@/lib/supabase-server', () => ({ createServerSupabaseClient: vi.fn() }))
@@ -53,5 +53,25 @@ describe('bookSlot', () => {
     vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
     const res = await bookSlot('slot-1')
     expect(res).toEqual({ ok: false, error: expect.stringContaining('not eligible') })
+  })
+})
+
+describe('cancelMyInterview', () => {
+  function authEmail(email: string | null) {
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: email ? { email } : null } }) },
+    } as never)
+  }
+
+  test('asks an unauthenticated user to sign in', async () => {
+    authEmail(null)
+    expect(await cancelMyInterview('iv-1')).toEqual({ ok: false, error: expect.stringContaining('sign in') })
+  })
+
+  test('refuses to change a completed interview', async () => {
+    authEmail('cand@x.com')
+    const q = { select: vi.fn(() => q), eq: vi.fn(() => q), maybeSingle: vi.fn(() => Promise.resolve({ data: { id: 'iv-1', slot_id: 's1', status: 'completed', scheduled_at: '2030-01-01T00:00:00Z' } })) }
+    vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
+    expect(await cancelMyInterview('iv-1')).toEqual({ ok: false, error: expect.stringContaining('can no longer be changed') })
   })
 })

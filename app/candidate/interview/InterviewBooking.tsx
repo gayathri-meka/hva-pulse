@@ -1,108 +1,227 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { IconCheck } from '@tabler/icons-react'
-import { bookSlot, type BookingState } from './actions'
+import { IconCheck, IconVideo, IconClock } from '@tabler/icons-react'
+import { bookSlot, cancelMyInterview, type BookingState } from './actions'
 import type { InterviewSlot, Interview } from '@/lib/interviews'
 
-function dayLabel(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-}
-function timeLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-}
+const jakarta = { fontFamily: 'var(--font-jakarta), sans-serif' } as const
 
-function RoundCard({ interview }: { interview: Interview }) {
-  const done = interview.status === 'completed'
-  return (
-    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-bold text-zinc-900">Round {interview.round}</div>
-        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${done ? 'bg-emerald-50 text-emerald-700' : interview.status === 'no_show' ? 'bg-zinc-100 text-zinc-500' : 'bg-sky-50 text-sky-700'}`}>
-          {done ? 'Completed' : interview.status === 'no_show' ? 'Missed' : 'Confirmed'}
-        </span>
-      </div>
-      <div className="mt-1.5 text-sm text-zinc-600">{dayLabel(interview.scheduledAt)} · {timeLabel(interview.scheduledAt)}</div>
-      {interview.meetLink && (
-        <a href={interview.meetLink} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold text-sky-600 hover:text-sky-700">Join Google Meet →</a>
-      )}
-    </div>
-  )
+const dayKey = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
+const weekday = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short' })
+const dayNum = (iso: string) => new Date(iso).getDate()
+const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { month: 'short' })
+const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
 export default function InterviewBooking({ state }: { state: BookingState }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
 
   const booked = state.interviews.filter((i) => i.status !== 'cancelled').sort((a, b) => a.round - b.round)
 
-  // Group open slots by day.
-  const byDay = useMemo(() => {
+  // Open slots grouped by local calendar day (future only), ordered.
+  const days = useMemo(() => {
     const m = new Map<string, InterviewSlot[]>()
-    for (const s of state.openSlots) {
-      const k = dayLabel(s.startsAt)
+    for (const s of [...state.openSlots].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+      const k = dayKey(s.startsAt)
       if (!m.has(k)) m.set(k, [])
       m.get(k)!.push(s)
     }
-    return [...m.entries()]
+    return [...m.entries()].map(([key, slots]) => ({ key, slots }))
   }, [state.openSlots])
 
-  function book(slotId: string) {
+  // Default-select the first available day.
+  useEffect(() => {
+    if (state.nextRound && days.length && !days.some((d) => d.key === selectedDay)) {
+      setSelectedDay(days[0].key)
+      setSelectedSlot(null)
+    }
+  }, [days, state.nextRound, selectedDay])
+
+  const daySlots = days.find((d) => d.key === selectedDay)?.slots ?? []
+  const chosen = state.openSlots.find((s) => s.id === selectedSlot)
+
+  function book() {
+    if (!selectedSlot) return
     setError(null)
     startTransition(async () => {
-      const res = await bookSlot(slotId)
+      const res = await bookSlot(selectedSlot)
+      if (!res.ok) { setError(res.error); return }
+      setSelectedSlot(null)
+      router.refresh()
+    })
+  }
+  function reschedule(id: string) {
+    setError(null)
+    startTransition(async () => {
+      const res = await cancelMyInterview(id)
       if (!res.ok) { setError(res.error); return }
       router.refresh()
     })
   }
 
   return (
-    <div className="space-y-5">
-      {booked.map((i) => <RoundCard key={i.id} interview={i} />)}
+    <div className="space-y-4">
+      {booked.map((i) => <RoundCard key={i.id} interview={i} onReschedule={reschedule} pending={pending} />)}
 
-      {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       {state.nextRound === null ? (
         booked.length > 0 && booked.every((i) => i.status === 'completed') ? (
-          <div className="flex items-center gap-2 rounded-2xl border-[0.5px] border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800">
-            <IconCheck size={18} /> Both interviews done — we&apos;ll be in touch with the outcome.
+          <div className="flex items-center gap-2 rounded-2xl border-[0.5px] border-emerald-200 bg-[#f0fdf4] p-5 text-sm text-emerald-800">
+            <IconCheck size={18} /> You&apos;re all set — both interviews done. We&apos;ll be in touch with the outcome.
           </div>
         ) : (
           <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5 text-sm text-zinc-600">
             {booked.some((i) => i.round === 1 && i.status !== 'completed')
-              ? 'Once your first interview is done, your second round will open up here.'
+              ? 'Your Round 2 slot will open up here once your first interview is done.'
               : 'Nothing to book right now.'}
           </div>
         )
       ) : (
-        <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5">
-          <div className="mb-3 text-sm font-bold text-zinc-900">Pick a slot for Round {state.nextRound}</div>
-          {byDay.length === 0 ? (
-            <p className="text-sm text-zinc-500">No slots are open right now. Please check back soon — we&apos;re adding availability.</p>
-          ) : (
-            <div className="space-y-4">
-              {byDay.map(([day, slots]) => (
-                <div key={day}>
-                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">{day}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {slots.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => book(s.id)}
-                        disabled={pending}
-                        className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-[#5BAE5B] hover:bg-emerald-50 disabled:opacity-50"
-                      >
-                        {timeLabel(s.startsAt)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <Picker
+          round={state.nextRound}
+          days={days}
+          daySlots={daySlots}
+          selectedDay={selectedDay}
+          selectedSlot={selectedSlot}
+          chosen={chosen}
+          pending={pending}
+          onPickDay={(k) => { setSelectedDay(k); setSelectedSlot(null) }}
+          onPickSlot={setSelectedSlot}
+          onBook={book}
+        />
+      )}
+    </div>
+  )
+}
+
+function RoundCard({ interview, onReschedule, pending }: { interview: Interview; onReschedule: (id: string) => void; pending: boolean }) {
+  const done = interview.status === 'completed'
+  const noShow = interview.status === 'no_show'
+  const upcoming = (interview.status === 'confirmed' || interview.status === 'booked') && new Date(interview.scheduledAt).getTime() > Date.now()
+  return (
+    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-extrabold text-zinc-900">Round {interview.round}</div>
+        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${done ? 'bg-emerald-50 text-emerald-700' : noShow ? 'bg-zinc-100 text-zinc-500' : 'bg-sky-50 text-sky-700'}`}>
+          {done ? 'Completed' : noShow ? 'Missed' : 'Confirmed'}
+        </span>
+      </div>
+      <div className="mt-1.5 text-[15px] font-bold text-zinc-900" style={jakarta}>{fullDay(interview.scheduledAt)}</div>
+      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 30 minutes</div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {interview.meetLink && (
+          <a href={interview.meetLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-[#0f1f0f] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#15301a]">
+            <IconVideo size={15} /> Join Google Meet
+          </a>
+        )}
+        {upcoming && (
+          <button onClick={() => onReschedule(interview.id)} disabled={pending} className="text-[13px] font-semibold text-zinc-500 underline underline-offset-2 hover:text-zinc-700 disabled:opacity-50">
+            Change time
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Picker({
+  round, days, daySlots, selectedDay, selectedSlot, chosen, pending, onPickDay, onPickSlot, onBook,
+}: {
+  round: 1 | 2
+  days: { key: string; slots: InterviewSlot[] }[]
+  daySlots: InterviewSlot[]
+  selectedDay: string | null
+  selectedSlot: string | null
+  chosen: InterviewSlot | undefined
+  pending: boolean
+  onPickDay: (k: string) => void
+  onPickSlot: (id: string) => void
+  onBook: () => void
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border-[0.5px] border-zinc-200 bg-white">
+      <div className="border-b border-zinc-100 px-5 pb-4 pt-5">
+        <div className="text-[17px] font-black text-zinc-900" style={jakarta}>Book your Round {round} interview</div>
+        <p className="mt-0.5 text-[13px] leading-[1.5] text-zinc-500">A 30-minute video call with the HVA team. Pick a day and time that works for you.</p>
+      </div>
+
+      {days.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-zinc-500">
+          No times are open right now — we&apos;re adding availability. Please check back soon.
         </div>
+      ) : (
+        <>
+          {/* Day pills */}
+          <div className="flex gap-2 overflow-x-auto px-5 pb-1 pt-4">
+            {days.map(({ key, slots }) => {
+              const iso = slots[0].startsAt
+              const active = key === selectedDay
+              return (
+                <button
+                  key={key}
+                  onClick={() => onPickDay(key)}
+                  className={`flex min-w-[58px] shrink-0 flex-col items-center rounded-2xl border px-2.5 py-2 transition-colors ${
+                    active ? 'border-[#5BAE5B] bg-[#f0fdf4]' : 'border-zinc-200 bg-white hover:border-zinc-300'
+                  }`}
+                >
+                  <span className={`text-[11px] font-bold uppercase ${active ? 'text-[#166534]' : 'text-zinc-400'}`}>{weekday(iso)}</span>
+                  <span className={`text-[19px] font-black leading-tight ${active ? 'text-[#166534]' : 'text-zinc-900'}`} style={jakarta}>{dayNum(iso)}</span>
+                  <span className={`text-[10px] font-semibold ${active ? 'text-[#16a34a]' : 'text-zinc-400'}`}>{monthShort(iso)}</span>
+                  <span className={`mt-0.5 text-[10px] font-bold ${active ? 'text-[#16a34a]' : 'text-zinc-300'}`}>{slots.length} slot{slots.length === 1 ? '' : 's'}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Time chips */}
+          <div className="px-5 pb-4 pt-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-zinc-700">
+              <IconClock size={15} className="text-[#16a34a]" />
+              {selectedDay ? fullDay(daySlots[0]?.startsAt ?? '') : 'Pick a day'}
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {daySlots.map((s) => {
+                const active = s.id === selectedSlot
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => onPickSlot(s.id)}
+                    className={`rounded-xl border px-2 py-2.5 text-[14px] font-bold transition-colors ${
+                      active ? 'border-[#5BAE5B] bg-[#5BAE5B] text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:border-[#5BAE5B] hover:bg-[#f0fdf4]'
+                    }`}
+                  >
+                    {timeLabel(s.startsAt)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Confirm */}
+          <div className="border-t border-zinc-100 p-4">
+            <button
+              onClick={onBook}
+              disabled={!selectedSlot || pending}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-4 text-[15px] font-extrabold text-white transition-all hover:bg-[#15301a] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {pending
+                ? 'Booking…'
+                : chosen
+                  ? <>Confirm · {new Date(chosen.startsAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}, {timeLabel(chosen.startsAt)} <span aria-hidden>→</span></>
+                  : 'Pick a time to confirm'}
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

@@ -124,3 +124,32 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   revalidatePath('/candidate/interview')
   return { ok: true }
 }
+
+/** Candidate cancels their own upcoming interview (to reschedule). Frees the slot. */
+export async function cancelMyInterview(interviewId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const email = await authedCandidateEmail()
+  if (!email) return { ok: false, error: 'Please sign in again.' }
+
+  const { data: iv } = await admin()
+    .from('interviews')
+    .select('id, slot_id, status, scheduled_at')
+    .eq('id', interviewId)
+    .eq('candidate_email', email)
+    .maybeSingle()
+  if (!iv) return { ok: false, error: 'Interview not found.' }
+  if (iv.status !== 'booked' && iv.status !== 'confirmed')
+    return { ok: false, error: 'This interview can no longer be changed.' }
+  if (new Date(iv.scheduled_at).getTime() <= Date.now())
+    return { ok: false, error: 'This interview has already started — contact the team to change it.' }
+
+  const { error } = await admin()
+    .from('interviews')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', interviewId)
+  if (error) return { ok: false, error: error.message }
+  // Free the slot back to the pool so it (or another) can be re-booked.
+  if (iv.slot_id) await admin().from('interview_slots').update({ status: 'open' }).eq('id', iv.slot_id).eq('status', 'booked')
+
+  revalidatePath('/candidate/interview')
+  return { ok: true }
+}
