@@ -3,6 +3,7 @@ import {
   challengeFunnel,
   challengeEventDates,
   challengeStatusByEmail,
+  candidateChallengeProgress,
   type ChallengeRawRow,
 } from '@/lib/challengeFunnel'
 
@@ -51,6 +52,33 @@ describe('challengeFunnel', () => {
   test('ignores blank emails', () => {
     const rows: ChallengeRawRow[] = [row('', 'completed', 't1'), row(null, 'completed', 't1')]
     expect(challengeFunnel(rows)).toEqual({ joined: 0, started: 0, completed: 0, attemptedAllItems: 0 })
+  })
+
+  test('candidateChallengeProgress reports item %, started, and 100%', () => {
+    // reading done (1/1) + 4 of 10 quiz questions → 5 of 11 items ≈ 45%.
+    const partial = candidateChallengeProgress([
+      row('me@x.com', 'completed', 'read', { task_type: 'learning_material' }),
+      row('me@x.com', 'attempted', 'quiz', { task_type: 'quiz', total_questions: '10', attempted_questions: '4' }),
+    ])
+    expect(partial.started).toBe(true)
+    expect(partial.percent).toBe(45)
+    expect(partial.attemptedAllItems).toBe(false)
+
+    // never touched → not started, 0%.
+    const none = candidateChallengeProgress([
+      row('me@x.com', 'not_started', 'read', { task_type: 'learning_material' }),
+      row('me@x.com', 'not_started', 'quiz', { task_type: 'quiz', total_questions: '10', attempted_questions: '0' }),
+    ])
+    expect(none.started).toBe(false)
+    expect(none.percent).toBe(0)
+
+    // all items → 100%.
+    const done = candidateChallengeProgress([
+      row('me@x.com', 'completed', 'read', { task_type: 'learning_material' }),
+      row('me@x.com', 'attempted', 'quiz', { task_type: 'quiz', total_questions: '10', attempted_questions: '10' }),
+    ])
+    expect(done.percent).toBe(100)
+    expect(done.attemptedAllItems).toBe(true)
   })
 
   test('attemptedAllItems counts items (quiz questions + reading), not tasks', () => {

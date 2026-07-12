@@ -44,14 +44,15 @@ export default async function CandidateLayout({
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
-  const { data: prospect } = await admin
-    .from('prospects')
-    .select('interest_form_submitted_at')
-    .eq('email', email)
-    .maybeSingle()
+  const [{ data: prospect }, { data: decision }] = await Promise.all([
+    admin.from('prospects').select('interest_form_submitted_at').eq('email', email).maybeSingle(),
+    admin.from('challenge_decisions').select('final_decision, published_at').eq('email', email).maybeSingle(),
+  ])
 
   const completedStages: string[] = []
   if (prospect?.interest_form_submitted_at) completedStages.push('interest-form')
+  // Once a decision is released, the challenge is behind them → mark it green.
+  if (decision?.published_at) completedStages.push('challenge')
 
   return (
     <div

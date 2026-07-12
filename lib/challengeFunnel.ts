@@ -55,6 +55,34 @@ export function challengeFunnel(rows: ChallengeRawRow[]): ChallengeFunnel {
   return { joined, started, completed, attemptedAllItems }
 }
 
+// One candidate's challenge progress (item-based: reading tasks + quiz questions).
+// `rows` must already be filtered to that candidate's email. Deduped by task.
+export type CandidateChallengeProgress = {
+  started: boolean
+  itemsTotal: number
+  itemsAttempted: number
+  percent: number
+  attemptedAllItems: boolean // hit 100%
+}
+export function candidateChallengeProgress(rows: ChallengeRawRow[]): CandidateChallengeProgress {
+  let itemsTotal = 0
+  let itemsAttempted = 0
+  let started = false
+  const seen = new Set<string>()
+  for (const r of rows) {
+    const dim = r.dimensions ?? {}
+    const taskId = dim.task_id ?? ''
+    if (taskId && seen.has(taskId)) continue
+    if (taskId) seen.add(taskId)
+    if ((dim.state ?? 'not_started') !== 'not_started') started = true
+    const ic = itemCounts(dim)
+    itemsTotal += ic.total
+    itemsAttempted += ic.attempted
+  }
+  const percent = itemsTotal > 0 ? Math.round((itemsAttempted / itemsTotal) * 100) : 0
+  return { started, itemsTotal, itemsAttempted, percent, attemptedAllItems: itemsTotal > 0 && itemsAttempted >= itemsTotal }
+}
+
 // BigQuery TIMESTAMPs land in metric_raw_rows as epoch-SECONDS strings, often in
 // scientific notation (e.g. "1.781678026E9"). Parse to epoch-ms, or null if absent.
 function epochMs(v: string | null | undefined): number | null {
