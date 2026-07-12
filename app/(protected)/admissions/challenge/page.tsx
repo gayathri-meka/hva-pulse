@@ -304,6 +304,8 @@ export default async function AdmissionsChallengePage() {
     const signals = {
       attemptedQuestions: m.attemptedQuestions,
       totalQuestions: totals.questions,
+      attemptedItems: m.attemptedItems,
+      totalItems: totals.items,
       keyQuestionScorePct: m.keyQuestionScorePct,
       keyQuestionAvgScore: m.keyQuestionAvgScore,
       activeDays: pace.activeDays,
