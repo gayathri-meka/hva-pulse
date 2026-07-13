@@ -171,6 +171,7 @@ export default function ChallengeReviewTable({
   const rejectedCount = rows.filter((r) => r.finalDecision === 'rejected').length
   const publishedCount = rows.filter((r) => r.published).length
   const sysSelected = rows.filter((r) => r.systemDecision === 'selected').length
+  const sysRejected = rows.filter((r) => r.systemDecision === 'rejected').length
   const sysReview = rows.filter((r) => r.systemDecision === 'review').length
   const sysInProgress = rows.filter((r) => r.systemDecision === 'in_progress').length
 
@@ -372,6 +373,7 @@ export default function ChallengeReviewTable({
         <span className="h-4 w-px bg-zinc-200" aria-hidden />
         <span className="text-zinc-400">
           System suggests <strong className="text-emerald-600">{sysSelected}</strong> select
+          {' '}· <strong className="text-red-600">{sysRejected}</strong> reject
           {sysReview > 0 && <> · <strong className="text-amber-600">{sysReview}</strong> need review</>}
           {sysInProgress > 0 && <> · <strong className="text-slate-500">{sysInProgress}</strong> in progress</>}
         </span>
