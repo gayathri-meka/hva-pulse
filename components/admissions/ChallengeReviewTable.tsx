@@ -97,6 +97,8 @@ function CriterionChip({ c }: { c: CriterionResult | undefined }) {
 }
 
 function DecisionBadge({ decision }: { decision: SystemDecision }) {
+  if (decision === 'in_progress')
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">IN PROGRESS</span>
   if (decision === 'selected')
     return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">SELECT</span>
   if (decision === 'review')
@@ -170,6 +172,7 @@ export default function ChallengeReviewTable({
   const publishedCount = rows.filter((r) => r.published).length
   const sysSelected = rows.filter((r) => r.systemDecision === 'selected').length
   const sysReview = rows.filter((r) => r.systemDecision === 'review').length
+  const sysInProgress = rows.filter((r) => r.systemDecision === 'in_progress').length
 
   const openRow = openEmail ? rows.find((r) => r.email === openEmail) ?? null : null
 
@@ -189,7 +192,7 @@ export default function ChallengeReviewTable({
           </button>
         ),
       }),
-      col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : r.systemDecision === 'review' ? 'Review' : 'Reject'), {
+      col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : r.systemDecision === 'review' ? 'Review' : r.systemDecision === 'in_progress' ? 'In progress' : 'Reject'), {
         id: 'system',
         header: 'System',
         size: 100,
@@ -370,6 +373,7 @@ export default function ChallengeReviewTable({
         <span className="text-zinc-400">
           System suggests <strong className="text-emerald-600">{sysSelected}</strong> select
           {sysReview > 0 && <> · <strong className="text-amber-600">{sysReview}</strong> need review</>}
+          {sysInProgress > 0 && <> · <strong className="text-slate-500">{sysInProgress}</strong> in progress</>}
         </span>
       </div>
 
@@ -460,11 +464,11 @@ export default function ChallengeReviewTable({
             <strong className="text-emerald-700">selected</strong> and{' '}
             {bulkRows.filter((r) => r.systemDecision === 'rejected').length}{' '}
             <strong className="text-red-700">rejected</strong>.
-            {bulkRows.filter((r) => r.systemDecision === 'review').length > 0 && (
+            {bulkRows.filter((r) => r.systemDecision === 'review' || r.systemDecision === 'in_progress').length > 0 && (
               <>
                 {' '}
-                <strong className="text-amber-700">{bulkRows.filter((r) => r.systemDecision === 'review').length}</strong> flagged{' '}
-                <strong className="text-amber-700">needs review</strong> will be skipped — decide those in the drawer.
+                <strong className="text-amber-700">{bulkRows.filter((r) => r.systemDecision === 'review' || r.systemDecision === 'in_progress').length}</strong>{' '}
+                still <strong className="text-amber-700">in progress or needing review</strong> will be skipped — handle those in the drawer.
               </>
             )}{' '}
             Overrides must be done one at a time in the drawer.
@@ -695,6 +699,18 @@ function EditRulesModal({
             />
             <span className="text-xs text-zinc-400">₹/yr</span>
           </span>
+        </label>
+        <label className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm text-zinc-700">
+            Challenge end date
+            <span className="mt-0.5 block text-[11px] text-zinc-400">after this, everyone is evaluated · before it, mid-challenge learners stay &ldquo;In progress&rdquo; (a learner is also finished 14 days after their first activity) · blank = not set</span>
+          </span>
+          <input
+            type="date"
+            value={t.challengeEndDate ?? ''}
+            onChange={(e) => setT({ ...t, challengeEndDate: e.target.value || undefined })}
+            className="rounded-lg border border-zinc-300 px-2.5 py-1 text-sm text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+          />
         </label>
       </div>
 

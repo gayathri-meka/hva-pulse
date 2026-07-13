@@ -353,8 +353,9 @@ export async function bulkConfirmChallengeDecisions(input: {
 
   const now = new Date().toISOString()
   const rows = input.items
-    // 'review' isn't a confirmable verdict — those need a human to decide individually.
-    .filter((it) => normEmail(it.email) && it.systemDecision !== 'review')
+    // 'review'/'in_progress' aren't confirmable verdicts — skip them (review needs a
+    // human; in_progress hasn't finished the challenge).
+    .filter((it) => normEmail(it.email) && it.systemDecision !== 'review' && it.systemDecision !== 'in_progress')
     .map((it) => ({
       email: normEmail(it.email),
       cohort_id: input.cohortId,
@@ -488,6 +489,7 @@ export async function updateChallengeReviewConfig(input: {
         max_cramming_pct: t.maxCrammingPct,
         max_gap_days: t.maxGapDays,
         disabled_rules: t.disabledRules ?? [],
+        challenge_end_date: t.challengeEndDate || null,
         max_work_income_annual: t.maxWorkIncomeAnnual,
         max_per_capita_income_annual: perCapita ?? null,
         excluded_colleges: excludedColleges,

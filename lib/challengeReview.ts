@@ -44,6 +44,10 @@ export type ReviewThresholds = {
   sesCutoff?: number
   // Criterion keys switched OFF — a disabled rule is shown but does NOT gate.
   disabledRules?: string[]
+  // Cohort challenge end date (ISO date). Once it passes, everyone is "finished" and
+  // gets evaluated (backstop for never-started learners). Undefined = only the
+  // per-candidate 14-day window applies.
+  challengeEndDate?: string
 }
 
 // The gating criteria the team can toggle on/off (informational ones excluded).
@@ -131,6 +135,10 @@ export type CandidateSignals = {
   activeDays: number
   spanDays: number
   crammingPct: number
+  // Has the candidate FINISHED the 14-day challenge? (14 days since their first
+  // activity, or the cohort end date passed.) Undefined = treat as finished. When
+  // false, the system returns 'in_progress' and NO rules gate.
+  challengeFinished?: boolean
   // SES rubric answers, keyed by rawField (place_raw, marital_raw, …). Scored via lib/ses.
   sesAnswers?: Record<string, string | null | undefined>
   // Informational (never gates): % of "[Coding] Challenges" questions passed, and
@@ -148,6 +156,30 @@ export type CandidateSignals = {
   monthlySalaryInr?: number    // the candidate's own monthly salary/stipend (₹)
   familyAnnualIncomeInr?: number // total family income per year (₹)
   familySize?: number          // total people in the family (per-capita denominator)
+}
+
+// The challenge is 14 days. A candidate has FINISHED once their 14-day window has
+// elapsed (with SensAI's daily drip they can't finish sooner), or the cohort end
+// date has passed. Until then they're 'in_progress' and no rules run.
+export const CHALLENGE_LENGTH_DAYS = 14
+
+export function isChallengeFinished(
+  firstActive: string | null,
+  nowMs: number,
+  challengeEndDate?: string,
+): boolean {
+  // Cohort backstop — end date passed → the whole cohort is finished (covers
+  // never-started learners, who have no personal window).
+  if (challengeEndDate) {
+    const end = new Date(`${challengeEndDate}T23:59:59Z`).getTime()
+    if (Number.isFinite(end) && nowMs > end) return true
+  }
+  // Per-candidate — their 14-day window (from first activity) has elapsed.
+  if (firstActive) {
+    const start = new Date(firstActive).getTime()
+    if (Number.isFinite(start) && (nowMs - start) / 86_400_000 >= CHALLENGE_LENGTH_DAYS) return true
+  }
+  return false
 }
 
 // Regular (full-time / part-time) students must finish BY this year. Distance /
@@ -179,9 +211,10 @@ export type CriterionResult = {
   disabled?: boolean // rule switched off in config — shown but does NOT gate
 }
 
-// 'review' = can't auto-decide: no hard fail, but ≥1 gate is undetermined for this
-// candidate (their data is missing), so we don't auto-select — a human resolves it.
-export type SystemDecision = 'selected' | 'rejected' | 'review'
+// 'in_progress' = the candidate hasn't FINISHED the 14-day challenge yet, so NO
+// rules are evaluated (mid-challenge learners can't fail the 14-day-window rules).
+// 'review' = finished + can't auto-decide (a gate is undetermined — data missing).
+export type SystemDecision = 'selected' | 'rejected' | 'review' | 'in_progress'
 
 export type ReviewEvaluation = {
   criteria: CriterionResult[]
@@ -441,19 +474,27 @@ export function evaluateCandidate(
   for (const c of criteria) if (disabledSet.has(c.key)) c.disabled = true
 
   // Informational + disabled criteria are shown for context but NEVER affect the
-  // decision. Precedence: a hard FAIL rejects; otherwise an UNDETERMINED gate (the
-  // candidate's own data is missing on an active gate) blocks auto-select → 'review';
-  // otherwise every gate passes → 'selected'. A not-yet-configured gate ('na' but not
-  // undetermined) stays neutral, so unconfigured gates don't flag everyone.
+  // decision. Precedence: still mid-challenge → 'in_progress' (no rules run — the
+  // 14-day-window rules can't be judged yet); otherwise a hard FAIL rejects; an
+  // UNDETERMINED gate (candidate data missing on an active gate) → 'review'; every
+  // gate passes → 'selected'. A not-yet-configured gate ('na' but not undetermined)
+  // stays neutral, so unconfigured gates don't flag everyone.
   const gating = criteria.filter((c) => !c.informational && !c.disabled)
-  const systemDecision: SystemDecision = gating.some((c) => c.status === 'fail')
-    ? 'rejected'
-    : gating.some((c) => c.undetermined)
-      ? 'review'
-      : 'selected'
-  const failReasons = criteria
-    .filter((c) => c.status === 'fail' && !c.informational && !c.disabled && c.failFeedback)
-    .map((c) => c.failFeedback!)
+  const systemDecision: SystemDecision =
+    signals.challengeFinished === false
+      ? 'in_progress'
+      : gating.some((c) => c.status === 'fail')
+        ? 'rejected'
+        : gating.some((c) => c.undetermined)
+          ? 'review'
+          : 'selected'
+  // No codified reasons while in progress (they're not being rejected).
+  const failReasons =
+    systemDecision === 'in_progress'
+      ? []
+      : criteria
+          .filter((c) => c.status === 'fail' && !c.informational && !c.disabled && c.failFeedback)
+          .map((c) => c.failFeedback!)
 
   return { criteria, systemDecision, failReasons }
 }

@@ -11,6 +11,7 @@ import ChallengeClient, {
 import { paceMetrics } from '@/lib/challengePace'
 import {
   evaluateCandidate,
+  isChallengeFinished,
   DEFAULT_THRESHOLDS,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
@@ -277,6 +278,7 @@ export default async function AdmissionsChallengePage() {
         sesWeights: (cfg.ses_weights ?? {}) as Record<string, number>,
         sesCutoff: cfg.ses_cutoff ?? undefined,
         disabledRules: cfg.disabled_rules ?? [],
+        challengeEndDate: cfg.challenge_end_date ?? undefined,
       }
     : DEFAULT_THRESHOLDS
 
@@ -306,6 +308,7 @@ export default async function AdmissionsChallengePage() {
       totalQuestions: totals.questions,
       attemptedItems: m.attemptedItems,
       totalItems: totals.items,
+      challengeFinished: isChallengeFinished(m.firstActive, Date.now(), thresholds.challengeEndDate),
       keyQuestionScorePct: m.keyQuestionScorePct,
       keyQuestionAvgScore: m.keyQuestionAvgScore,
       activeDays: pace.activeDays,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   evaluateCandidate,
   isExcludedCollege,
+  isChallengeFinished,
   DEFAULT_THRESHOLDS,
   type CandidateSignals,
 } from '@/lib/challengeReview'
@@ -46,6 +47,21 @@ const passing: CandidateSignals = {
 
 const get = (r: ReturnType<typeof evaluateCandidate>, key: string) =>
   r.criteria.find((c) => c.key === key)!
+
+describe('isChallengeFinished', () => {
+  const DAY = 86_400_000
+  const now = new Date('2026-07-20T12:00:00Z').getTime()
+  it('finished once 14 days have passed since first activity', () => {
+    expect(isChallengeFinished(new Date(now - 5 * DAY).toISOString(), now)).toBe(false) // day 5
+    expect(isChallengeFinished(new Date(now - 13 * DAY).toISOString(), now)).toBe(false) // day 14, still in window
+    expect(isChallengeFinished(new Date(now - 14 * DAY).toISOString(), now)).toBe(true) // window elapsed
+  })
+  it('never-started (no first activity) is only finished once the cohort end date passes', () => {
+    expect(isChallengeFinished(null, now)).toBe(false)
+    expect(isChallengeFinished(null, now, '2026-07-25')).toBe(false) // end date not yet
+    expect(isChallengeFinished(null, now, '2026-07-19')).toBe(true) // end date passed
+  })
+})
 
 describe('evaluateCandidate', () => {
   it('selects a candidate who clears every implemented criterion', () => {
@@ -120,6 +136,16 @@ describe('evaluateCandidate', () => {
       expect(get(r, key).placeholder).toBe(false)
     }
     expect(get(r, 'key_question_score').informational).toBe(true)
+  })
+
+  it('is "in_progress" while unfinished — no rules run, even with hard fails', () => {
+    // A candidate mid-challenge (span 5 < 14) would normally REJECT; while unfinished
+    // the system must not evaluate → in_progress, no fail reasons.
+    const r = evaluateCandidate({ ...passing, spanDays: 5, activeDays: 3, crammingPct: 90, challengeFinished: false })
+    expect(r.systemDecision).toBe('in_progress')
+    expect(r.failReasons).toEqual([])
+    // Once finished, the same signals evaluate normally → rejected.
+    expect(evaluateCandidate({ ...passing, spanDays: 5, activeDays: 3, crammingPct: 90, challengeFinished: true }).systemDecision).toBe('rejected')
   })
 
   it('never lets the informational Challenge-question score gate the decision', () => {

@@ -125,13 +125,21 @@ export default function ChallengeReviewDrawer({
   }, [onClose])
 
   const systemLabel =
-    row.systemDecision === 'selected' ? 'SELECT' : row.systemDecision === 'review' ? 'NEEDS REVIEW' : 'REJECT'
+    row.systemDecision === 'selected'
+      ? 'SELECT'
+      : row.systemDecision === 'review'
+        ? 'NEEDS REVIEW'
+        : row.systemDecision === 'in_progress'
+          ? 'IN PROGRESS'
+          : 'REJECT'
   const systemTone =
     row.systemDecision === 'selected'
       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
       : row.systemDecision === 'review'
         ? 'border-amber-200 bg-amber-50 text-amber-800'
-        : 'border-red-200 bg-red-50 text-red-800'
+        : row.systemDecision === 'in_progress'
+          ? 'border-slate-200 bg-slate-50 text-slate-600'
+          : 'border-red-200 bg-red-50 text-red-800'
 
   function decide(decision: 'selected' | 'rejected') {
     setError(null)
