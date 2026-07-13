@@ -32,7 +32,7 @@ export default async function InterviewPage() {
             Book your interviews
           </h1>
           <p className="mx-auto mt-2 max-w-md text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
-            You&apos;re through to the interview round 🎉 There are two — book the first, and the second opens once it&apos;s done.
+            You&apos;re selected — congratulations! 🎉 There are two interviews: book the first below, and the second opens once it&apos;s done.
           </p>
         </div>
       </section>

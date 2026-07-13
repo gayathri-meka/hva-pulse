@@ -43,7 +43,7 @@ export default async function SelectionPage() {
       iconColor: '#16a34a',
       Icon: IconConfetti,
       eyebrow: 'Selection',
-      title: "You're through to the interview! 🎉",
+      title: "You're selected! 🎉",
       body:
         "Great work on the challenge. You've been selected for the interview round. Head to the Interview step to book your slots.",
     }

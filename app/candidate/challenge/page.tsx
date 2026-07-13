@@ -177,9 +177,9 @@ function SelectedCard({ firstName }: { firstName: string }) {
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#dcfce7]">
         <IconConfetti size={30} stroke={2} className="text-[#16a34a]" />
       </div>
-      <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#16a34a]">You&apos;re through!</div>
+      <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#16a34a]">You&apos;re selected!</div>
       <h2 className="mt-1.5 text-[22px] font-black text-zinc-900 sm:text-[26px]" style={{ ...jakarta, lineHeight: 1.2 }}>
-        You&apos;re through to the interview, {firstName}! 🎉
+        You&apos;re selected, {firstName}! 🎉
       </h2>
       <p className="mx-auto mt-2 max-w-md text-[13px] leading-[1.6] text-zinc-600 sm:text-[14px]">
         Congratulations — you&apos;ve been selected for the interview round. Head over to the Interview tab to pick a
