@@ -117,7 +117,7 @@ function RoundCard({ interview, onReschedule, pending }: { interview: Interview;
         </span>
       </div>
       <div className="mt-1.5 text-[15px] font-bold text-zinc-900" style={jakarta}>{fullDay(interview.scheduledAt)}</div>
-      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 30 minutes</div>
+      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 1 hour</div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         {interview.meetLink && (
           <a href={interview.meetLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-[#0f1f0f] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#15301a]">
@@ -150,9 +150,9 @@ function Picker({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border-[0.5px] border-zinc-200 bg-white">
-      <div className="border-b border-zinc-100 px-5 pb-4 pt-5">
+      <div className="border-b border-zinc-100 px-5 pb-4 pt-6 sm:pt-7">
         <div className="text-[17px] font-black text-zinc-900" style={jakarta}>Book your Round {round} interview</div>
-        <p className="mt-0.5 text-[13px] leading-[1.5] text-zinc-500">A 30-minute video call with the HVA team. Pick a day and time that works for you.</p>
+        <p className="mt-0.5 text-[13px] leading-[1.5] text-zinc-500">A 1-hour video call with the HVA team. Pick a day and time that works for you.</p>
       </div>
 
       {days.length === 0 ? (

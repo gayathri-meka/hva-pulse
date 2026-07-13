@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { syncWeekAvailability, setInterviewOutcome } from '../actions'
 import type { InterviewSlot, Interview } from '@/lib/interviews'
 
-const HALF = 30 * 60_000
+const HOUR = 60 * 60_000
 const DAY = 24 * 60 * 60_000
-const ROWS = 48 // 30-min cells across 24h
+const ROWS = 24 // one-hour cells across 24h; each cell = one 1-hour slot
 
 type Iv = Interview & { candidateName: string | null }
 
@@ -53,7 +53,7 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
   const dragMode = useRef<'add' | 'erase'>('add')
 
   function cellStart(dayIdx: number, row: number) {
-    return new Date(weekStart.getTime() + dayIdx * DAY + row * HALF)
+    return new Date(weekStart.getTime() + dayIdx * DAY + row * HOUR)
   }
   function apply(iso: string, mode: 'add' | 'erase') {
     const next = new Set(paintedRef.current)
@@ -130,7 +130,7 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
   }
 
   const upcoming = interviews
-    .filter((i) => (i.status === 'booked' || i.status === 'confirmed') && new Date(i.scheduledAt).getTime() > now - HALF)
+    .filter((i) => (i.status === 'booked' || i.status === 'confirmed') && new Date(i.scheduledAt).getTime() > now - HOUR)
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
 
   return (
@@ -220,12 +220,11 @@ function RowCells({
   onDown: (d: number, r: number) => void
   onEnter: (d: number, r: number) => void
 }) {
-  const onHour = row % 2 === 0
-  const hh = String(Math.floor(row / 2)).padStart(2, '0')
+  const hh = String(row).padStart(2, '0')
   return (
     <>
-      <div className={`h-6 border-r border-zinc-100 pr-1 text-right text-[10px] text-zinc-400 ${onHour ? 'border-t' : ''}`}>
-        {onHour ? `${hh}:00` : ''}
+      <div className="h-8 border-r border-t border-zinc-100 pr-1 text-right text-[10px] text-zinc-400">
+        {hh}:00
       </div>
       {days.map((_, dayIdx) => {
         const start = cellStart(dayIdx, row)
@@ -243,10 +242,10 @@ function RowCells({
             onMouseDown={() => onDown(dayIdx, row)}
             onMouseEnter={() => onEnter(dayIdx, row)}
             title={booked ? `${firstName(booked.candidateName, booked.candidateEmail)} · Round ${booked.round}` : ''}
-            className={`h-6 cursor-pointer border-l border-zinc-100 ${onHour ? 'border-t' : ''} ${cls} ${booked || isPast ? 'cursor-default' : ''}`}
+            className={`h-8 cursor-pointer border-l border-t border-zinc-100 ${cls} ${booked || isPast ? 'cursor-default' : ''}`}
           >
             {booked && (
-              <span className="pointer-events-none block truncate px-1 text-[9px] font-semibold leading-6 text-white">
+              <span className="pointer-events-none block truncate px-1 text-[9px] font-semibold leading-8 text-white">
                 {firstName(booked.candidateName, booked.candidateEmail)}
               </span>
             )}

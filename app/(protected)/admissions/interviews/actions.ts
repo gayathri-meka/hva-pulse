@@ -55,7 +55,7 @@ export async function removeInterviewer(email: string): Promise<Ok | Err> {
 }
 
 // ── Personal scheduling calendar (interviewer / admin / staff) ────────────────
-const SLOT_MINUTES = 30
+const SLOT_MINUTES = 60
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status })
@@ -89,12 +89,12 @@ export async function getMyCalendar(): Promise<{
 
 /**
  * Reconcile this interviewer's OPEN availability for one week to exactly the given
- * set of 30-min slot start times. Creates missing open slots, deletes open slots no
+ * set of 1-hour slot start times. Creates missing open slots, deletes open slots no
  * longer wanted; never touches booked slots. Past starts are ignored.
  */
 export async function syncWeekAvailability(input: {
   weekStartIso: string
-  starts: string[] // ISO start times of desired 30-min available slots
+  starts: string[] // ISO start times of desired 1-hour available slots
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireInterviewer()
   const email = normEmail(user.email)
