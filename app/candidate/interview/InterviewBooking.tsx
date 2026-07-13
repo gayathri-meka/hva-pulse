@@ -16,7 +16,7 @@ const weekday = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { wee
 const dayNum = (iso: string) => new Date(iso).getDate()
 const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { month: 'short' })
 const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 export default function InterviewBooking({ state }: { state: BookingState }) {
   const router = useRouter()
@@ -125,8 +125,12 @@ function RoundCard({ interview, onReschedule, pending }: { interview: Interview;
           </a>
         )}
         {upcoming && (
-          <button onClick={() => onReschedule(interview.id)} disabled={pending} className="text-[13px] font-semibold text-zinc-500 underline underline-offset-2 hover:text-zinc-700 disabled:opacity-50">
-            Change time
+          <button
+            onClick={() => onReschedule(interview.id)}
+            disabled={pending}
+            className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-[13px] font-bold text-zinc-700 transition-colors hover:border-[#5BAE5B] hover:bg-[#f0fdf4] disabled:opacity-50"
+          >
+            Request reschedule
           </button>
         )}
       </div>
