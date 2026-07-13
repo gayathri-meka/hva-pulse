@@ -292,7 +292,7 @@ describe('editUpdate', () => {
       { at: '2026-04-02T00:00:00Z', by: 'staff-2', by_name: 'Staff User', note: 'latest', decision_date_pushed_to: '2026-06-01' },
     ]
     const { mockUpdate } = mockSupabaseBuilder({
-      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+      selectResult: { data: { update_log: updateLog, decision_date: '2026-06-01', learner_id: 'learner-1' }, error: null },
     })
 
     await editUpdate('iv-1', 0, 'older revised', '2026-05-15')
@@ -314,7 +314,7 @@ describe('editUpdate', () => {
       { at: '2026-04-01T00:00:00Z', by: 'staff-1', by_name: 'Admin User', note: 'only push', decision_date_pushed_to: '2026-05-01' },
     ]
     const { mockUpdate } = mockSupabaseBuilder({
-      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+      selectResult: { data: { update_log: updateLog, decision_date: '2026-05-01', learner_id: 'learner-1' }, error: null },
     })
 
     await editUpdate('iv-1', 0, 'push removed', null)
@@ -334,6 +334,21 @@ describe('editUpdate', () => {
     })
 
     await expect(editUpdate('iv-1', 0, 'updated', null)).rejects.toThrow('update failed')
+  })
+
+  test('preserves a manually set decision_date when editing an unrelated note', async () => {
+    const updateLog = [
+      { at: '2026-04-01T00:00:00Z', by: 'staff-1', by_name: 'Admin User', note: 'older', decision_date_pushed_to: '2026-05-01' },
+      { at: '2026-04-02T00:00:00Z', by: 'staff-2', by_name: 'Staff User', note: 'note only', decision_date_pushed_to: null },
+    ]
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: updateLog, decision_date: '2026-08-01', learner_id: 'learner-1' }, error: null },
+    })
+
+    await editUpdate('iv-1', 1, 'note typo fixed', null)
+
+    const payload = mockUpdate.mock.calls[0][0] as { decision_date: string }
+    expect(payload.decision_date).toBe('2026-08-01')
   })
 
   test('falls back to editor email when staff name is missing', async () => {
@@ -376,7 +391,7 @@ describe('deleteUpdate', () => {
       { at: '2026-04-02T00:00:00Z', note: 'second', decision_date_pushed_to: '2026-06-01' },
     ]
     const { mockUpdate } = mockSupabaseBuilder({
-      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+      selectResult: { data: { update_log: updateLog, decision_date: '2026-06-01', learner_id: 'learner-1' }, error: null },
     })
 
     await deleteUpdate('iv-1', 1)
@@ -393,7 +408,7 @@ describe('deleteUpdate', () => {
       { at: '2026-04-01T00:00:00Z', note: 'only push', decision_date_pushed_to: '2026-05-01' },
     ]
     const { mockUpdate } = mockSupabaseBuilder({
-      selectResult: { data: { update_log: updateLog, learner_id: 'learner-1' }, error: null },
+      selectResult: { data: { update_log: updateLog, decision_date: '2026-05-01', learner_id: 'learner-1' }, error: null },
     })
 
     await deleteUpdate('iv-1', 0)
@@ -410,6 +425,22 @@ describe('deleteUpdate', () => {
     })
 
     await expect(deleteUpdate('iv-1', 0)).rejects.toThrow('delete failed')
+  })
+
+  test('preserves a manually set decision_date when deleting an unrelated note', async () => {
+    const updateLog = [
+      { at: '2026-04-01T00:00:00Z', note: 'date push', decision_date_pushed_to: '2026-05-01' },
+      { at: '2026-04-02T00:00:00Z', note: 'note only', decision_date_pushed_to: null },
+    ]
+    const { mockUpdate } = mockSupabaseBuilder({
+      selectResult: { data: { update_log: updateLog, decision_date: '2026-08-01', learner_id: 'learner-1' }, error: null },
+    })
+
+    await deleteUpdate('iv-1', 1)
+
+    const payload = mockUpdate.mock.calls[0][0] as { update_log: any[]; decision_date: string }
+    expect(payload.update_log).toEqual([updateLog[0]])
+    expect(payload.decision_date).toBe('2026-08-01')
   })
 })
 

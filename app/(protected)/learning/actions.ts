@@ -885,6 +885,17 @@ function latestPushedDecisionDate(updateLog: Array<Record<string, unknown>>): st
   return null
 }
 
+function nextDecisionDateAfterLogMutation(
+  currentDecisionDate: string | null,
+  currentLog:          Array<Record<string, unknown>>,
+  nextLog:             Array<Record<string, unknown>>,
+): string | null {
+  const currentLogDate = latestPushedDecisionDate(currentLog)
+  return currentDecisionDate === currentLogDate
+    ? latestPushedDecisionDate(nextLog)
+    : currentDecisionDate
+}
+
 /** Edit one update-log entry. Any staff member can update monitoring notes. */
 export async function editUpdate(
   id: string,
@@ -901,12 +912,13 @@ export async function editUpdate(
 
   const { data: existing } = await supabase
     .from('cases')
-    .select('update_log, learner_id')
+    .select('update_log, decision_date, learner_id')
     .eq('id', id)
     .single()
   if (!existing) throw new Error('Case not found')
 
   const updateLog = ((existing.update_log ?? []) as Array<Record<string, unknown>>)
+  const currentDecisionDate = typeof existing.decision_date === 'string' ? existing.decision_date : null
   const target = updateLog[entryIndex]
   if (!target) throw new Error('Update not found')
 
@@ -925,7 +937,7 @@ export async function editUpdate(
 
   const updates: Record<string, unknown> = {
     update_log:    nextLog,
-    decision_date: latestPushedDecisionDate(nextLog),
+    decision_date: nextDecisionDateAfterLogMutation(currentDecisionDate, updateLog, nextLog),
     updated_at:    new Date().toISOString(),
   }
 
@@ -944,12 +956,13 @@ export async function deleteUpdate(id: string, entryIndex: number) {
 
   const { data: existing } = await supabase
     .from('cases')
-    .select('update_log, learner_id')
+    .select('update_log, decision_date, learner_id')
     .eq('id', id)
     .single()
   if (!existing) throw new Error('Case not found')
 
   const updateLog = ((existing.update_log ?? []) as Array<Record<string, unknown>>)
+  const currentDecisionDate = typeof existing.decision_date === 'string' ? existing.decision_date : null
   if (!updateLog[entryIndex]) throw new Error('Update not found')
   const nextLog = updateLog.filter((_, index) => index !== entryIndex)
 
@@ -957,7 +970,7 @@ export async function deleteUpdate(id: string, entryIndex: number) {
     .from('cases')
     .update({
       update_log:    nextLog,
-      decision_date: latestPushedDecisionDate(nextLog),
+      decision_date: nextDecisionDateAfterLogMutation(currentDecisionDate, updateLog, nextLog),
       updated_at:    new Date().toISOString(),
     })
     .eq('id', id)
