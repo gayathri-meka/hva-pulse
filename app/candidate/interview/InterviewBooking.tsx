@@ -130,7 +130,7 @@ function RoundCard({ interview, onReschedule, pending }: { interview: Interview;
             disabled={pending}
             className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-[13px] font-bold text-zinc-700 transition-colors hover:border-[#5BAE5B] hover:bg-[#f0fdf4] disabled:opacity-50"
           >
-            Request reschedule
+            Reschedule
           </button>
         )}
       </div>
