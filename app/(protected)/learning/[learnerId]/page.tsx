@@ -317,6 +317,7 @@ export default async function LearnerLearningPage({ params }: Props) {
         checklistItems={checklistItems}
         currentUserId={appUser.id}
         currentUserName={appUser.name ?? null}
+        isAdmin={appUser.role === 'admin'}
         observationsForLearner={observations}
         metricOptions={metricDefs.map((m) => ({ id: m.id, name: m.name }))}
       />

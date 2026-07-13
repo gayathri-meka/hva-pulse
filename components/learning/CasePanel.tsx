@@ -11,6 +11,8 @@ import {
   saveInterventions,
   updateDecisionDate,
   saveUpdate,
+  editUpdate,
+  deleteUpdate,
   closeCase,
   deleteCase,
   addInterventionComment,
@@ -56,6 +58,9 @@ export type UpdateLogEntry = {
   by_name:                 string | null
   note:                    string
   decision_date_pushed_to: string | null
+  edited_at?:              string | null
+  edited_by?:              string | null
+  edited_by_name?:         string | null
 }
 
 // Trigger views as projected to the UI. Observations and metrics are joined
@@ -133,6 +138,7 @@ interface Props {
   checklistItems:        string[]
   currentUserId:         string
   currentUserName:       string | null
+  isAdmin:               boolean
   observationsForLearner?: Observation[]
   metricOptions?:          MetricOption[]
 }
@@ -644,7 +650,7 @@ function LinkSignalsDialog({
 
 // ── Panel ──────────────────────────────────────────────────────────────────────
 
-export default function CasePanel({ learnerId, cs, learner, staffUsers, categories, checklistItems, currentUserId, currentUserName, observationsForLearner = [], metricOptions = [] }: Props) {
+export default function CasePanel({ learnerId, cs, learner, staffUsers, categories, checklistItems, currentUserId, currentUserName, isAdmin, observationsForLearner = [], metricOptions = [] }: Props) {
   const router = useRouter()
   const [isDeleting, startDelete] = useTransition()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -689,7 +695,7 @@ export default function CasePanel({ learnerId, cs, learner, staffUsers, categori
         />
         <Step2Card cs={cs} locked={!step1Done} categories={categories} currentUserId={currentUserId} currentUserName={currentUserName} />
         <Step3Card cs={cs} locked={!step2Done} staffUsers={staffUsers} currentUserId={currentUserId} currentUserName={currentUserName} />
-        <Step4Card cs={cs} locked={!step3Done} />
+        <Step4Card cs={cs} locked={!step3Done} isAdmin={isAdmin} />
       </div>
 
       {cs && (
@@ -1882,9 +1888,11 @@ function CommentsThread({
 function Step4Card({
   cs,
   locked,
+  isAdmin,
 }: {
   cs: Case | null
   locked:       boolean
+  isAdmin:      boolean
 }) {
   const router = useRouter()
   const [isPending, startTrans] = useTransition()
@@ -1897,6 +1905,10 @@ function Step4Card({
   const [updateNote,      setUpdateNote]      = useState('')
   const [extendInUpdate,  setExtendInUpdate]  = useState(false)
   const [updateNewDate,   setUpdateNewDate]   = useState('')
+  const [editingUpdateIndex, setEditingUpdateIndex] = useState<number | null>(null)
+  const [editUpdateNote,     setEditUpdateNote]     = useState('')
+  const [editUpdatePush,     setEditUpdatePush]     = useState(false)
+  const [editUpdateDate,     setEditUpdateDate]     = useState('')
   const [showClose,       setShowClose]       = useState(false)
   const [outcome,         setOutcome]         = useState<'resolved' | 'dropped' | 'other'>('resolved')
   const [outcomeNote,     setOutcomeNote]     = useState('')
@@ -1970,6 +1982,50 @@ function Step4Card({
         setUpdateNote('')
         setExtendInUpdate(false)
         setUpdateNewDate('')
+        setError('')
+        router.refresh()
+      } catch (e) { setError(String(e)) }
+    })
+  }
+
+  function startEditingUpdate(index: number, entry: UpdateLogEntry) {
+    setEditingUpdateIndex(index)
+    setEditUpdateNote(entry.note)
+    setEditUpdatePush(!!entry.decision_date_pushed_to)
+    setEditUpdateDate(entry.decision_date_pushed_to ?? '')
+    setShowAddUpdate(false)
+    setShowClose(false)
+    setEditingDate(false)
+    setError('')
+  }
+
+  function handleEditUpdate(index: number) {
+    if (!cs) return
+    if (!editUpdateNote.trim()) { setError('Note is required'); return }
+    const dateToSend = editUpdatePush ? editUpdateDate : null
+    if (editUpdatePush && !/^\d{4}-\d{2}-\d{2}$/.test(editUpdateDate)) {
+      setError('Pick a valid date'); return
+    }
+    startTrans(async () => {
+      try {
+        await editUpdate(cs.id, index, editUpdateNote, dateToSend)
+        setEditingUpdateIndex(null)
+        setEditUpdateNote('')
+        setEditUpdatePush(false)
+        setEditUpdateDate('')
+        setError('')
+        router.refresh()
+      } catch (e) { setError(String(e)) }
+    })
+  }
+
+  function handleDeleteUpdate(index: number) {
+    if (!cs) return
+    if (!window.confirm('Delete this update?')) return
+    startTrans(async () => {
+      try {
+        await deleteUpdate(cs.id, index)
+        setEditingUpdateIndex(null)
         setError('')
         router.refresh()
       } catch (e) { setError(String(e)) }
@@ -2074,22 +2130,92 @@ function Step4Card({
           {updateLog.length > 0 && (
             <ul className="mb-3 space-y-2.5 border-t border-zinc-100 pt-3">
               {updateLog.map((entry, i) => (
-                <li key={i} className="text-xs">
-                  <span className="text-zinc-400">
-                    {fmtDate(entry.at)}{entry.by_name ? ` · ${entry.by_name}` : ''}
-                  </span>
-                  <p className="mt-0.5 text-zinc-700">{entry.note}</p>
-                  {entry.decision_date_pushed_to && (
-                    <p className="mt-0.5 text-zinc-400">
-                      Decision date pushed to {fmtDate(entry.decision_date_pushed_to)}
-                    </p>
+                <li key={`${entry.at}-${i}`} className="text-xs">
+                  {editingUpdateIndex === i ? (
+                    <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                      <textarea
+                        autoFocus
+                        className={`${inputCls} min-h-[72px] resize-y`}
+                        value={editUpdateNote}
+                        onChange={(e) => setEditUpdateNote(e.target.value)}
+                      />
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600">
+                        <input
+                          type="checkbox"
+                          checked={editUpdatePush}
+                          onChange={(e) => setEditUpdatePush(e.target.checked)}
+                          className="h-3.5 w-3.5 rounded border-zinc-300 accent-[#5BAE5B]"
+                        />
+                        Push decision date
+                      </label>
+                      {editUpdatePush && (
+                        <input
+                          type="date"
+                          className={inputCls}
+                          value={editUpdateDate}
+                          onChange={(e) => setEditUpdateDate(e.target.value)}
+                        />
+                      )}
+                      {error && <p className="text-xs text-[#E24B4A]">{error}</p>}
+                      <div className="flex gap-2">
+                        <button onClick={() => handleEditUpdate(i)} disabled={isPending} className={primaryBtn}>
+                          {isPending ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => { setEditingUpdateIndex(null); setError('') }}
+                          className={ghostBtn}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <div className="min-w-0 text-zinc-400">
+                          <div>
+                            {fmtDate(entry.at)}{entry.by_name ? ` · ${entry.by_name}` : ''}
+                          </div>
+                          {entry.edited_at && (
+                            <div className="mt-0.5">
+                              Edited {fmtDate(entry.edited_at)} · {entry.edited_by_name ?? 'Unknown user'}
+                            </div>
+                          )}
+                        </div>
+                        {!editingDate && !showAddUpdate && !showClose && editingUpdateIndex === null && (
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              onClick={() => startEditingUpdate(i, entry)}
+                              className="text-xs text-zinc-400 hover:text-zinc-600"
+                            >
+                              Edit
+                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteUpdate(i)}
+                                disabled={isPending}
+                                className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <p className="mt-0.5 whitespace-pre-wrap text-zinc-700">{entry.note}</p>
+                      {entry.decision_date_pushed_to && (
+                        <p className="mt-0.5 text-zinc-400">
+                          Decision date pushed to {fmtDate(entry.decision_date_pushed_to)}
+                        </p>
+                      )}
+                    </>
                   )}
                 </li>
               ))}
             </ul>
           )}
 
-          {!editingDate && !showClose && (
+          {!editingDate && !showClose && editingUpdateIndex === null && (
             showAddUpdate ? (
               <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                 <textarea

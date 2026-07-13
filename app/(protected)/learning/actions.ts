@@ -877,6 +877,108 @@ export async function saveUpdate(id: string, note: string, newDecisionDate: stri
   revalidatePath(`/learning/${existing.learner_id}`)
 }
 
+function latestPushedDecisionDate(updateLog: Array<Record<string, unknown>>): string | null {
+  for (let i = updateLog.length - 1; i >= 0; i -= 1) {
+    const value = updateLog[i]?.decision_date_pushed_to
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return null
+}
+
+function nextDecisionDateAfterLogMutation(
+  currentDecisionDate: string | null,
+  currentLog:          Array<Record<string, unknown>>,
+  nextLog:             Array<Record<string, unknown>>,
+): string | null {
+  const currentLogDate = latestPushedDecisionDate(currentLog)
+  return currentDecisionDate === currentLogDate
+    ? latestPushedDecisionDate(nextLog)
+    : currentDecisionDate
+}
+
+/** Edit one update-log entry. Any staff member can update monitoring notes. */
+export async function editUpdate(
+  id: string,
+  entryIndex: number,
+  note: string,
+  newDecisionDate: string | null,
+) {
+  if (!note.trim()) throw new Error('Note is required')
+  if (!Number.isInteger(entryIndex) || entryIndex < 0) throw new Error('Invalid update')
+  if (newDecisionDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDecisionDate)) throw new Error('Invalid date')
+
+  const user = await requireStaff()
+  const supabase = await createServerSupabaseClient()
+
+  const { data: existing } = await supabase
+    .from('cases')
+    .select('update_log, decision_date, learner_id')
+    .eq('id', id)
+    .single()
+  if (!existing) throw new Error('Case not found')
+
+  const updateLog = ((existing.update_log ?? []) as Array<Record<string, unknown>>)
+  const currentDecisionDate = typeof existing.decision_date === 'string' ? existing.decision_date : null
+  const target = updateLog[entryIndex]
+  if (!target) throw new Error('Update not found')
+
+  const nextLog = updateLog.map((entry, index) =>
+    index === entryIndex
+      ? {
+          ...entry,
+          note:                    note.trim(),
+          decision_date_pushed_to: newDecisionDate ?? null,
+          edited_at:               new Date().toISOString(),
+          edited_by:               user.id,
+          edited_by_name:          user.name ?? user.email ?? null,
+        }
+      : entry
+  )
+
+  const updates: Record<string, unknown> = {
+    update_log:    nextLog,
+    decision_date: nextDecisionDateAfterLogMutation(currentDecisionDate, updateLog, nextLog),
+    updated_at:    new Date().toISOString(),
+  }
+
+  const { error } = await supabase.from('cases').update(updates).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${existing.learner_id}`)
+}
+
+/** Delete one update-log entry. Admin only. */
+export async function deleteUpdate(id: string, entryIndex: number) {
+  if (!Number.isInteger(entryIndex) || entryIndex < 0) throw new Error('Invalid update')
+
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+
+  const { data: existing } = await supabase
+    .from('cases')
+    .select('update_log, decision_date, learner_id')
+    .eq('id', id)
+    .single()
+  if (!existing) throw new Error('Case not found')
+
+  const updateLog = ((existing.update_log ?? []) as Array<Record<string, unknown>>)
+  const currentDecisionDate = typeof existing.decision_date === 'string' ? existing.decision_date : null
+  if (!updateLog[entryIndex]) throw new Error('Update not found')
+  const nextLog = updateLog.filter((_, index) => index !== entryIndex)
+
+  const { error } = await supabase
+    .from('cases')
+    .update({
+      update_log:    nextLog,
+      decision_date: nextDecisionDateAfterLogMutation(currentDecisionDate, updateLog, nextLog),
+      updated_at:    new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/learning')
+  revalidatePath(`/learning/${existing.learner_id}`)
+}
+
 export async function closeCase(
   id: string,
   learnerId: string,
