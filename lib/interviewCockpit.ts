@@ -3,6 +3,7 @@
 export type InterviewQuestion = {
   id: string
   round: 1 | 2 | null // null = both rounds
+  section: string | null // bucket tag (General / Drive / Need / …)
   ordering: number
   prompt: string
   purpose: string | null

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { requireInterviewer, requireStaff } from '@/lib/auth'
 import type { CriterionResult } from '@/lib/challengeReview'
+import { intakeDossierFields, type IntakeGroup } from '@/lib/challengeIntakeDisplay'
 import { isValidScore, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type Recommendation } from '@/lib/interviewCockpit'
 
 // Cockpit ops for conducting an interview. requireInterviewer allows admin/staff +
@@ -19,7 +20,7 @@ type Err = { ok: false; error: string }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toQuestion(r: any): InterviewQuestion {
-  return { id: r.id, round: r.round ?? null, ordering: r.ordering, prompt: r.prompt, purpose: r.purpose ?? null, strongAnswer: r.strong_answer ?? null, weakAnswer: r.weak_answer ?? null, probe: r.probe ?? null, active: r.active }
+  return { id: r.id, round: r.round ?? null, section: r.section ?? null, ordering: r.ordering, prompt: r.prompt, purpose: r.purpose ?? null, strongAnswer: r.strong_answer ?? null, weakAnswer: r.weak_answer ?? null, probe: r.probe ?? null, active: r.active }
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toRubric(r: any): InterviewRubric {
@@ -46,6 +47,7 @@ async function loadOwnedInterview(interviewId: string): Promise<{ ok: false; err
 export type CockpitData = {
   interview: { id: string; candidateEmail: string; candidateName: string | null; round: 1 | 2; scheduledAt: string; status: string; meetLink: string | null; recommendation: Recommendation | null; summary: string | null; assessedAt: string | null }
   dossier: CriterionResult[]
+  intake: IntakeGroup[] // raw challenge-intake answers (Motivation/round-1 dossier)
   questions: InterviewQuestion[]
   rubrics: InterviewRubric[]
   notes: Record<string, string> // questionId → note
@@ -69,6 +71,22 @@ export async function getCockpit(interviewId: string): Promise<Ok<CockpitData> |
 
   const round = iv.round as 1 | 2
   const questions = (qs ?? []).map(toQuestion).filter((q) => q.round === null || q.round === round)
+
+  // Motivation (round 1) dossier: the candidate's raw challenge-intake answers.
+  let intake: IntakeGroup[] = []
+  if (round === 1) {
+    const { data: intakeSrc } = await a.from('metric_sources').select('id').eq('bq_table', 'pulse_challenge_intake').maybeSingle()
+    if (intakeSrc) {
+      const { data: r } = await a
+        .from('metric_raw_rows')
+        .select('dimensions')
+        .eq('source_id', intakeSrc.id)
+        .eq('learner_id', (iv.candidate_email as string).trim().toLowerCase())
+        .maybeSingle()
+      intake = intakeDossierFields((r?.dimensions ?? {}) as Record<string, string>)
+    }
+  }
+
   return {
     ok: true,
     data: {
@@ -78,6 +96,7 @@ export async function getCockpit(interviewId: string): Promise<Ok<CockpitData> |
         recommendation: iv.recommendation ?? null, summary: iv.summary ?? null, assessedAt: iv.assessed_at ?? null,
       },
       dossier: (decision?.criteria_snapshot ?? []) as CriterionResult[],
+      intake,
       questions,
       rubrics: (rs ?? []).map(toRubric),
       notes: Object.fromEntries((ns ?? []).map((n) => [n.question_id, n.note ?? ''])),
@@ -248,6 +267,7 @@ export async function getInterviewContent(): Promise<{ questions: InterviewQuest
 export async function upsertQuestion(input: {
   id?: string
   round: 1 | 2 | null
+  section?: string
   ordering: number
   prompt: string
   purpose?: string
@@ -260,7 +280,7 @@ export async function upsertQuestion(input: {
   if (!input.prompt?.trim()) return { ok: false, error: 'A question prompt is required.' }
   const row = {
     ...(input.id ? { id: input.id } : {}),
-    round: input.round, ordering: input.ordering, prompt: input.prompt.trim(),
+    round: input.round, section: input.section?.trim() || null, ordering: input.ordering, prompt: input.prompt.trim(),
     purpose: input.purpose?.trim() || null, strong_answer: input.strongAnswer?.trim() || null,
     weak_answer: input.weakAnswer?.trim() || null, probe: input.probe?.trim() || null,
     active: input.active ?? true, updated_at: new Date().toISOString(),

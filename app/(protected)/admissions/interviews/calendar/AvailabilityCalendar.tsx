@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { syncWeekAvailability, setInterviewOutcome } from '../actions'
-import { roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { roundLabel, formatDateTimeIST, type InterviewSlot, type Interview } from '@/lib/interviews'
 
 const HOUR = 60 * 60_000
 const DAY = 24 * 60 * 60_000
@@ -196,7 +196,7 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
                 <div className="text-sm">
                   <span className="font-semibold text-zinc-800">{i.candidateName ?? i.candidateEmail}</span>
                   <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{roundLabel(i.round)}</span>
-                  <span className="ml-2 text-xs text-zinc-500">{new Date(i.scheduledAt).toLocaleString('en-US', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}</span>
+                  <span className="ml-2 text-xs text-zinc-500">{formatDateTimeIST(i.scheduledAt)}</span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <Link href={`/admissions/interviews/notes/${i.id}`} className="rounded-lg bg-[#5BAE5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#4e9c4e]">Conduct →</Link>

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { addInterviewer, removeInterviewer, type InterviewerRow } from './actions'
-import { computeInterviewMetrics, roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { computeInterviewMetrics, roundLabel, formatDateTimeIST, type InterviewSlot, type Interview } from '@/lib/interviews'
 
 type IvRow = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 
@@ -16,9 +16,7 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: 'bg-zinc-100 text-zinc-500',
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
-}
+const fmt = formatDateTimeIST
 
 function Metric({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return (

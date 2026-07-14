@@ -189,6 +189,7 @@ function QuestionCard({ question, nextOrder, onDone }: { question: InterviewQues
   const [pending, start] = useTransition()
   const [editing, setEditing] = useState(!question)
   const [round, setRound] = useState<1 | 2 | null>(question?.round ?? null)
+  const [section, setSection] = useState(question?.section ?? '')
   const [ordering, setOrdering] = useState(question?.ordering ?? nextOrder ?? 0)
   const [prompt, setPrompt] = useState(question?.prompt ?? '')
   const [purpose, setPurpose] = useState(question?.purpose ?? '')
@@ -204,7 +205,7 @@ function QuestionCard({ question, nextOrder, onDone }: { question: InterviewQues
     setError(null)
     start(async () => {
       const r = await upsertQuestion({
-        id: question?.id, round, ordering, prompt,
+        id: question?.id, round, section, ordering, prompt,
         purpose, strongAnswer: strong, weakAnswer: weak, probe, active,
       })
       if (!r.ok) { setError(r.error); return }
@@ -229,6 +230,7 @@ function QuestionCard({ question, nextOrder, onDone }: { question: InterviewQues
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500">{ROUND_LABEL(question.round)}</span>
+            {question.section && <span className="ml-1.5 rounded bg-[#5BAE5B]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#5BAE5B]">{question.section}</span>}
             {!question.active && <span className="ml-2 text-[11px] text-zinc-400">(inactive)</span>}
             <p className="mt-1.5 text-sm font-medium text-zinc-900">{question.prompt}</p>
             {question.purpose && <p className="mt-1 text-[12px] text-zinc-500">{question.purpose}</p>}
@@ -249,6 +251,13 @@ function QuestionCard({ question, nextOrder, onDone }: { question: InterviewQues
             <option value="1">{roundLabel(1)}</option>
             <option value="2">{roundLabel(2)}</option>
           </select>
+        </div>
+        <div>
+          <label className={labelCls}>Section</label>
+          <input value={section} onChange={(e) => setSection(e.target.value)} list="interview-sections" placeholder="e.g. Drive" className={`${inputCls} mt-1 w-40`} />
+          <datalist id="interview-sections">
+            <option value="General" /><option value="Drive" /><option value="Need" /><option value="Time & Commitment" /><option value="Program Alignment" />
+          </datalist>
         </div>
         <div className="w-20">
           <label className={labelCls}>Order</label>

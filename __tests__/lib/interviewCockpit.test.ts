@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { questionsForRound, averageScore, isValidScore, isValidRecommendation, type InterviewQuestion } from '@/lib/interviewCockpit'
 
 const q = (id: string, round: 1 | 2 | null, ordering: number, active = true): InterviewQuestion => ({
-  id, round, ordering, prompt: id, purpose: null, strongAnswer: null, weakAnswer: null, probe: null, active,
+  id, round, section: null, ordering, prompt: id, purpose: null, strongAnswer: null, weakAnswer: null, probe: null, active,
 })
 
 describe('questionsForRound', () => {

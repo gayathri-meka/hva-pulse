@@ -60,7 +60,15 @@ latest AS (
     AND question_id IN (
       34069, 34070, 34073, 34074, 34075, 34084, 34085, 34086, 34160, 34168,
       -- SES rubric questions:
-      34016, 34158, 34159, 34164, 34165, 34166, 34170, 34171, 34172, 34173, 34174, 34175
+      34016, 34158, 34159, 34164, 34165, 34166, 34170, 34171, 34172, 34173, 34174, 34175,
+      -- Dossier intake (interview cockpit), verified prompts (2026):
+      --   34024 preferred name · 34035 why HVA · 34077 currently working (Day3 Q1)
+      --   34083 company · 34087 time/day · 34088 commitments · 34089 internship
+      --   34090 placement · 34129 why web dev · 34130 other course · 34131 course detail
+      --   34132 relocate · 34133 non-tech · 34134 urgency · 34135 applying for jobs
+      --   34136 min salary · 34167 earning members (Day6 Q1) · 34169 monthly income · 34509 availability
+      34024, 34035, 34077, 34083, 34087, 34088, 34089, 34090, 34129, 34130, 34131,
+      34132, 34133, 34134, 34135, 34136, 34167, 34169, 34509
     )
 ),
 pivoted AS (
@@ -76,6 +84,26 @@ pivoted AS (
     MAX(IF(question_id = 34086, content, NULL)) AS willing_raw,
     MAX(IF(question_id = 34160, content, NULL)) AS family_size_raw,
     MAX(IF(question_id = 34168, content, NULL)) AS family_income_raw,
+    -- Dossier intake:
+    MAX(IF(question_id = 34024, content, NULL)) AS preferred_name_raw,
+    MAX(IF(question_id = 34035, content, NULL)) AS why_hva_raw,
+    MAX(IF(question_id = 34077, content, NULL)) AS working_raw,
+    MAX(IF(question_id = 34083, content, NULL)) AS company_raw,
+    MAX(IF(question_id = 34087, content, NULL)) AS time_per_day_raw,
+    MAX(IF(question_id = 34088, content, NULL)) AS commitments_raw,
+    MAX(IF(question_id = 34089, content, NULL)) AS internship_raw,
+    MAX(IF(question_id = 34090, content, NULL)) AS placement_raw,
+    MAX(IF(question_id = 34129, content, NULL)) AS why_webdev_raw,
+    MAX(IF(question_id = 34130, content, NULL)) AS other_course_raw,
+    MAX(IF(question_id = 34131, content, NULL)) AS other_course_detail_raw,
+    MAX(IF(question_id = 34132, content, NULL)) AS relocate_raw,
+    MAX(IF(question_id = 34133, content, NULL)) AS non_tech_raw,
+    MAX(IF(question_id = 34134, content, NULL)) AS urgency_raw,
+    MAX(IF(question_id = 34135, content, NULL)) AS applying_raw,
+    MAX(IF(question_id = 34136, content, NULL)) AS min_salary_raw,
+    MAX(IF(question_id = 34167, content, NULL)) AS earning_members_raw,
+    MAX(IF(question_id = 34169, content, NULL)) AS monthly_income_raw,
+    MAX(IF(question_id = 34509, content, NULL)) AS availability_raw,
     MAX(IF(question_id = 34016, content, NULL)) AS gender_raw,
     MAX(IF(question_id = 34158, content, NULL)) AS marital_raw,
     MAX(IF(question_id = 34159, content, NULL)) AS social_category_raw,
@@ -106,6 +134,25 @@ SELECT
   p.willing_raw,
   p.family_size_raw,
   p.family_income_raw,
+  p.preferred_name_raw,
+  p.why_hva_raw,
+  p.working_raw,
+  p.company_raw,
+  p.time_per_day_raw,
+  p.commitments_raw,
+  p.internship_raw,
+  p.placement_raw,
+  p.why_webdev_raw,
+  p.other_course_raw,
+  p.other_course_detail_raw,
+  p.relocate_raw,
+  p.non_tech_raw,
+  p.urgency_raw,
+  p.applying_raw,
+  p.min_salary_raw,
+  p.earning_members_raw,
+  p.monthly_income_raw,
+  p.availability_raw,
   p.gender_raw,
   p.marital_raw,
   p.social_category_raw,

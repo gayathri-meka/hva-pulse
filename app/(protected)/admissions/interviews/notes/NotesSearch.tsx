@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { searchInterviewNotes, type NoteBundle } from '../cockpit-actions'
-import { roundLabel } from '@/lib/interviews'
+import { roundLabel, formatDateTimeIST } from '@/lib/interviews'
 
 const REC_STYLE: Record<string, string> = {
   advance: 'bg-emerald-50 text-emerald-700',
@@ -13,7 +13,7 @@ const REC_STYLE: Record<string, string> = {
 const REC_LABEL: Record<string, string> = { advance: 'Advance', borderline: 'Borderline', no: 'Do not advance' }
 const SCORE_TONE = ['bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-orange-100 text-orange-700', 'bg-emerald-100 text-emerald-700']
 
-const when = (iso: string) => new Date(iso).toLocaleString('en-US', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+const when = formatDateTimeIST
 
 export default function NotesSearch({ initial, initialQuery = '' }: { initial: NoteBundle[]; initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery)

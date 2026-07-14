@@ -4,6 +4,17 @@
 export const INTERVIEW_ROUNDS = [1, 2] as const
 export type InterviewRound = (typeof INTERVIEW_ROUNDS)[number]
 
+// "Sun, Jul 19 at 1:30 AM" in IST. Assembled from formatToParts with a FIXED
+// separator — toLocaleString's own separator (", " vs " at ") differs between
+// Node's ICU (server) and the browser's ICU (client), which breaks hydration.
+export function formatDateTimeIST(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+  }).formatToParts(new Date(iso))
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  return `${g('weekday')}, ${g('month')} ${g('day')} at ${g('hour')}:${g('minute')} ${g('dayPeriod')}`
+}
+
 // Each round has a theme. Displayed everywhere a round is named.
 export const ROUND_NAMES: Record<InterviewRound, string> = { 1: 'Motivation', 2: 'Coding' }
 /** "Round 1: Motivation". Pass short=true for just "Motivation". */
