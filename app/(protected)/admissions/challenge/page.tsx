@@ -330,6 +330,8 @@ export default async function AdmissionsChallengePage() {
       failReasons: evaln.failReasons,
       finalDecision: (d?.final_decision as 'selected' | 'rejected' | undefined) ?? null,
       reason: d?.reason ?? null,
+      rejectionReasonType: d?.rejection_reason_type ?? null,
+      rejectionMessage: d?.rejection_message ?? null,
       overrodeSystem: d?.overrode_system ?? false,
       decidedByName: d?.decided_by_name ?? null,
       decidedAt: d?.decided_at ?? null,

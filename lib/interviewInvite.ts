@@ -4,11 +4,11 @@
 // has been re-consented with the calendar scope.
 
 import { getGmailSender, buildRawMessage, sendRaw } from './googleMail'
-import type { InterviewRound } from './interviews'
+import { roundLabel, type InterviewRound } from './interviews'
 
 function whenLabel(iso: string): string {
-  return new Date(iso).toLocaleString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  return new Date(iso).toLocaleString('en-US', {
+    weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
   })
 }
 
@@ -31,17 +31,17 @@ export async function sendBookingEmails(input: {
 
     const candidateBody =
       `Hi ${input.candidateName || 'there'},\n\n` +
-      `Your Round ${input.round} interview with HyperVerge Academy is confirmed for:\n${when}${meetLine}\n\n` +
+      `Your ${roundLabel(input.round)} interview with HyperVerge Academy is confirmed for:\n${when}${meetLine}\n\n` +
       `See you then!\nHyperVerge Academy`
     const interviewerBody =
       `Hi ${input.interviewerName || 'there'},\n\n` +
       `An interview has been booked into your availability:\n` +
-      `Candidate: ${input.candidateName || input.candidateEmail}\nRound: ${input.round}\nWhen: ${when}${meetLine}\n\n` +
+      `Candidate: ${input.candidateName || input.candidateEmail}\nRound: ${roundLabel(input.round)}\nWhen: ${when}${meetLine}\n\n` +
       `HyperVerge Academy`
 
     for (const [to, subject, text] of [
       [input.candidateEmail, `Your HVA interview is confirmed — ${when}`, candidateBody],
-      [input.interviewerEmail, `Interview booked — ${input.candidateName || input.candidateEmail} (Round ${input.round})`, interviewerBody],
+      [input.interviewerEmail, `Interview booked — ${input.candidateName || input.candidateEmail} (${roundLabel(input.round)})`, interviewerBody],
     ] as const) {
       const raw = buildRawMessage({ from: sender.from, to, subject, text })
       await sendRaw(sender.accessToken, raw)

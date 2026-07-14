@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
 import { requireStaff } from '@/lib/auth'
 import { runBigQuery } from '@/lib/bigquery'
-import type { CriterionResult, SystemDecision, ReviewThresholds } from '@/lib/challengeReview'
+import { candidateRejectionReasons } from '@/lib/challengeReview'
+import type { CriterionResult, SystemDecision, ReviewThresholds, CandidateSignals } from '@/lib/challengeReview'
 import {
   toChatMessage,
   blocksToText,
@@ -298,6 +299,8 @@ export async function setChallengeDecision(input: {
   courseId: number
   decision: DecisionValue
   reason?: string
+  rejectionReasonType?: string
+  rejectionMessage?: string
   systemDecision: SystemDecision
   criteriaSnapshot: CriterionResult[]
 }): Promise<DecisionResult> {
@@ -312,6 +315,11 @@ export async function setChallengeDecision(input: {
   if (overrode && !reason)
     return { ok: false, error: 'A reason is required when overriding the system recommendation.' }
 
+  // Candidate-facing rejection message applies only to rejections.
+  const rejecting = input.decision === 'rejected'
+  const rejectionMessage = rejecting ? (input.rejectionMessage ?? '').trim() || null : null
+  const rejectionReasonType = rejecting ? input.rejectionReasonType || null : null
+
   const now = new Date().toISOString()
   const { error } = await adminClient()
     .from('challenge_decisions')
@@ -322,6 +330,8 @@ export async function setChallengeDecision(input: {
         course_id: input.courseId,
         final_decision: input.decision,
         reason: reason || null,
+        rejection_reason_type: rejectionReasonType,
+        rejection_message: rejectionMessage,
         overrode_system: overrode,
         system_decision_at_verify: input.systemDecision,
         criteria_snapshot: input.criteriaSnapshot,
@@ -347,7 +357,7 @@ export async function setChallengeDecision(input: {
 export async function bulkConfirmChallengeDecisions(input: {
   cohortId: number
   courseId: number
-  items: { email: string; systemDecision: SystemDecision; criteriaSnapshot: CriterionResult[] }[]
+  items: { email: string; name?: string; signals?: CandidateSignals; systemDecision: SystemDecision; criteriaSnapshot: CriterionResult[] }[]
 }): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
   const user = await requireStaff()
 
@@ -356,20 +366,28 @@ export async function bulkConfirmChallengeDecisions(input: {
     // 'review'/'in_progress' aren't confirmable verdicts — skip them (review needs a
     // human; in_progress hasn't finished the challenge).
     .filter((it) => normEmail(it.email) && it.systemDecision !== 'review' && it.systemDecision !== 'in_progress')
-    .map((it) => ({
-      email: normEmail(it.email),
-      cohort_id: input.cohortId,
-      course_id: input.courseId,
-      final_decision: it.systemDecision,
-      reason: null,
-      overrode_system: false,
-      system_decision_at_verify: it.systemDecision,
-      criteria_snapshot: it.criteriaSnapshot,
-      decided_by: user.id,
-      decided_by_name: user.name,
-      decided_at: now,
-      updated_at: now,
-    }))
+    .map((it) => {
+      // Auto-pick the most-relevant rejection message for rejected rows.
+      const reject = it.systemDecision === 'rejected'
+      const reasons = reject && it.signals ? candidateRejectionReasons(it.criteriaSnapshot, { name: it.name ?? '', signals: it.signals }) : []
+      const top = reasons[0] // most relevant (or the 'general' fallback)
+      return {
+        email: normEmail(it.email),
+        cohort_id: input.cohortId,
+        course_id: input.courseId,
+        final_decision: it.systemDecision,
+        reason: null,
+        rejection_reason_type: reject ? (top?.key ?? null) : null,
+        rejection_message: reject ? (top?.message ?? null) : null,
+        overrode_system: false,
+        system_decision_at_verify: it.systemDecision,
+        criteria_snapshot: it.criteriaSnapshot,
+        decided_by: user.id,
+        decided_by_name: user.name,
+        decided_at: now,
+        updated_at: now,
+      }
+    })
 
   if (rows.length === 0) return { ok: false, error: 'Nothing to confirm — these candidates need a manual decision.' }
 

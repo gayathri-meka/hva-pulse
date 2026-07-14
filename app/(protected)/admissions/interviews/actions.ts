@@ -60,7 +60,7 @@ const SLOT_MINUTES = 60
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status })
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toInterview = (r: any): Interview => ({ id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id, interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null })
+const toInterview = (r: any): Interview => ({ id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id, interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null, recommendation: r.recommendation ?? null })
 
 /** The logged-in interviewer's own slots + interviews (for the paint-week grid). */
 export async function getMyCalendar(): Promise<{
@@ -149,16 +149,20 @@ export async function setInterviewOutcome(
   outcome: 'completed' | 'no_show',
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireInterviewer()
-  const email = normEmail(user.email)
-  const { data, error } = await admin()
+  const isStaff = user.role === 'admin' || user.role === 'staff'
+  // Staff/admin may close any interview (from the Interviews tab); a dedicated
+  // interviewer only their own (from their calendar).
+  let q = admin()
     .from('interviews')
     .update({ status: outcome, updated_at: new Date().toISOString() })
     .eq('id', interviewId)
-    .eq('interviewer_email', email)
     .in('status', ['booked', 'confirmed'])
-    .select('id')
+  if (!isStaff) q = q.eq('interviewer_email', normEmail(user.email))
+  const { data, error } = await q.select('id')
   if (error) return { ok: false, error: error.message }
   if (!data?.length) return { ok: false, error: 'Interview not found or already closed.' }
+  revalidatePath('/admissions/interviews')
+  revalidatePath('/admissions/interviews/list')
   revalidatePath('/admissions/interviews/calendar')
   return { ok: true }
 }
@@ -169,7 +173,7 @@ export type InterviewerRow = { email: string; name: string | null; openSlots: nu
 export async function getInterviewOverview(): Promise<{
   interviewers: InterviewerRow[]
   slots: InterviewSlot[]
-  interviews: (Interview & { candidateName: string | null; interviewerName: string | null })[]
+  interviews: (Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean })[]
 }> {
   await requireStaff()
   const a = admin()
@@ -183,6 +187,16 @@ export async function getInterviewOverview(): Promise<{
   const slots: InterviewSlot[] = (slotsRes.data ?? []).map((r: any) => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawIv = (ivRes.data ?? []) as any[]
+
+  // Self-heal: free any slot stuck in 'booked' with no live interview backing it
+  // (e.g. a cancellation from an older code path that didn't release the slot).
+  // Otherwise that time stays wrongly blocked and the booked-slot count drifts.
+  const liveSlotIds = new Set(rawIv.filter((r) => r.status !== 'cancelled' && r.slot_id).map((r) => r.slot_id))
+  const orphanBooked = slots.filter((s) => s.status === 'booked' && !liveSlotIds.has(s.id))
+  if (orphanBooked.length) {
+    await a.from('interview_slots').update({ status: 'open', updated_at: new Date().toISOString() }).in('id', orphanBooked.map((s) => s.id))
+    for (const s of orphanBooked) s.status = 'open'
+  }
 
   // Every email that acts as an interviewer = dedicated 'interviewer' users PLUS any
   // admin/staff who published slots or conducted interviews. Resolve all their names.
@@ -204,11 +218,25 @@ export async function getInterviewOverview(): Promise<{
     for (const p of data ?? []) candName.set(p.email, (p.name as string) ?? p.email)
   }
 
+  // Which interviews already have notes/scores captured (⇒ "View notes" vs "Take notes").
+  const ivIds = rawIv.map((r) => r.id)
+  const noted = new Set<string>()
+  if (ivIds.length) {
+    const [{ data: nRows }, { data: sRows }] = await Promise.all([
+      a.from('interview_notes').select('interview_id, note').in('interview_id', ivIds),
+      a.from('interview_scores').select('interview_id').in('interview_id', ivIds),
+    ])
+    for (const n of nRows ?? []) if ((n.note ?? '').trim()) noted.add(n.interview_id)
+    for (const s of sRows ?? []) noted.add(s.interview_id)
+  }
+
   const interviews = rawIv.map((r) => ({
     id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id,
     interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null,
+    recommendation: r.recommendation ?? null,
     candidateName: candName.get(r.candidate_email) ?? null,
     interviewerName: nameByEmail.get(r.interviewer_email) ?? null,
+    hasNotes: noted.has(r.id) || !!r.recommendation,
   }))
 
   // Show anyone who is a dedicated interviewer OR has published/conducted anything.

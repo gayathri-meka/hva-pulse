@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { addInterviewer, removeInterviewer, type InterviewerRow } from './actions'
-import { computeInterviewMetrics, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { computeInterviewMetrics, roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
 
-type IvRow = Interview & { candidateName: string | null; interviewerName: string | null }
+type IvRow = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 
 const STATUS_STYLE: Record<string, string> = {
   confirmed: 'bg-sky-50 text-sky-700',
@@ -16,7 +17,7 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
 }
 
 function Metric({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
@@ -68,9 +69,8 @@ export default function InterviewsAdmin({
   return (
     <div className="space-y-6">
       {/* Metrics */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Metric label="Open slots" value={m.slotsOpen} />
-        <Metric label="Booked slots" value={m.slotsBooked} />
         <Metric label="Scheduled" value={m.scheduled} tone="text-sky-600" />
         <Metric label="Completed" value={m.completed} tone="text-emerald-600" />
         <Metric label="No-shows" value={m.noShow} tone="text-red-600" />
@@ -131,17 +131,26 @@ export default function InterviewsAdmin({
               <tr className="border-b border-zinc-100 text-left text-xs text-zinc-400">
                 <th className="py-1.5 font-medium">Candidate</th><th className="py-1.5 font-medium">Round</th>
                 <th className="py-1.5 font-medium">Interviewer</th><th className="py-1.5 font-medium">When</th>
-                <th className="py-1.5 font-medium">Status</th>
+                <th className="py-1.5 font-medium">Status</th><th />
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {interviews.map((i) => (
                 <tr key={i.id}>
                   <td className="py-1.5 text-zinc-800">{i.candidateName ?? i.candidateEmail}</td>
-                  <td className="py-1.5 text-zinc-600">R{i.round}</td>
+                  <td className="py-1.5 text-zinc-600">{roundLabel(i.round, true)}</td>
                   <td className="py-1.5 text-zinc-600">{i.interviewerName ?? i.interviewerEmail}</td>
                   <td className="py-1.5 text-zinc-600">{fmt(i.scheduledAt)}</td>
                   <td className="py-1.5"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[i.status] ?? 'bg-zinc-100 text-zinc-500'}`}>{i.status.replace('_', '-')}</span></td>
+                  <td className="py-1.5 text-right">
+                    {i.status === 'cancelled' && !i.hasNotes ? (
+                      <span className="text-xs text-zinc-300">—</span>
+                    ) : (
+                      <Link href={`/admissions/interviews/notes/${i.id}`} className="text-xs font-medium text-[#5BAE5B] hover:underline">
+                        {i.hasNotes ? 'View notes' : 'Take notes'} →
+                      </Link>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

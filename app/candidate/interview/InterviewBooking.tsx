@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { IconCheck, IconVideo, IconClock } from '@tabler/icons-react'
 import { bookSlot, cancelMyInterview, type BookingState } from './actions'
-import type { InterviewSlot, Interview } from '@/lib/interviews'
+import { roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
 
 const jakarta = { fontFamily: 'var(--font-jakarta), sans-serif' } as const
 
@@ -82,7 +82,7 @@ export default function InterviewBooking({ state }: { state: BookingState }) {
         ) : (
           <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5 text-sm text-zinc-600">
             {booked.some((i) => i.round === 1 && i.status !== 'completed')
-              ? 'Your Round 2 slot will open up here once your first interview is done.'
+              ? 'Your Round 2 (Coding) slot will open up here once your first interview is done.'
               : 'Nothing to book right now.'}
           </div>
         )
@@ -111,7 +111,7 @@ function RoundCard({ interview, onReschedule, pending }: { interview: Interview;
   return (
     <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-extrabold text-zinc-900">Round {interview.round}</div>
+        <div className="text-sm font-extrabold text-zinc-900">{roundLabel(interview.round)}</div>
         <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${done ? 'bg-emerald-50 text-emerald-700' : noShow ? 'bg-zinc-100 text-zinc-500' : 'bg-sky-50 text-sky-700'}`}>
           {done ? 'Completed' : noShow ? 'Missed' : 'Confirmed'}
         </span>
@@ -155,7 +155,7 @@ function Picker({
   return (
     <div className="overflow-hidden rounded-2xl border-[0.5px] border-zinc-200 bg-white">
       <div className="border-b border-zinc-100 px-5 pb-4 pt-6 sm:pt-7">
-        <div className="text-[17px] font-black text-zinc-900" style={jakarta}>Book your Round {round} interview</div>
+        <div className="text-[17px] font-black text-zinc-900" style={jakarta}>Book your {roundLabel(round)} interview</div>
         <p className="mt-0.5 text-[13px] leading-[1.5] text-zinc-500">A 1-hour video call with the HVA team. Pick a day and time that works for you.</p>
       </div>
 

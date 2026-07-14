@@ -223,6 +223,60 @@ export type ReviewEvaluation = {
   failReasons: string[]
 }
 
+// A neutral, humane fallback shown when there's no drafted reason to give (e.g. the
+// only fails are cramming / key-question, or the team overrode a system select).
+export const GENERIC_REJECTION_MESSAGE =
+  'Thank you for taking on the 14-Day Challenge — we really appreciate the effort you put in. After careful review, we won’t be moving forward with your application this time. We’d genuinely encourage you to keep building on your skills and apply again in the future.'
+
+const ORBIT_LINK = 'https://sensai.hyperverge.org/school/hvacademy/join?cohortId=129'
+
+// Candidate-facing rejection message per criterion key. {Name} → first name,
+// {X} → the reason's number (active days / span days / gap days). Filled when the
+// drawer opens (editable before release). Keys without a template fall back to
+// GENERIC_REJECTION_MESSAGE. These are the candidate-safe versions of the sensitive
+// gates too (SES / college / income) — the raw failFeedback stays internal.
+export const REJECTION_TEMPLATES: Record<string, string> = {
+  ses: `Hi {Name}, thank you for completing the 14-day challenge with us. HVA is a free fellowship designed to prioritize learners with the highest need for this opportunity. Based on our current selection criteria, we’re unable to offer you a seat this cycle, as we have limited spots and many other applicants with equally strong or greater need. We’d still love to have you with us through our Orbit Track — a self-paced programme open to a wider group of learners: ${ORBIT_LINK}`,
+  college: `Hi {Name}, thank you for your interest in HVA and for completing the challenge. Since our program is designed to support learners who currently have limited access to strong placement opportunities, and your college has a good placement track record, we believe you’re already well-positioned for outcomes similar to what HVA offers. We’d rather use this seat for someone who doesn’t have that access. If you’d still like to build these skills, our Orbit Track is a self-paced option you’re welcome to join: ${ORBIT_LINK}`,
+  per_capita_income: `Hi {Name}, thank you for completing the 14-day challenge. As a free fellowship with limited seats, we prioritize learners with the greatest need for this kind of support. This cycle, we’re unable to move forward with your application, as we have other candidates whose circumstances make this opportunity more critical for them. We’d love for you to continue learning with us through our Orbit Track, a self-paced programme: ${ORBIT_LINK}`,
+  graduation_timeline: `Hi {Name}, thank you for completing the 14-day challenge with us. HVA is designed for learners who are close to entering the workforce, and we prioritize candidates who will be ready to work within the next year. Since your expected graduation is a little further out, we’re unable to offer you a seat in this cohort. We’d encourage you to apply again closer to your graduation — we’d love to have you then! If you’d still like to build these skills, our Orbit Track is a self-paced option you’re welcome to join: ${ORBIT_LINK}`,
+  work_commitment: `Hi {Name}, thank you for completing the 14-day challenge. HVA requires full-time commitment from learners for the duration of the fellowship, and based on your current work situation, we don’t think this is the right time for you to take this on. We don’t want to set you up for a difficult trade-off. Good news — our Orbit Track is self-paced and designed for exactly this kind of situation, so you can upskill alongside your job: ${ORBIT_LINK}`,
+  attempted_questions: `Hi {Name}, thank you for participating in the 14-day challenge. We noticed a few tasks and related reading materials weren’t completed, which are an important part of how we assess readiness for the program. We’re unable to offer you a seat this cycle, but we’d love for you to try our Orbit Track, a self-paced programme where you can move through the material at your own pace: ${ORBIT_LINK}`,
+  active_days: `Hi {Name}, thank you for taking part in the 14-day challenge. Regular, daily engagement is something we look closely at, since it reflects the consistency the fellowship demands. We noticed limited activity on {X} out of the 14 days, so we’re unable to offer you a seat this cycle. Our Orbit Track could be a great fit instead — it’s self-paced, so you can engage on a schedule that works better for you: ${ORBIT_LINK}`,
+  span: `Hi {Name}, thank you for completing the 14-day challenge. We noticed it took {X} days to finish the challenge, longer than the expected window, which makes it harder for us to gauge your pace and readiness for the program’s intensity. We’re unable to offer you a seat this cycle, but our Orbit Track is a self-paced alternative that might suit your pace better: ${ORBIT_LINK}`,
+  consistency: `Hi {Name}, thank you for completing the 14-day challenge. We noticed a gap of more than {X} days where there was no activity on SensAI. Since consistent engagement is key to succeeding in the fellowship, we’re unable to offer you a seat this cycle. We’d love for you to check out our Orbit Track instead — a self-paced programme with more flexibility: ${ORBIT_LINK}`,
+}
+
+// The {X} number for a reason (null when the template has no {X}).
+function rejectionX(key: string, s: CandidateSignals): number | null {
+  if (key === 'active_days') return s.activeDays
+  if (key === 'span') return s.spanDays
+  if (key === 'consistency') return Math.max(0, s.spanDays - s.activeDays)
+  return null
+}
+
+/** Substitute {Name}/{X} in a rejection template. */
+export function fillRejectionMessage(template: string, name: string, key: string, signals: CandidateSignals): string {
+  const first = (name ?? '').trim().split(' ')[0] || 'there'
+  const x = rejectionX(key, signals)
+  return template.replace(/\{Name\}/g, first).replace(/\{X\}/g, x == null ? '' : String(x))
+}
+
+export type RejectionReason = { key: string; label: string; message: string }
+
+// The reason "types" offered on rejection: each failed criterion that HAS a drafted
+// template, filled for this candidate. Ordered most-relevant-first (criteria order),
+// so the first is the sensible default. Always ends with a 'general' fallback.
+export function candidateRejectionReasons(
+  criteria: CriterionResult[],
+  ctx: { name: string; signals: CandidateSignals },
+): RejectionReason[] {
+  const specific = criteria
+    .filter((c) => c.status === 'fail' && !c.disabled && !c.informational && REJECTION_TEMPLATES[c.key])
+    .map((c) => ({ key: c.key, label: c.label, message: fillRejectionMessage(REJECTION_TEMPLATES[c.key], ctx.name, c.key, ctx.signals) }))
+  return [...specific, { key: 'general', label: 'General (no specific reason)', message: GENERIC_REJECTION_MESSAGE }]
+}
+
 // Evaluate one candidate. `systemDecision` is 'selected' iff every non-'na'
 // criterion passes; a single fail rejects. Placeholder criteria never gate.
 export function evaluateCandidate(

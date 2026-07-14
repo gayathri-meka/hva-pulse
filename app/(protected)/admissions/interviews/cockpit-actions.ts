@@ -1,0 +1,305 @@
+'use server'
+
+import { createClient } from '@supabase/supabase-js'
+import { revalidatePath } from 'next/cache'
+import { requireInterviewer, requireStaff } from '@/lib/auth'
+import type { CriterionResult } from '@/lib/challengeReview'
+import { isValidScore, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type Recommendation } from '@/lib/interviewCockpit'
+
+// Cockpit ops for conducting an interview. requireInterviewer allows admin/staff +
+// dedicated interviewers; a dedicated interviewer may only touch their OWN interview.
+
+function admin() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
+const norm = (v: string | null | undefined) => (v ?? '').toString().trim().toLowerCase()
+
+type Ok<T> = { ok: true; data: T }
+type Err = { ok: false; error: string }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toQuestion(r: any): InterviewQuestion {
+  return { id: r.id, round: r.round ?? null, ordering: r.ordering, prompt: r.prompt, purpose: r.purpose ?? null, strongAnswer: r.strong_answer ?? null, weakAnswer: r.weak_answer ?? null, probe: r.probe ?? null, active: r.active }
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toRubric(r: any): InterviewRubric {
+  return {
+    key: r.key, label: r.label, ordering: r.ordering,
+    levels: [r.level_1 ?? '', r.level_2 ?? '', r.level_3 ?? '', r.level_4 ?? ''],
+    lookingFor: [r.looking_for_1 ?? '', r.looking_for_2 ?? '', r.looking_for_3 ?? '', r.looking_for_4 ?? ''],
+    examples: [r.example_1 ?? '', r.example_2 ?? '', r.example_3 ?? '', r.example_4 ?? ''],
+    active: r.active,
+  }
+}
+
+/** Load the interview + verify the caller may conduct it. Returns the row or an error. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadOwnedInterview(interviewId: string): Promise<{ ok: false; error: string } | { ok: true; iv: any; user: Awaited<ReturnType<typeof requireInterviewer>> }> {
+  const user = await requireInterviewer()
+  const { data: iv } = await admin().from('interviews').select('*').eq('id', interviewId).maybeSingle()
+  if (!iv) return { ok: false, error: 'Interview not found.' }
+  const isStaff = user.role === 'admin' || user.role === 'staff'
+  if (!isStaff && norm(iv.interviewer_email) !== norm(user.email)) return { ok: false, error: 'Not your interview.' }
+  return { ok: true, iv, user }
+}
+
+export type CockpitData = {
+  interview: { id: string; candidateEmail: string; candidateName: string | null; round: 1 | 2; scheduledAt: string; status: string; meetLink: string | null; recommendation: Recommendation | null; summary: string | null; assessedAt: string | null }
+  dossier: CriterionResult[]
+  questions: InterviewQuestion[]
+  rubrics: InterviewRubric[]
+  notes: Record<string, string> // questionId → note
+  scores: Record<string, number> // rubricKey → score
+}
+
+export async function getCockpit(interviewId: string): Promise<Ok<CockpitData> | Err> {
+  const res = await loadOwnedInterview(interviewId)
+  if (!res.ok) return { ok: false, error: res.error }
+  const { iv } = res
+  const a = admin()
+
+  const [{ data: prospect }, { data: decision }, { data: qs }, { data: rs }, { data: ns }, { data: sc }] = await Promise.all([
+    a.from('prospects').select('name').eq('email', iv.candidate_email).maybeSingle(),
+    a.from('challenge_decisions').select('criteria_snapshot').eq('email', iv.candidate_email).maybeSingle(),
+    a.from('interview_questions').select('*').eq('active', true).order('ordering'),
+    a.from('interview_rubrics').select('*').eq('active', true).order('ordering'),
+    a.from('interview_notes').select('question_id, note').eq('interview_id', interviewId),
+    a.from('interview_scores').select('rubric_key, score').eq('interview_id', interviewId),
+  ])
+
+  const round = iv.round as 1 | 2
+  const questions = (qs ?? []).map(toQuestion).filter((q) => q.round === null || q.round === round)
+  return {
+    ok: true,
+    data: {
+      interview: {
+        id: iv.id, candidateEmail: iv.candidate_email, candidateName: (prospect?.name as string) ?? null,
+        round, scheduledAt: iv.scheduled_at, status: iv.status, meetLink: iv.meet_link ?? null,
+        recommendation: iv.recommendation ?? null, summary: iv.summary ?? null, assessedAt: iv.assessed_at ?? null,
+      },
+      dossier: (decision?.criteria_snapshot ?? []) as CriterionResult[],
+      questions,
+      rubrics: (rs ?? []).map(toRubric),
+      notes: Object.fromEntries((ns ?? []).map((n) => [n.question_id, n.note ?? ''])),
+      scores: Object.fromEntries((sc ?? []).map((s) => [s.rubric_key, s.score])),
+    },
+  }
+}
+
+export async function saveNote(interviewId: string, questionId: string, note: string): Promise<Ok<null> | Err> {
+  const res = await loadOwnedInterview(interviewId)
+  if (!res.ok) return { ok: false, error: res.error }
+  const { error } = await admin()
+    .from('interview_notes')
+    .upsert({ interview_id: interviewId, question_id: questionId, note, updated_at: new Date().toISOString() }, { onConflict: 'interview_id,question_id' })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data: null }
+}
+
+export async function saveScore(interviewId: string, rubricKey: string, score: number): Promise<Ok<null> | Err> {
+  if (!isValidScore(score)) return { ok: false, error: 'Score must be 1–4.' }
+  const res = await loadOwnedInterview(interviewId)
+  if (!res.ok) return { ok: false, error: res.error }
+  const { error } = await admin()
+    .from('interview_scores')
+    .upsert({ interview_id: interviewId, rubric_key: rubricKey, score, updated_at: new Date().toISOString() }, { onConflict: 'interview_id,rubric_key' })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data: null }
+}
+
+export async function submitAssessment(input: {
+  interviewId: string
+  recommendation: string
+  summary: string
+}): Promise<Ok<null> | Err> {
+  if (!isValidRecommendation(input.recommendation)) return { ok: false, error: 'Pick a recommendation.' }
+  const res = await loadOwnedInterview(input.interviewId)
+  if (!res.ok) return { ok: false, error: res.error }
+  const { user } = res
+  const { error } = await admin()
+    .from('interviews')
+    .update({
+      recommendation: input.recommendation,
+      summary: input.summary?.trim() || null,
+      assessed_at: new Date().toISOString(),
+      assessed_by: user.email,
+      assessed_by_name: user.name ?? null,
+      // Completing the assessment also closes the interview out.
+      status: 'completed',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.interviewId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/interviews')
+  revalidatePath(`/admissions/interviews/notes/${input.interviewId}`)
+  return { ok: true, data: null }
+}
+
+// ── Notes lookup by candidate (Interviews → Notes tab) ───────────────────────
+export type NoteBundle = {
+  interviewId: string
+  candidateName: string | null
+  candidateEmail: string
+  round: 1 | 2
+  interviewerName: string | null
+  scheduledAt: string
+  status: string
+  recommendation: Recommendation | null
+  summary: string | null
+  notes: { prompt: string; note: string }[]
+  scores: { label: string; score: number }[]
+}
+
+/** Search interviews by candidate name/email and return their captured notes + scores.
+ *  Empty query returns the most recent interviews that already have notes. */
+export async function searchInterviewNotes(query: string): Promise<NoteBundle[]> {
+  await requireStaff()
+  const a = admin()
+  const q = query.trim().toLowerCase()
+
+  // Resolve which candidate emails match the query.
+  let ivRows: { data: Record<string, unknown>[] | null } = { data: [] }
+  if (q) {
+    const emails = new Set<string>()
+    const [{ data: p }, { data: directIv }] = await Promise.all([
+      a.from('prospects').select('email').or(`name.ilike.%${q}%,email.ilike.%${q}%`),
+      a.from('interviews').select('candidate_email').ilike('candidate_email', `%${q}%`),
+    ])
+    for (const r of p ?? []) emails.add(r.email)
+    for (const r of directIv ?? []) emails.add(r.candidate_email)
+    if (emails.size === 0) return []
+    ivRows = await a.from('interviews').select('*').in('candidate_email', [...emails]).order('scheduled_at', { ascending: false })
+  } else {
+    // No query → recent interviews that have notes/scores/assessment.
+    const [{ data: nIds }, { data: sIds }, { data: aIds }] = await Promise.all([
+      a.from('interview_notes').select('interview_id'),
+      a.from('interview_scores').select('interview_id'),
+      a.from('interviews').select('id').not('recommendation', 'is', null),
+    ])
+    const ids = [...new Set([...(nIds ?? []).map((r) => r.interview_id), ...(sIds ?? []).map((r) => r.interview_id), ...(aIds ?? []).map((r) => r.id)])]
+    if (ids.length === 0) return []
+    ivRows = await a.from('interviews').select('*').in('id', ids).order('scheduled_at', { ascending: false }).limit(40)
+  }
+
+  const rows = ivRows.data ?? []
+  if (rows.length === 0) return []
+  const ivIds = rows.map((r) => r.id as string)
+
+  const [{ data: nRows }, { data: sRows }, { data: prospects }, { data: users }, { data: questions }, { data: rubrics }] = await Promise.all([
+    a.from('interview_notes').select('interview_id, question_id, note').in('interview_id', ivIds),
+    a.from('interview_scores').select('interview_id, rubric_key, score').in('interview_id', ivIds),
+    a.from('prospects').select('email, name').in('email', [...new Set(rows.map((r) => r.candidate_email as string))]),
+    a.from('users').select('email, name').in('email', [...new Set(rows.map((r) => r.interviewer_email as string))]),
+    a.from('interview_questions').select('id, prompt, ordering'),
+    a.from('interview_rubrics').select('key, label, ordering'),
+  ])
+
+  const candName = new Map((prospects ?? []).map((p) => [p.email, p.name as string | null]))
+  const ivrName = new Map((users ?? []).map((u) => [u.email, u.name as string | null]))
+  const qMeta = new Map((questions ?? []).map((x) => [x.id, { prompt: x.prompt as string, ordering: x.ordering as number }]))
+  const rMeta = new Map((rubrics ?? []).map((x) => [x.key, { label: x.label as string, ordering: x.ordering as number }]))
+
+  return rows
+    // A cancelled interview with nothing captured wasn't conducted — drop it.
+    .filter((r) =>
+      r.status !== 'cancelled' ||
+      !!r.recommendation ||
+      (nRows ?? []).some((n) => n.interview_id === r.id && (n.note ?? '').trim()) ||
+      (sRows ?? []).some((s) => s.interview_id === r.id),
+    )
+    .map((r) => {
+    const notes = (nRows ?? [])
+      .filter((n) => n.interview_id === r.id && (n.note ?? '').trim())
+      .map((n) => ({ prompt: qMeta.get(n.question_id)?.prompt ?? 'Question', note: n.note as string, ordering: qMeta.get(n.question_id)?.ordering ?? 0 }))
+      .sort((x, y) => x.ordering - y.ordering)
+      .map(({ prompt, note }) => ({ prompt, note }))
+    const scores = (sRows ?? [])
+      .filter((s) => s.interview_id === r.id)
+      .map((s) => ({ label: rMeta.get(s.rubric_key)?.label ?? s.rubric_key, score: s.score as number, ordering: rMeta.get(s.rubric_key)?.ordering ?? 0 }))
+      .sort((x, y) => x.ordering - y.ordering)
+      .map(({ label, score }) => ({ label, score }))
+    return {
+      interviewId: r.id as string,
+      candidateName: candName.get(r.candidate_email as string) ?? null,
+      candidateEmail: r.candidate_email as string,
+      round: r.round as 1 | 2,
+      interviewerName: ivrName.get(r.interviewer_email as string) ?? null,
+      scheduledAt: r.scheduled_at as string,
+      status: r.status as string,
+      recommendation: (r.recommendation as Recommendation) ?? null,
+      summary: (r.summary as string) ?? null,
+      notes,
+      scores,
+    }
+  })
+}
+
+// ── Admin config: question bank + rubrics ─────────────────────────────────────
+export async function getInterviewContent(): Promise<{ questions: InterviewQuestion[]; rubrics: InterviewRubric[] }> {
+  await requireStaff()
+  const a = admin()
+  const [{ data: qs }, { data: rs }] = await Promise.all([
+    a.from('interview_questions').select('*').order('ordering'),
+    a.from('interview_rubrics').select('*').order('ordering'),
+  ])
+  return { questions: (qs ?? []).map(toQuestion), rubrics: (rs ?? []).map(toRubric) }
+}
+
+export async function upsertQuestion(input: {
+  id?: string
+  round: 1 | 2 | null
+  ordering: number
+  prompt: string
+  purpose?: string
+  strongAnswer?: string
+  weakAnswer?: string
+  probe?: string
+  active?: boolean
+}): Promise<Ok<null> | Err> {
+  await requireStaff()
+  if (!input.prompt?.trim()) return { ok: false, error: 'A question prompt is required.' }
+  const row = {
+    ...(input.id ? { id: input.id } : {}),
+    round: input.round, ordering: input.ordering, prompt: input.prompt.trim(),
+    purpose: input.purpose?.trim() || null, strong_answer: input.strongAnswer?.trim() || null,
+    weak_answer: input.weakAnswer?.trim() || null, probe: input.probe?.trim() || null,
+    active: input.active ?? true, updated_at: new Date().toISOString(),
+  }
+  const { error } = await admin().from('interview_questions').upsert(row)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/interviews/questions')
+  return { ok: true, data: null }
+}
+
+export async function deleteQuestion(id: string): Promise<Ok<null> | Err> {
+  await requireStaff()
+  const { error } = await admin().from('interview_questions').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/interviews/questions')
+  return { ok: true, data: null }
+}
+
+export async function upsertRubric(input: {
+  key: string
+  label: string
+  ordering: number
+  levels: [string, string, string, string]
+  lookingFor?: [string, string, string, string]
+  examples?: [string, string, string, string]
+  active?: boolean
+}): Promise<Ok<null> | Err> {
+  await requireStaff()
+  if (!input.key?.trim() || !input.label?.trim()) return { ok: false, error: 'Rubric key and label are required.' }
+  const lf = input.lookingFor ?? ['', '', '', '']
+  const ex = input.examples ?? ['', '', '', '']
+  const { error } = await admin().from('interview_rubrics').upsert({
+    key: input.key.trim(), label: input.label.trim(), ordering: input.ordering,
+    level_1: input.levels[0] || null, level_2: input.levels[1] || null, level_3: input.levels[2] || null, level_4: input.levels[3] || null,
+    looking_for_1: lf[0]?.trim() || null, looking_for_2: lf[1]?.trim() || null, looking_for_3: lf[2]?.trim() || null, looking_for_4: lf[3]?.trim() || null,
+    example_1: ex[0]?.trim() || null, example_2: ex[1]?.trim() || null, example_3: ex[2]?.trim() || null, example_4: ex[3]?.trim() || null,
+    active: input.active ?? true, updated_at: new Date().toISOString(),
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admissions/interviews/questions')
+  return { ok: true, data: null }
+}

@@ -4,6 +4,14 @@
 export const INTERVIEW_ROUNDS = [1, 2] as const
 export type InterviewRound = (typeof INTERVIEW_ROUNDS)[number]
 
+// Each round has a theme. Displayed everywhere a round is named.
+export const ROUND_NAMES: Record<InterviewRound, string> = { 1: 'Motivation', 2: 'Coding' }
+/** "Round 1: Motivation". Pass short=true for just "Motivation". */
+export function roundLabel(round: InterviewRound, short = false): string {
+  const name = ROUND_NAMES[round] ?? ''
+  return short ? name : `Round ${round}: ${name}`
+}
+
 export type SlotStatus = 'open' | 'booked' | 'blocked'
 export type InterviewStatus = 'booked' | 'confirmed' | 'completed' | 'no_show' | 'cancelled'
 
@@ -24,6 +32,7 @@ export type Interview = {
   scheduledAt: string // ISO
   status: InterviewStatus
   meetLink: string | null
+  recommendation?: 'advance' | 'borderline' | 'no' | null
 }
 
 export const normEmail = (v: string | null | undefined) => (v ?? '').toString().trim().toLowerCase()

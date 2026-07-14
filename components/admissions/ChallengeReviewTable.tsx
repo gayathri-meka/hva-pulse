@@ -35,6 +35,8 @@ export type ChallengeReviewRow = {
   failReasons: string[]
   finalDecision: 'selected' | 'rejected' | null
   reason: string | null
+  rejectionReasonType: string | null
+  rejectionMessage: string | null
   overrodeSystem: boolean
   decidedByName: string | null
   decidedAt: string | null
@@ -319,6 +321,8 @@ export default function ChallengeReviewTable({
         courseId,
         items: bulkRows.map((r) => ({
           email: r.email,
+          name: r.name,
+          signals: r.signals,
           systemDecision: r.systemDecision,
           criteriaSnapshot: r.criteria,
         })),

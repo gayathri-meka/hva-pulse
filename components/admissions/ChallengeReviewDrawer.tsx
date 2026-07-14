@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ChallengeReviewRow } from './ChallengeReviewTable'
-import { REVIEW_DECISIONS_ENABLED, type CriterionResult, type CriterionGroup } from '@/lib/challengeReview'
+import { REVIEW_DECISIONS_ENABLED, candidateRejectionReasons, type CriterionResult, type CriterionGroup } from '@/lib/challengeReview'
 import {
   setChallengeDecision,
   releaseChallengeDecisions,
@@ -118,6 +118,24 @@ export default function ChallengeReviewDrawer({
   const [error, setError] = useState<string | null>(null)
   const [sesOpen, setSesOpen] = useState(false)
 
+  // Candidate-facing rejection message: pick a reason type (defaults to the most
+  // relevant failed criterion), edit the drafted message that the learner will see.
+  const rejectionReasons = candidateRejectionReasons(row.criteria, { name: row.name, signals: row.signals })
+  const initialType = row.rejectionReasonType && rejectionReasons.some((r) => r.key === row.rejectionReasonType)
+    ? row.rejectionReasonType
+    : rejectionReasons[0].key
+  const [reasonType, setReasonType] = useState(initialType)
+  const [rejectionMsg, setRejectionMsg] = useState(
+    row.rejectionMessage ?? rejectionReasons.find((r) => r.key === initialType)!.message,
+  )
+  const [confirmReject, setConfirmReject] = useState(false)
+  function pickReasonType(key: string) {
+    setReasonType(key)
+    // Load that reason's drafted message (overwrites the current draft).
+    const r = rejectionReasons.find((x) => x.key === key)
+    if (r) setRejectionMsg(r.message)
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -141,6 +159,17 @@ export default function ChallengeReviewDrawer({
           ? 'border-slate-200 bg-slate-50 text-slate-600'
           : 'border-red-200 bg-red-50 text-red-800'
 
+  // Reject opens a confirm popup (with the candidate message); validate the
+  // override-note requirement up front so the note field (in the bar) is reachable.
+  function openRejectModal() {
+    setError(null)
+    if ('rejected' !== row.systemDecision && !reason.trim()) {
+      setError('A reason is required when overriding the system recommendation.')
+      return
+    }
+    setConfirmReject(true)
+  }
+
   function decide(decision: 'selected' | 'rejected') {
     setError(null)
     const overriding = decision !== row.systemDecision
@@ -155,6 +184,8 @@ export default function ChallengeReviewDrawer({
         courseId,
         decision,
         reason: reason.trim() || undefined,
+        rejectionReasonType: decision === 'rejected' ? reasonType : undefined,
+        rejectionMessage: decision === 'rejected' ? rejectionMsg : undefined,
         systemDecision: row.systemDecision,
         criteriaSnapshot: row.criteria,
       })
@@ -385,16 +416,17 @@ export default function ChallengeReviewDrawer({
               </p>
             )}
             <label className="mb-1.5 block text-[11px] font-medium text-zinc-500">
-              Reason (required to override the system)
+              Internal note (required to override the system)
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
               disabled={!REVIEW_DECISIONS_ENABLED}
-              placeholder="Optional note; required if you disagree with the system…"
+              placeholder="Team-only note; required if you disagree with the system…"
               className="mb-3 w-full resize-none rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-[#5BAE5B] focus:outline-none disabled:bg-zinc-50 disabled:text-zinc-400"
             />
+
             {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button
@@ -406,11 +438,61 @@ export default function ChallengeReviewDrawer({
               </button>
               <button
                 disabled={pending || !REVIEW_DECISIONS_ENABLED}
-                onClick={() => decide('rejected')}
+                onClick={openRejectModal}
                 className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:hover:bg-zinc-300"
               >
                 ✗ Reject
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Confirm-reject popup: pick reason + review the candidate message. */}
+        {confirmReject && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmReject(false)}>
+            <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-bold text-zinc-900">Reject {row.name}?</h3>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Pick the reason and review the message the candidate will see. Nothing is sent until you Release.
+              </p>
+
+              <label className="mt-3 block text-[11px] font-medium text-zinc-500">Reason</label>
+              <select
+                value={reasonType}
+                onChange={(e) => pickReasonType(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm text-zinc-700 focus:border-[#5BAE5B] focus:outline-none"
+              >
+                {rejectionReasons.map((r) => (
+                  <option key={r.key} value={r.key}>{r.label}</option>
+                ))}
+              </select>
+
+              <label className="mt-3 block text-[11px] font-medium text-zinc-500">Message to candidate (editable)</label>
+              <textarea
+                value={rejectionMsg}
+                onChange={(e) => setRejectionMsg(e.target.value)}
+                rows={9}
+                className="mt-1 w-full resize-y rounded-lg border border-zinc-300 px-3 py-2 text-[13px] leading-relaxed text-zinc-700 focus:border-[#5BAE5B] focus:outline-none"
+              />
+
+              {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setConfirmReject(false)}
+                  disabled={pending}
+                  className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => decide('rejected')}
+                  disabled={pending}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {pending ? 'Rejecting…' : 'Confirm reject'}
+                </button>
+              </div>
             </div>
           </div>
         )}

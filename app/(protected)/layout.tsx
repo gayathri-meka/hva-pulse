@@ -8,6 +8,8 @@ import InterviewerHeader from '@/components/interviewer/InterviewerHeader'
 
 // The one page a dedicated interviewer may see (their scheduling calendar).
 const INTERVIEWER_HOME = '/admissions/interviews/calendar'
+// Paths a dedicated interviewer is allowed to reach (calendar + conducting an interview).
+const INTERVIEWER_PATHS = [INTERVIEWER_HOME, '/admissions/interviews/notes']
 
 export default async function ProtectedLayout({
   children,
@@ -25,7 +27,7 @@ export default async function ProtectedLayout({
   // Admissions), with minimal chrome — no sidebar, no other tabs.
   if (appUser.role === 'interviewer') {
     const path = (await headers()).get('x-pathname') ?? ''
-    if (!path.startsWith(INTERVIEWER_HOME)) redirect(INTERVIEWER_HOME)
+    if (!INTERVIEWER_PATHS.some((p) => path.startsWith(p))) redirect(INTERVIEWER_HOME)
     return (
       <div className="min-h-screen bg-zinc-50">
         <InterviewerHeader name={appUser.name ?? appUser.email} />

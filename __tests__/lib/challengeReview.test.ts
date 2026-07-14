@@ -3,8 +3,13 @@ import {
   evaluateCandidate,
   isExcludedCollege,
   isChallengeFinished,
+  candidateRejectionReasons,
+  fillRejectionMessage,
+  REJECTION_TEMPLATES,
+  GENERIC_REJECTION_MESSAGE,
   DEFAULT_THRESHOLDS,
   type CandidateSignals,
+  type CriterionResult,
 } from '@/lib/challengeReview'
 
 describe('isExcludedCollege', () => {
@@ -303,5 +308,42 @@ describe('evaluateCandidate', () => {
     expect(get(r, 'attempted_questions').threshold).toContain('40%')
     expect(get(r, 'span').value).toBe('14 days')
     expect(get(r, 'cramming').threshold).toContain('30%')
+  })
+})
+
+describe('fillRejectionMessage', () => {
+  const signals = { attemptedQuestions: 0, totalQuestions: 0, attemptedItems: 0, totalItems: 0, activeDays: 3, spanDays: 11, crammingPct: 0 } as CandidateSignals
+  it('substitutes {Name} (first name) and {X} per reason', () => {
+    expect(fillRejectionMessage(REJECTION_TEMPLATES.active_days, 'Asha Kumar', 'active_days', signals)).toContain('Hi Asha,')
+    expect(fillRejectionMessage(REJECTION_TEMPLATES.active_days, 'Asha', 'active_days', signals)).toContain('activity on 3 out of the 14 days')
+    expect(fillRejectionMessage(REJECTION_TEMPLATES.span, 'Asha', 'span', signals)).toContain('took 11 days')
+    // gap days = span − active = 11 − 3 = 8
+    expect(fillRejectionMessage(REJECTION_TEMPLATES.consistency, 'Asha', 'consistency', signals)).toContain('more than 8 days')
+  })
+  it('falls back to "there" when name is blank', () => {
+    expect(fillRejectionMessage(REJECTION_TEMPLATES.ses, '', 'ses', signals)).toContain('Hi there,')
+  })
+})
+
+describe('candidateRejectionReasons', () => {
+  const crit = (key: string, status: 'pass' | 'fail' | 'na', extra: Partial<CriterionResult> = {}): CriterionResult =>
+    ({ key, label: key, group: 'engagement', status, value: '', threshold: '', placeholder: false, ...extra })
+  const signals = { attemptedQuestions: 0, totalQuestions: 0, attemptedItems: 0, totalItems: 0, activeDays: 2, spanDays: 10, crammingPct: 0 } as CandidateSignals
+
+  it('returns one reason per failed criterion that has a template, ordered, + general last', () => {
+    const criteria = [crit('active_days', 'fail'), crit('cramming', 'fail'), crit('span', 'pass')]
+    const reasons = candidateRejectionReasons(criteria, { name: 'Asha', signals })
+    // cramming has no template → excluded; span passed → excluded; general always last
+    expect(reasons.map((r) => r.key)).toEqual(['active_days', 'general'])
+    expect(reasons[0].message).toContain('Asha')
+    expect(reasons[1].message).toBe(GENERIC_REJECTION_MESSAGE)
+  })
+  it('includes sensitive (internal-only) gates when they have a candidate-safe template', () => {
+    const reasons = candidateRejectionReasons([crit('ses', 'fail', { internalOnly: true })], { name: 'A', signals })
+    expect(reasons.map((r) => r.key)).toEqual(['ses', 'general'])
+  })
+  it('is just the general fallback when nothing templated failed', () => {
+    const reasons = candidateRejectionReasons([crit('cramming', 'fail'), crit('active_days', 'pass')], { name: 'A', signals })
+    expect(reasons.map((r) => r.key)).toEqual(['general'])
   })
 })

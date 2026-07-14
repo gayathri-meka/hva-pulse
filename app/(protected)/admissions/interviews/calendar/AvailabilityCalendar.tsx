@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { syncWeekAvailability, setInterviewOutcome } from '../actions'
-import type { InterviewSlot, Interview } from '@/lib/interviews'
+import { roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
 
 const HOUR = 60 * 60_000
 const DAY = 24 * 60 * 60_000
@@ -22,7 +23,7 @@ const isoOf = (s: string) => new Date(s).toISOString()
 const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
 const firstName = (s: string | null | undefined, email: string) => (s ? s.split(' ')[0] : email.split('@')[0])
 
-export default function AvailabilityCalendar({ slots, interviews }: { slots: InterviewSlot[]; interviews: Iv[] }) {
+export default function AvailabilityCalendar({ slots, interviews, showBookings = true }: { slots: InterviewSlot[]; interviews: Iv[]; showBookings?: boolean }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [weekOffset, setWeekOffset] = useState(0)
@@ -181,7 +182,9 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
         </div>
       </div>
 
-      {/* Upcoming interviews with outcome buttons */}
+      {/* Upcoming interviews with outcome buttons — shown for dedicated interviewers
+          (staff/admin manage these from the Interviews tab). */}
+      {showBookings && (
       <section className="mt-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Upcoming interviews</h2>
         {upcoming.length === 0 ? (
@@ -192,10 +195,11 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
               <li key={i.id} className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2">
                 <div className="text-sm">
                   <span className="font-semibold text-zinc-800">{i.candidateName ?? i.candidateEmail}</span>
-                  <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">Round {i.round}</span>
-                  <span className="ml-2 text-xs text-zinc-500">{new Date(i.scheduledAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{roundLabel(i.round)}</span>
+                  <span className="ml-2 text-xs text-zinc-500">{new Date(i.scheduledAt).toLocaleString('en-US', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}</span>
                 </div>
-                <div className="flex shrink-0 gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Link href={`/admissions/interviews/notes/${i.id}`} className="rounded-lg bg-[#5BAE5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#4e9c4e]">Conduct →</Link>
                   <button onClick={() => outcome(i.id, 'completed')} disabled={pending} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Done</button>
                   <button onClick={() => outcome(i.id, 'no_show')} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">No-show</button>
                 </div>
@@ -204,6 +208,7 @@ export default function AvailabilityCalendar({ slots, interviews }: { slots: Int
           </ul>
         )}
       </section>
+      )}
     </div>
   )
 }
@@ -220,11 +225,11 @@ function RowCells({
   onDown: (d: number, r: number) => void
   onEnter: (d: number, r: number) => void
 }) {
-  const hh = String(row).padStart(2, '0')
+  const hourLabel = `${row % 12 || 12} ${row < 12 ? 'AM' : 'PM'}`
   return (
     <>
       <div className="h-8 border-r border-t border-zinc-100 pr-1 text-right text-[10px] text-zinc-400">
-        {hh}:00
+        {hourLabel}
       </div>
       {days.map((_, dayIdx) => {
         const start = cellStart(dayIdx, row)
@@ -241,7 +246,7 @@ function RowCells({
             key={dayIdx}
             onMouseDown={() => onDown(dayIdx, row)}
             onMouseEnter={() => onEnter(dayIdx, row)}
-            title={booked ? `${firstName(booked.candidateName, booked.candidateEmail)} · Round ${booked.round}` : ''}
+            title={booked ? `${firstName(booked.candidateName, booked.candidateEmail)} · ${roundLabel(booked.round)}` : ''}
             className={`h-8 cursor-pointer border-l border-t border-zinc-100 ${cls} ${booked || isPast ? 'cursor-default' : ''}`}
           >
             {booked && (

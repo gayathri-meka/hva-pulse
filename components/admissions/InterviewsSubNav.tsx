@@ -6,6 +6,9 @@ import { usePathname } from 'next/navigation'
 const TABS = [
   { href: '/admissions/interviews', label: 'Overview', exact: true },
   { href: '/admissions/interviews/calendar', label: 'My calendar', exact: false },
+  { href: '/admissions/interviews/list', label: 'Interviews', exact: false },
+  { href: '/admissions/interviews/notes', label: 'Notes', exact: false },
+  { href: '/admissions/interviews/questions', label: 'Questions & rubrics', exact: false },
 ]
 
 export default function InterviewsSubNav() {

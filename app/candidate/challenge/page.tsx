@@ -32,7 +32,7 @@ export default async function ChallengePage() {
   const [{ data: prospect }, { data: src }, { data: decision }] = await Promise.all([
     admin.from('prospects').select('name').eq('email', email).maybeSingle(),
     admin.from('metric_sources').select('id').eq('bq_table', CHALLENGE_VIEW).maybeSingle(),
-    admin.from('challenge_decisions').select('final_decision, published_at').eq('email', email).maybeSingle(),
+    admin.from('challenge_decisions').select('final_decision, published_at, rejection_message').eq('email', email).maybeSingle(),
   ])
   const firstName = (prospect?.name ?? '').trim().split(' ')[0] || 'there'
 
@@ -85,7 +85,7 @@ export default async function ChallengePage() {
         {state === 'in_progress' && <InProgressCard firstName={firstName} percent={progress.percent} />}
         {state === 'completed' && <CompletedCard firstName={firstName} />}
         {state === 'selected' && <SelectedCard firstName={firstName} />}
-        {state === 'rejected' && <RejectedCard />}
+        {state === 'rejected' && <RejectedCard message={decision?.rejection_message ?? null} />}
 
         {/* ── PERSISTENT: How it works + What we observe (all states) ──── */}
         <HowItWorks />
@@ -196,13 +196,25 @@ function SelectedCard({ firstName }: { firstName: string }) {
   )
 }
 
-// ── State 5: rejected + released (placeholder — templated messages TBD) ─────
-function RejectedCard() {
+// ── State 5: rejected + released — shows the team's chosen rejection message ─
+function RejectedCard({ message }: { message: string | null }) {
+  const fallback =
+    'Thank you for taking part in the 14-Day Challenge. We won’t be moving forward with your application this cycle, but we truly appreciate the effort you put in.'
+  const text = message?.trim() || fallback
+  // Render plain text but turn any URLs into clickable links (the Orbit CTA).
+  const parts = text.split(/(https?:\/\/[^\s]+)/g)
   return (
-    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-6 text-center sm:p-7">
-      <p className="mx-auto max-w-md text-[13px] leading-[1.6] text-zinc-600 sm:text-[14px]">
-        Thank you for taking part in the 14-Day Challenge. We&apos;ll be in touch here with an update on your
-        application soon.
+    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-6 sm:p-7">
+      <p className="mx-auto max-w-xl whitespace-pre-wrap text-[13px] leading-[1.7] text-zinc-700 sm:text-[14px]">
+        {parts.map((part, i) =>
+          /^https?:\/\//.test(part) ? (
+            <a key={i} href={part} target="_blank" rel="noreferrer" className="font-semibold text-[#166534] underline underline-offset-2">
+              {part}
+            </a>
+          ) : (
+            <span key={i}>{part}</span>
+          ),
+        )}
       </p>
     </div>
   )
