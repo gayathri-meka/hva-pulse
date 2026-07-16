@@ -50,6 +50,7 @@ export type DayProgress = {
 export type Member = {
   email: string
   name: string
+  phone: string | null
   source: 'pulse' | 'sensai'
   days: DayProgress[]
   totalTasks: number

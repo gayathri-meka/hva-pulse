@@ -28,6 +28,7 @@ import {
 export type ChallengeReviewRow = {
   email: string
   name: string
+  phone: string | null
   source: 'pulse' | 'sensai'
   signals: CandidateSignals
   criteria: CriterionResult[]
@@ -194,6 +195,19 @@ export default function ChallengeReviewTable({
             {info.getValue() || info.row.original.email}
           </button>
         ),
+      }),
+      col.accessor('email', {
+        header: 'Email',
+        size: 220,
+        enableColumnFilter: false,
+        cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
+      }),
+      col.accessor((r) => r.phone ?? '', {
+        id: 'phone',
+        header: 'Phone',
+        size: 140,
+        enableColumnFilter: false,
+        cell: (info) => <span className="tabular-nums text-zinc-600">{info.getValue() || '—'}</span>,
       }),
       col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : r.systemDecision === 'review' ? 'Review' : r.systemDecision === 'in_progress' ? 'In progress' : 'Reject'), {
         id: 'system',
@@ -391,8 +405,8 @@ export default function ChallengeReviewTable({
         getRowId={(r) => r.email}
         enableRowSelection={canReview}
         pinnedLeft={['name']}
-        searchKeys={['name', 'email']}
-        searchPlaceholder="Search name or email…"
+        searchKeys={['name', 'email', 'phone']}
+        searchPlaceholder="Search name, email or phone…"
         csvFilename="challenge_review"
         emptyMessage="No candidates to review yet."
         toolbarRight={({ selectedRows, filteredRows }) => (

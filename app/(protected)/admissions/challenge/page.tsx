@@ -106,7 +106,7 @@ export default async function AdmissionsChallengePage() {
   const [fetchedRows, { data: prospectRows }, { data: configRows }, { data: decisionRows }] =
     await Promise.all([
       fetchAllRawRows(src.id),
-      supabase.from('prospects').select('email, name'),
+      supabase.from('prospects').select('email, name, phone'),
       supabase.from('challenge_review_config').select('*'),
       supabase.from('challenge_decisions').select('*'),
     ])
@@ -124,6 +124,9 @@ export default async function AdmissionsChallengePage() {
 
   const prospectName = new Map(
     (prospectRows ?? []).map((p) => [p.email.trim().toLowerCase(), p.name as string | null]),
+  )
+  const prospectPhone = new Map(
+    (prospectRows ?? []).map((p) => [p.email.trim().toLowerCase(), (p.phone as string | null) ?? null]),
   )
 
   // Group every (member, task) row by member email.
@@ -216,6 +219,7 @@ export default async function AdmissionsChallengePage() {
       return {
         email,
         name: prospectName.get(email) || dims[0]?.learner_name || email,
+        phone: prospectPhone.get(email) ?? null,
         source: (prospectName.has(email) ? 'pulse' : 'sensai') as Member['source'],
         days,
         totalTasks,
@@ -323,6 +327,7 @@ export default async function AdmissionsChallengePage() {
     return {
       email: m.email,
       name: m.name,
+      phone: m.phone,
       source: m.source,
       signals,
       criteria: evaln.criteria,
