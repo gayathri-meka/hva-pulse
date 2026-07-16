@@ -30,6 +30,8 @@ export async function fetchChallengeRawRows(supabase: SupabaseClient): Promise<C
       .from('metric_raw_rows')
       .select('learner_id, dimensions')
       .eq('source_id', src.id)
+      // Stable sort REQUIRED — unordered offset pagination skips/duplicates rows.
+      .order('id', { ascending: true })
       .range(from, from + PAGE - 1)
     if (error || !data?.length) break
     rows.push(...(data as ChallengeRawRow[]))

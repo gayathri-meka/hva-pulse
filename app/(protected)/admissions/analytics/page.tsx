@@ -43,6 +43,9 @@ export default async function AdmissionsAnalyticsPage() {
         .from('metric_raw_rows')
         .select('learner_id, dimensions')
         .eq('source_id', sourceId)
+        // Stable sort REQUIRED — unordered offset pagination skips/duplicates rows
+        // on large tables, undercounting the funnel.
+        .order('id', { ascending: true })
         .range(from, from + PAGE - 1)
       if (error) throw error
       if (!data?.length) break

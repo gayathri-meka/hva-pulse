@@ -176,6 +176,8 @@ export default async function LearningPage({ searchParams }: Props) {
             .select('source_id, learner_id, dimensions, value')
             .in('source_id', sourceIds)
             .in('learner_id', emails)
+            // Stable sort REQUIRED — parallel unordered ranges skip/duplicate rows.
+            .order('id', { ascending: true })
             .range(i * PAGE, (i + 1) * PAGE - 1),
         ),
       )

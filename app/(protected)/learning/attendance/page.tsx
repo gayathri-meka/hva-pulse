@@ -53,6 +53,9 @@ export default async function AttendancePage() {
   async function fetchAll<T>(
     table: string,
     cols: string,
+    // Stable, unique sort key — REQUIRED, else offset pagination skips/duplicates
+    // rows once the table is large.
+    orderCol: string,
     apply?: (q: any) => any,
   ): Promise<T[]> {
     const PAGE = 1000
@@ -60,7 +63,7 @@ export default async function AttendancePage() {
     let from = 0
     for (;;) {
       const base = supabase.from(table).select(cols)
-      const q = apply ? apply(base) : base
+      const q = (apply ? apply(base) : base).order(orderCol, { ascending: true })
       const { data, error } = await q.range(from, from + PAGE - 1)
       if (error) throw error
       const rows = (data ?? []) as T[]
@@ -73,15 +76,17 @@ export default async function AttendancePage() {
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const [calls, attendance, learners, { data: syncLog }] = await Promise.all([
-    fetchAll<CallRow>('calls', 'meeting_code, name, type, batch'),
+    fetchAll<CallRow>('calls', 'meeting_code, name, type, batch', 'meeting_code'),
     fetchAll<AttendanceRow>(
       'attendance_records',
       'meeting_code, participant_email, call_date, call_time, duration_minutes',
+      'id',
     ),
     // Only count "Ongoing" learners.
     fetchAll<LearnerRow>(
       'learners',
       'learner_id, batch_name, new_batch, status, users!learners_user_id_fkey(id, email, name)',
+      'learner_id',
       (q) => q.eq('is_current_cohort', true).eq('status', 'Ongoing'),
     ),
     supabase

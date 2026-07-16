@@ -94,6 +94,10 @@ export default async function AdmissionsChallengePage() {
         .from('metric_raw_rows')
         .select('learner_id, dimensions')
         .eq('source_id', sourceId)
+        // Stable sort is REQUIRED: without it, offset pagination silently skips
+        // and duplicates rows across pages once the table is large — which under-
+        // counts distinct tasks (the "320 items → 257" bug).
+        .order('id', { ascending: true })
         .range(from, from + PAGE - 1)
       if (error) throw error
       if (!data?.length) break
