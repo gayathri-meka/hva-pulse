@@ -94,13 +94,13 @@ describe('evaluateCandidate', () => {
     expect(r.failReasons).toHaveLength(4)
   })
 
-  // Boundary checks — operators are attempted>min, active>min, span>=min, cramming<max.
-  it('gates on the % of items attempted (>= threshold)', () => {
+  // Boundary checks — operators are attempted>=min, active>min, span>=min, cramming<max.
+  it('gates on the % of questions attempted (>= threshold)', () => {
     // Default threshold is 40%. Use /100 so the % is exact.
-    expect(get(evaluateCandidate({ ...passing, attemptedItems: 39, totalItems: 100 }), 'attempted_questions').status).toBe('fail')
-    expect(get(evaluateCandidate({ ...passing, attemptedItems: 40, totalItems: 100 }), 'attempted_questions').status).toBe('pass')
-    // Value shows the % and the raw fraction (of items).
-    expect(get(evaluateCandidate({ ...passing, attemptedItems: 40, totalItems: 100 }), 'attempted_questions').value).toBe('40% (40/100)')
+    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 39, totalQuestions: 100 }), 'attempted_questions').status).toBe('fail')
+    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 40, totalQuestions: 100 }), 'attempted_questions').status).toBe('pass')
+    // Value shows the % and the raw fraction (of questions).
+    expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 40, totalQuestions: 100 }), 'attempted_questions').value).toBe('40% (40/100)')
   })
 
   it('treats active days as strictly greater than the threshold', () => {

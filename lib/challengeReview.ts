@@ -57,7 +57,7 @@ export const GATING_RULES: { key: string; label: string }[] = [
   { key: 'per_capita_income', label: 'Per-capita income' },
   { key: 'graduation_timeline', label: 'Graduation timeline' },
   { key: 'work_commitment', label: 'Work commitment' },
-  { key: 'attempted_questions', label: 'Items attempted' },
+  { key: 'attempted_questions', label: 'Questions attempted' },
   { key: 'active_days', label: 'Active days' },
   { key: 'span', label: 'Span' },
   { key: 'cramming', label: 'Cramming' },
@@ -333,9 +333,9 @@ export function evaluateCandidate(
         ? 'fail'
         : 'pass'
 
-  // Share of ALL challenge items (reading + questions) this candidate attempted.
-  const itemsAttemptedPct =
-    signals.totalItems > 0 ? Math.round((signals.attemptedItems / signals.totalItems) * 100) : 0
+  // Share of the quiz QUESTIONS this candidate attempted (of the total, ~263).
+  const questionsAttemptedPct =
+    signals.totalQuestions > 0 ? Math.round((signals.attemptedQuestions / signals.totalQuestions) * 100) : 0
 
   // Consistency: idle days between first and last activity.
   const gapDays = Math.max(0, signals.spanDays - signals.activeDays)
@@ -449,14 +449,14 @@ export function evaluateCandidate(
     // ── Engagement (challenge effort + performance) ───────────────────────────
     {
       key: 'attempted_questions',
-      label: 'Items attempted',
+      label: 'Questions attempted',
       group: 'engagement',
       placeholder: false,
-      status: itemsAttemptedPct >= thresholds.minQuestionsAttemptedPct ? 'pass' : 'fail',
-      value: `${itemsAttemptedPct}% (${signals.attemptedItems}/${signals.totalItems})`,
-      threshold: `At least ${thresholds.minQuestionsAttemptedPct}% of all challenge items (reading + questions) attempted`,
-      failFeedback: `You attempted ${itemsAttemptedPct}% of the challenge items; we look for at least ${thresholds.minQuestionsAttemptedPct}%.`,
-      sortValue: itemsAttemptedPct,
+      status: questionsAttemptedPct >= thresholds.minQuestionsAttemptedPct ? 'pass' : 'fail',
+      value: `${questionsAttemptedPct}% (${signals.attemptedQuestions}/${signals.totalQuestions})`,
+      threshold: `At least ${thresholds.minQuestionsAttemptedPct}% of all quiz questions attempted`,
+      failFeedback: `You attempted ${questionsAttemptedPct}% of the challenge questions; we look for at least ${thresholds.minQuestionsAttemptedPct}%.`,
+      sortValue: questionsAttemptedPct,
     },
     {
       key: 'active_days',
