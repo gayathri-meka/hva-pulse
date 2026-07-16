@@ -387,6 +387,8 @@ Full schema dump is at `docs/schema.sql`. Always refer to this for column names 
 
 Existing indexes are in `migrations/007_performance_indexes.sql` and `migrations/020_missing_indexes.sql`. Add new ones in a new migration file.
 
+**Paginating a large table? ALWAYS add a stable `.order(<unique col>)` (e.g. `.order('id')`) before `.range()`.** PostgREST/Postgres offset pagination without a sort silently **skips and duplicates rows across pages** once the result spans multiple pages — you still get ~the right row *count* but a lopsided subset (this caused the "320 items → 257" challenge-totals bug). Every `.range()` loop over `metric_raw_rows` (challenge review/analytics, `lib/challengeStatus.ts`, learning metrics) now orders by `id`. For very large tables where deep `OFFSET` gets slow, prefer keyset/cursor pagination (`WHERE id > <last id> ORDER BY id LIMIT n`) — fast at any size — over offset.
+
 **`docs/schema.sql` must ALWAYS be kept in sync — this is a hard rule.** Any time you add or change a migration, regenerate the dump and commit it in the same PR as the migration. Never leave the dump stale. Regenerate it only *after* the migration has actually been applied to the linked database (a dump reflects the live DB, not the migration files), so the sequence is: write migration → apply it → regenerate dump → commit both together. If you cannot apply the migration yourself (no DB access), say so explicitly and flag that the dump regen is still owed.
 
 ```bash
