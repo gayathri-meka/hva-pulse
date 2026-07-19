@@ -12,15 +12,20 @@ const ROWS = 24 // one-hour cells across 24h; each cell = one 1-hour slot
 
 type Iv = Interview & { candidateName: string | null }
 
-function startOfWeekMonday(base: Date): Date {
-  const x = new Date(base)
-  x.setHours(0, 0, 0, 0)
-  const day = (x.getDay() + 6) % 7 // Mon=0
-  x.setDate(x.getDate() - day)
-  return x
+// The grid is fixed to IST (the programme runs in India), independent of the
+// interviewer's device timezone — so a "1 PM" cell is 1 PM IST for everyone.
+const IST = 'Asia/Kolkata'
+const IST_OFFSET_MS = 5.5 * 60 * 60_000 // IST = UTC+5:30, no DST
+
+// UTC instant of Monday 00:00 IST for the week containing `base`.
+function startOfWeekMondayIST(base: Date): Date {
+  const ist = new Date(base.getTime() + IST_OFFSET_MS) // shift so UTC accessors read IST wall clock
+  const day = (ist.getUTCDay() + 6) % 7 // Mon=0 in IST
+  const mondayMidnightIstWall = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - day, 0, 0, 0)
+  return new Date(mondayMidnightIstWall - IST_OFFSET_MS) // IST wall clock → real UTC instant
 }
 const isoOf = (s: string) => new Date(s).toISOString()
-const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
+const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: IST })
 const firstName = (s: string | null | undefined, email: string) => (s ? s.split(' ')[0] : email.split('@')[0])
 
 export default function AvailabilityCalendar({ slots, interviews, showBookings = true }: { slots: InterviewSlot[]; interviews: Iv[]; showBookings?: boolean }) {
@@ -47,7 +52,7 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
   for (const i of interviews) bookedByIso.set(isoOf(i.scheduledAt), i)
 
   const now = Date.now()
-  const weekStart = new Date(startOfWeekMonday(new Date()).getTime() + weekOffset * 7 * DAY)
+  const weekStart = new Date(startOfWeekMondayIST(new Date()).getTime() + weekOffset * 7 * DAY)
   const days = Array.from({ length: 7 }, (_, d) => new Date(weekStart.getTime() + d * DAY))
 
   const dragging = useRef(false)
@@ -142,7 +147,7 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
           <button onClick={() => setWeekOffset(0)} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${weekOffset === 0 ? 'bg-zinc-900 text-white' : 'border border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}>This week</button>
           <button onClick={() => setWeekOffset(1)} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${weekOffset === 1 ? 'bg-zinc-900 text-white' : 'border border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}>Next week</button>
         </div>
-        <span className="text-xs text-zinc-400">Week of {days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+        <span className="text-xs text-zinc-400">Week of {days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: IST })} · IST</span>
         {weekOffset === 0 && (
           <button onClick={copyToNextWeek} disabled={pending} className="ml-auto rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">Copy to next week →</button>
         )}

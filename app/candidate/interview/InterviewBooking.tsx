@@ -8,15 +8,15 @@ import { roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews
 
 const jakarta = { fontFamily: 'var(--font-jakarta), sans-serif' } as const
 
-const dayKey = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-const weekday = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short' })
-const dayNum = (iso: string) => new Date(iso).getDate()
-const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { month: 'short' })
-const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+// All times are shown in IST (the programme runs in India) — pin the timezone so
+// the candidate sees the same time regardless of their device's timezone.
+const IST = 'Asia/Kolkata'
+const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: IST }) // YYYY-MM-DD (IST)
+const weekday = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', timeZone: IST })
+const dayNum = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', timeZone: IST })
+const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { month: 'short', timeZone: IST })
+const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: IST })
+const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: IST })
 
 export default function InterviewBooking({ state }: { state: BookingState }) {
   const router = useRouter()
@@ -221,7 +221,7 @@ function Picker({
               {pending
                 ? 'Booking…'
                 : chosen
-                  ? <>Confirm · {new Date(chosen.startsAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}, {timeLabel(chosen.startsAt)} <span aria-hidden>→</span></>
+                  ? <>Confirm · {new Date(chosen.startsAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: IST })}, {timeLabel(chosen.startsAt)} <span aria-hidden>→</span></>
                   : 'Pick a time to confirm'}
             </button>
           </div>

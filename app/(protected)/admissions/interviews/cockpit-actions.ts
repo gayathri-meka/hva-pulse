@@ -154,103 +154,59 @@ export async function submitAssessment(input: {
   return { ok: true, data: null }
 }
 
-// ── Notes lookup by candidate (Interviews → Notes tab) ───────────────────────
-export type NoteBundle = {
+// ── Scores table (Interviews → Notes tab) ────────────────────────────────────
+export type ScoreRow = {
   interviewId: string
   candidateName: string | null
   candidateEmail: string
   round: 1 | 2
   interviewerName: string | null
-  scheduledAt: string
-  status: string
   recommendation: Recommendation | null
-  summary: string | null
-  notes: { prompt: string; note: string }[]
-  scores: { label: string; score: number }[]
+  scores: Record<string, number> // rubricKey → 1–4
+  hasNotes: boolean
 }
 
-/** Search interviews by candidate name/email and return their captured notes + scores.
- *  Empty query returns the most recent interviews that already have notes. */
-export async function searchInterviewNotes(query: string): Promise<NoteBundle[]> {
+/** One row per (non-cancelled) interview with its rubric scores + decision, plus
+ *  the rubric column list. Powers the Notes tab table. */
+export async function getInterviewScores(): Promise<{ rubrics: { key: string; label: string }[]; rows: ScoreRow[] }> {
   await requireStaff()
   const a = admin()
-  const q = query.trim().toLowerCase()
-
-  // Resolve which candidate emails match the query.
-  let ivRows: { data: Record<string, unknown>[] | null } = { data: [] }
-  if (q) {
-    const emails = new Set<string>()
-    const [{ data: p }, { data: directIv }] = await Promise.all([
-      a.from('prospects').select('email').or(`name.ilike.%${q}%,email.ilike.%${q}%`),
-      a.from('interviews').select('candidate_email').ilike('candidate_email', `%${q}%`),
-    ])
-    for (const r of p ?? []) emails.add(r.email)
-    for (const r of directIv ?? []) emails.add(r.candidate_email)
-    if (emails.size === 0) return []
-    ivRows = await a.from('interviews').select('*').in('candidate_email', [...emails]).order('scheduled_at', { ascending: false })
-  } else {
-    // No query → recent interviews that have notes/scores/assessment.
-    const [{ data: nIds }, { data: sIds }, { data: aIds }] = await Promise.all([
-      a.from('interview_notes').select('interview_id'),
-      a.from('interview_scores').select('interview_id'),
-      a.from('interviews').select('id').not('recommendation', 'is', null),
-    ])
-    const ids = [...new Set([...(nIds ?? []).map((r) => r.interview_id), ...(sIds ?? []).map((r) => r.interview_id), ...(aIds ?? []).map((r) => r.id)])]
-    if (ids.length === 0) return []
-    ivRows = await a.from('interviews').select('*').in('id', ids).order('scheduled_at', { ascending: false }).limit(40)
-  }
-
-  const rows = ivRows.data ?? []
-  if (rows.length === 0) return []
-  const ivIds = rows.map((r) => r.id as string)
-
-  const [{ data: nRows }, { data: sRows }, { data: prospects }, { data: users }, { data: questions }, { data: rubrics }] = await Promise.all([
-    a.from('interview_notes').select('interview_id, question_id, note').in('interview_id', ivIds),
-    a.from('interview_scores').select('interview_id, rubric_key, score').in('interview_id', ivIds),
-    a.from('prospects').select('email, name').in('email', [...new Set(rows.map((r) => r.candidate_email as string))]),
-    a.from('users').select('email, name').in('email', [...new Set(rows.map((r) => r.interviewer_email as string))]),
-    a.from('interview_questions').select('id, prompt, ordering'),
-    a.from('interview_rubrics').select('key, label, ordering'),
+  const [{ data: ivs }, { data: rubricRows }, { data: scoreRows }, { data: noteRows }] = await Promise.all([
+    a.from('interviews').select('id, candidate_email, round, interviewer_email, recommendation').neq('status', 'cancelled').order('scheduled_at', { ascending: false }),
+    a.from('interview_rubrics').select('key, label, ordering').eq('active', true).order('ordering'),
+    a.from('interview_scores').select('interview_id, rubric_key, score'),
+    a.from('interview_notes').select('interview_id, note'),
   ])
+  const interviews = ivs ?? []
+  const rubrics = (rubricRows ?? []).map((r) => ({ key: r.key as string, label: r.label as string }))
 
+  const [{ data: prospects }, { data: users }] = await Promise.all([
+    a.from('prospects').select('email, name').in('email', [...new Set(interviews.map((r) => r.candidate_email as string))]),
+    a.from('users').select('email, name').in('email', [...new Set(interviews.map((r) => r.interviewer_email as string))]),
+  ])
   const candName = new Map((prospects ?? []).map((p) => [p.email, p.name as string | null]))
   const ivrName = new Map((users ?? []).map((u) => [u.email, u.name as string | null]))
-  const qMeta = new Map((questions ?? []).map((x) => [x.id, { prompt: x.prompt as string, ordering: x.ordering as number }]))
-  const rMeta = new Map((rubrics ?? []).map((x) => [x.key, { label: x.label as string, ordering: x.ordering as number }]))
 
-  return rows
-    // A cancelled interview with nothing captured wasn't conducted — drop it.
-    .filter((r) =>
-      r.status !== 'cancelled' ||
-      !!r.recommendation ||
-      (nRows ?? []).some((n) => n.interview_id === r.id && (n.note ?? '').trim()) ||
-      (sRows ?? []).some((s) => s.interview_id === r.id),
-    )
-    .map((r) => {
-    const notes = (nRows ?? [])
-      .filter((n) => n.interview_id === r.id && (n.note ?? '').trim())
-      .map((n) => ({ prompt: qMeta.get(n.question_id)?.prompt ?? 'Question', note: n.note as string, ordering: qMeta.get(n.question_id)?.ordering ?? 0 }))
-      .sort((x, y) => x.ordering - y.ordering)
-      .map(({ prompt, note }) => ({ prompt, note }))
-    const scores = (sRows ?? [])
-      .filter((s) => s.interview_id === r.id)
-      .map((s) => ({ label: rMeta.get(s.rubric_key)?.label ?? s.rubric_key, score: s.score as number, ordering: rMeta.get(s.rubric_key)?.ordering ?? 0 }))
-      .sort((x, y) => x.ordering - y.ordering)
-      .map(({ label, score }) => ({ label, score }))
-    return {
-      interviewId: r.id as string,
-      candidateName: candName.get(r.candidate_email as string) ?? null,
-      candidateEmail: r.candidate_email as string,
-      round: r.round as 1 | 2,
-      interviewerName: ivrName.get(r.interviewer_email as string) ?? null,
-      scheduledAt: r.scheduled_at as string,
-      status: r.status as string,
-      recommendation: (r.recommendation as Recommendation) ?? null,
-      summary: (r.summary as string) ?? null,
-      notes,
-      scores,
-    }
-  })
+  const scoresByIv = new Map<string, Record<string, number>>()
+  for (const s of scoreRows ?? []) {
+    const m = scoresByIv.get(s.interview_id) ?? {}
+    m[s.rubric_key] = s.score as number
+    scoresByIv.set(s.interview_id, m)
+  }
+  const noted = new Set<string>()
+  for (const n of noteRows ?? []) if ((n.note ?? '').trim()) noted.add(n.interview_id)
+
+  const rows: ScoreRow[] = interviews.map((r) => ({
+    interviewId: r.id as string,
+    candidateName: candName.get(r.candidate_email as string) ?? null,
+    candidateEmail: r.candidate_email as string,
+    round: r.round as 1 | 2,
+    interviewerName: ivrName.get(r.interviewer_email as string) ?? null,
+    recommendation: (r.recommendation as Recommendation) ?? null,
+    scores: scoresByIv.get(r.id as string) ?? {},
+    hasNotes: noted.has(r.id as string) || scoresByIv.has(r.id as string) || !!r.recommendation,
+  }))
+  return { rubrics, rows }
 }
 
 // ── Admin config: question bank + rubrics ─────────────────────────────────────
