@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { requireStaff, requireInterviewer, getAppUser } from '@/lib/auth'
 import { normEmail, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { deleteInterviewEvent } from '@/lib/googleCalendar'
 
 // Admin/staff view of the whole interview programme: interviewers, the slot pool,
 // all bookings, and metrics. Adding an interviewer = a users row with role
@@ -161,6 +162,32 @@ export async function setInterviewOutcome(
   const { data, error } = await q.select('id')
   if (error) return { ok: false, error: error.message }
   if (!data?.length) return { ok: false, error: 'Interview not found or already closed.' }
+  revalidatePath('/admissions/interviews')
+  revalidatePath('/admissions/interviews/list')
+  revalidatePath('/admissions/interviews/calendar')
+  return { ok: true }
+}
+
+/** Cancel an interview: mark cancelled, free the slot back to the pool, and delete
+ *  the Google Calendar event (notifies attendees). The proper way to cancel — never
+ *  delete the interviews row directly (that orphans the calendar event). */
+export async function cancelInterview(interviewId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireInterviewer()
+  const isStaff = user.role === 'admin' || user.role === 'staff'
+  let q = admin().from('interviews').select('id, slot_id, calendar_event_id, status').eq('id', interviewId)
+  if (!isStaff) q = q.eq('interviewer_email', normEmail(user.email))
+  const { data: iv } = await q.maybeSingle()
+  if (!iv) return { ok: false, error: 'Interview not found.' }
+  if (iv.status === 'cancelled') return { ok: true } // already cancelled — idempotent
+
+  const { error } = await admin()
+    .from('interviews')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', interviewId)
+  if (error) return { ok: false, error: error.message }
+  if (iv.slot_id) await admin().from('interview_slots').update({ status: 'open' }).eq('id', iv.slot_id).eq('status', 'booked')
+  if (iv.calendar_event_id) await deleteInterviewEvent(iv.calendar_event_id as string)
+
   revalidatePath('/admissions/interviews')
   revalidatePath('/admissions/interviews/list')
   revalidatePath('/admissions/interviews/calendar')

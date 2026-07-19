@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
-import { setInterviewOutcome } from '../actions'
+import { setInterviewOutcome, cancelInterview } from '../actions'
 import { roundLabel, type Interview } from '@/lib/interviews'
 
 type Row = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
@@ -143,6 +143,15 @@ function RowActions({ interview, onError }: { interview: Row; onError: (e: strin
       else router.refresh()
     })
   }
+  function cancel() {
+    if (!confirm('Cancel this interview? The Google Calendar invite will be removed and attendees notified.')) return
+    onError(null)
+    start(async () => {
+      const res = await cancelInterview(interview.id)
+      if (!res.ok) onError(res.error)
+      else router.refresh()
+    })
+  }
 
   // A cancelled interview with nothing captured has no useful action.
   const cancelledEmpty = interview.status === 'cancelled' && !interview.hasNotes
@@ -160,6 +169,7 @@ function RowActions({ interview, onError }: { interview: Row; onError: (e: strin
         <>
           <button onClick={() => outcome('completed')} disabled={pending} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Done</button>
           <button onClick={() => outcome('no_show')} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">No-show</button>
+          <button onClick={cancel} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Cancel</button>
         </>
       )}
     </div>
