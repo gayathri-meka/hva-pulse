@@ -18,6 +18,22 @@ const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { 
 const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: IST })
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: IST })
 
+// A "quick add" Google Calendar link so the candidate can drop the interview onto
+// their own calendar in one click (needed since external invites don't auto-add).
+function gcalUrl(interview: Interview): string {
+  const start = new Date(interview.scheduledAt)
+  const end = new Date(start.getTime() + 60 * 60_000)
+  const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '') // YYYYMMDDTHHmmssZ (UTC)
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `HVA Interview · ${roundLabel(interview.round)}`,
+    dates: `${stamp(start)}/${stamp(end)}`,
+    details: interview.meetLink ? `Join the interview: ${interview.meetLink}` : 'HyperVerge Academy admissions interview.',
+    ctz: IST,
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
 export default function InterviewBooking({ state }: { state: BookingState }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -117,11 +133,16 @@ function RoundCard({ interview, onReschedule, pending }: { interview: Interview;
         </span>
       </div>
       <div className="mt-1.5 text-[15px] font-bold text-zinc-900" style={jakarta}>{fullDay(interview.scheduledAt)}</div>
-      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 1 hour</div>
+      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 1 hour · IST</div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         {interview.meetLink && (
           <a href={interview.meetLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-[#0f1f0f] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#15301a]">
             <IconVideo size={15} /> Join Google Meet
+          </a>
+        )}
+        {upcoming && (
+          <a href={gcalUrl(interview)} target="_blank" rel="noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-[13px] font-bold text-zinc-700 transition-colors hover:border-[#5BAE5B] hover:bg-[#f0fdf4]">
+            Add to calendar
           </a>
         )}
         {upcoming && (
