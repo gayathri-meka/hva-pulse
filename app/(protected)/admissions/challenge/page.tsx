@@ -175,6 +175,12 @@ export default async function AdmissionsChallengePage() {
             (acc, t) => { const c = itemCounts(t); acc.total += c.total; acc.attempted += c.attempted; acc.completed += c.completed; return acc },
             { total: 0, attempted: 0, completed: 0 },
           )
+          // Question-only counts (reading excluded) — the admin Day-by-day / Detailed
+          // views count attempted quiz questions, not items.
+          const q = tasks.reduce(
+            (acc, t) => { if (t.type === 'quiz') { acc.total += t.totalQuestions; acc.attempted += t.attemptedQuestions; acc.passed += t.passedQuestions } return acc },
+            { total: 0, attempted: 0, passed: 0 },
+          )
           return {
             ordering,
             name: v.name,
@@ -184,6 +190,9 @@ export default async function AdmissionsChallengePage() {
             itemsTotal: items.total,
             itemsAttempted: items.attempted,
             itemsCompleted: items.completed,
+            questionsTotal: q.total,
+            questionsAttempted: q.attempted,
+            questionsPassed: q.passed,
           }
         })
       const totalTasks = days.reduce((s, d) => s + d.total, 0)
@@ -220,6 +229,19 @@ export default async function AdmissionsChallengePage() {
         const day = istDate(ms)
         activityByDate[day] = (activityByDate[day] ?? 0) + 1
       }
+      // Attempted QUIZ QUESTIONS per IST date (reading excluded) — the Review-tab heat
+      // shows sub-questions attempted per day. Each task's attempts are attributed to
+      // its last-activity date (same approximation as activityByDate).
+      const questionsByDate: Record<string, number> = {}
+      for (const d of dims) {
+        if ((d.task_type ?? '') !== 'quiz') continue
+        const ms = activityMs(d.last_activity_at)
+        const attempted = num(d.attempted_questions)
+        if (ms == null || attempted === 0) continue
+        const day = istDate(ms)
+        questionsByDate[day] = (questionsByDate[day] ?? 0) + attempted
+      }
+      const totalQuestions = days.reduce((s, d) => s + d.questionsTotal, 0)
       return {
         email,
         name: prospectName.get(email) || dims[0]?.learner_name || email,
@@ -234,6 +256,8 @@ export default async function AdmissionsChallengePage() {
         completedItems,
         attemptedQuestions,
         passedQuestions,
+        totalQuestions,
+        questionsByDate,
         keyQuestionScorePct,
         keyQuestionAvgScore,
         started,
@@ -356,18 +380,20 @@ export default async function AdmissionsChallengePage() {
       completedItems: m.completedItems,
       totalItems: m.totalItems,
       activityByDate: m.activityByDate,
+      questionsByDate: m.questionsByDate,
     }
   })
 
   // Cohort-level per-day rollup.
   const memberCount = members.length
-  const agg = new Map<number, { name: string; total: number; totalItems: number; pctSum: number; fully: number; started: number }>()
+  const agg = new Map<number, { name: string; total: number; totalItems: number; totalQuestions: number; pctSum: number; fully: number; started: number }>()
   for (const m of members) {
     for (const d of m.days) {
-      if (!agg.has(d.ordering)) agg.set(d.ordering, { name: d.name, total: d.total, totalItems: 0, pctSum: 0, fully: 0, started: 0 })
+      if (!agg.has(d.ordering)) agg.set(d.ordering, { name: d.name, total: d.total, totalItems: 0, totalQuestions: 0, pctSum: 0, fully: 0, started: 0 })
       const a = agg.get(d.ordering)!
-      // Structural item count for the day (same across members) — take the max seen.
+      // Structural counts for the day (same across members) — take the max seen.
       a.totalItems = Math.max(a.totalItems, d.itemsTotal)
+      a.totalQuestions = Math.max(a.totalQuestions, d.questionsTotal)
       a.pctSum += d.total ? d.completed / d.total : 0
       if (d.total && d.completed === d.total) a.fully += 1
       if (d.tasks.some((t) => t.state !== 'not_started')) a.started += 1
@@ -380,6 +406,7 @@ export default async function AdmissionsChallengePage() {
       name: a.name,
       totalTasks: a.total,
       totalItems: a.totalItems,
+      totalQuestions: a.totalQuestions,
       avgPct: memberCount ? Math.round((a.pctSum / memberCount) * 100) : 0,
       fullyCompleted: a.fully,
       started: a.started,

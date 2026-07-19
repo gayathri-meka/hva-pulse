@@ -47,6 +47,7 @@ export type ChallengeReviewRow = {
   completedItems: number
   totalItems: number
   activityByDate: Record<string, number> // IST date → items done that day
+  questionsByDate: Record<string, number> // IST date → attempted quiz questions that day
 }
 
 // Which criteria get their own column, and the short header for each. Eligibility
@@ -307,10 +308,10 @@ export default function ChallengeReviewTable({
         size: 150,
         cell: (info) => <ActivitySparkline activityByDate={info.row.original.activityByDate} />,
       }),
-      // Per-date heat columns — granular, default-hidden (toggle via the column menu).
+      // Per-date heat columns — sub-questions attempted that day (reading excluded).
       // `compact` gives them tight padding + a readable "16 Jun" header.
       ...calendarDates.map((date) =>
-        col.accessor((r) => r.activityByDate[date] ?? 0, {
+        col.accessor((r) => r.questionsByDate[date] ?? 0, {
           id: `d_${date}`,
           header: dateLabel(date),
           size: 56,
