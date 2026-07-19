@@ -53,18 +53,24 @@ const passing: CandidateSignals = {
 const get = (r: ReturnType<typeof evaluateCandidate>, key: string) =>
   r.criteria.find((c) => c.key === key)!
 
-describe('isChallengeFinished', () => {
+describe('isChallengeFinished (evaluable rule)', () => {
   const DAY = 86_400_000
   const now = new Date('2026-07-20T12:00:00Z').getTime()
-  it('finished once 14 days have passed since first activity', () => {
-    expect(isChallengeFinished(new Date(now - 5 * DAY).toISOString(), now)).toBe(false) // day 5
-    expect(isChallengeFinished(new Date(now - 13 * DAY).toISOString(), now)).toBe(false) // day 14, still in window
-    expect(isChallengeFinished(new Date(now - 14 * DAY).toISOString(), now)).toBe(true) // window elapsed
+  const base = { attemptedQuestions: 0, totalQuestions: 263, nowMs: now }
+  it('completed — attempted every question → evaluable', () => {
+    const recent = new Date(now - DAY).toISOString()
+    expect(isChallengeFinished({ ...base, lastActive: recent, attemptedQuestions: 263 })).toBe(true)
+    // recently active + not all attempted → still pending
+    expect(isChallengeFinished({ ...base, lastActive: recent, attemptedQuestions: 262 })).toBe(false)
   })
-  it('never-started (no first activity) is only finished once the cohort end date passes', () => {
-    expect(isChallengeFinished(null, now)).toBe(false)
-    expect(isChallengeFinished(null, now, '2026-07-25')).toBe(false) // end date not yet
-    expect(isChallengeFinished(null, now, '2026-07-19')).toBe(true) // end date passed
+  it('inactive for 7+ days → evaluable; within 7 days → pending', () => {
+    expect(isChallengeFinished({ ...base, lastActive: new Date(now - 6 * DAY).toISOString() })).toBe(false)
+    expect(isChallengeFinished({ ...base, lastActive: new Date(now - 7 * DAY).toISOString() })).toBe(true)
+  })
+  it('never-started (no activity) stays pending until the cohort end date passes', () => {
+    expect(isChallengeFinished({ ...base, lastActive: null })).toBe(false)
+    expect(isChallengeFinished({ ...base, lastActive: null, challengeEndDate: '2026-07-25' })).toBe(false)
+    expect(isChallengeFinished({ ...base, lastActive: null, challengeEndDate: '2026-07-19' })).toBe(true)
   })
 })
 

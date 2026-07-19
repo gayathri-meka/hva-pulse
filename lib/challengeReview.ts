@@ -158,26 +158,32 @@ export type CandidateSignals = {
   familySize?: number          // total people in the family (per-capita denominator)
 }
 
-// The challenge is 14 days. A candidate has FINISHED once their 14-day window has
-// elapsed (with SensAI's daily drip they can't finish sooner), or the cohort end
-// date has passed. Until then they're 'in_progress' and no rules run.
-export const CHALLENGE_LENGTH_DAYS = 14
+// A candidate becomes EVALUABLE (Select/Reject) only once they've either finished
+// the challenge (attempted every quiz question) or gone quiet for INACTIVITY_DAYS.
+// Everyone else — still actively working through it — stays 'in_progress' (Pending),
+// with NO rules run. Never-started learners (no activity to measure from) stay
+// pending until the cohort end date. Until evaluable they're 'in_progress'.
+export const INACTIVITY_DAYS = 7
 
-export function isChallengeFinished(
-  firstActive: string | null,
-  nowMs: number,
-  challengeEndDate?: string,
-): boolean {
-  // Cohort backstop — end date passed → the whole cohort is finished (covers
-  // never-started learners, who have no personal window).
+export function isChallengeFinished(params: {
+  lastActive: string | null // last activity timestamp (null = never started)
+  attemptedQuestions: number
+  totalQuestions: number // total quiz questions in the challenge
+  nowMs: number
+  challengeEndDate?: string | null
+}): boolean {
+  const { lastActive, attemptedQuestions, totalQuestions, nowMs, challengeEndDate } = params
+  // Cohort backstop — end date passed → whole cohort evaluable (covers never-started).
   if (challengeEndDate) {
     const end = new Date(`${challengeEndDate}T23:59:59Z`).getTime()
     if (Number.isFinite(end) && nowMs > end) return true
   }
-  // Per-candidate — their 14-day window (from first activity) has elapsed.
-  if (firstActive) {
-    const start = new Date(firstActive).getTime()
-    if (Number.isFinite(start) && (nowMs - start) / 86_400_000 >= CHALLENGE_LENGTH_DAYS) return true
+  // Completed — attempted every quiz question.
+  if (totalQuestions > 0 && attemptedQuestions >= totalQuestions) return true
+  // Inactive — no activity in the last INACTIVITY_DAYS days (measured from last activity).
+  if (lastActive) {
+    const last = new Date(lastActive).getTime()
+    if (Number.isFinite(last) && (nowMs - last) / 86_400_000 >= INACTIVITY_DAYS) return true
   }
   return false
 }
