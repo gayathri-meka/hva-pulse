@@ -309,6 +309,10 @@ export async function setChallengeDecision(input: {
   if (!email) return { ok: false, error: 'This candidate has no email to record a decision against.' }
   if (input.decision !== 'selected' && input.decision !== 'rejected')
     return { ok: false, error: 'Invalid decision.' }
+  // Learners still mid-challenge can't be decided yet (also enforced by the DB
+  // constraint, which doesn't allow 'in_progress' as a snapshot value).
+  if (input.systemDecision === 'in_progress')
+    return { ok: false, error: 'This candidate is still doing the challenge — no decision can be recorded yet.' }
 
   const overrode = input.decision !== input.systemDecision
   const reason = (input.reason ?? '').trim()
