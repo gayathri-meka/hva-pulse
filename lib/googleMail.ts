@@ -14,6 +14,8 @@ import { createClient } from '@supabase/supabase-js'
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/userinfo.email',
+  // Lets the shared account create the interview calendar event + Meet link.
+  'https://www.googleapis.com/auth/calendar.events',
 ]
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -132,6 +134,18 @@ export type GmailSender = { accessToken: string; from: string }
  * behaviour). Returns null if OAuth isn't configured or no account is connected.
  */
 export async function getGmailSender(): Promise<GmailSender | null> {
+  const t = await getGoogleAccessToken()
+  if (!t) return null
+  const displayName = process.env.EMAIL_FROM_NAME || 'HyperVerge Academy'
+  return { accessToken: t.accessToken, from: `${encodeHeaderWord(displayName)} <${t.email}>` }
+}
+
+/**
+ * Mint a fresh access token for the shared Google account (+ its email). Used by
+ * both the Gmail sender and the Calendar helper. Null if OAuth isn't configured or
+ * no account is connected.
+ */
+export async function getGoogleAccessToken(): Promise<{ accessToken: string; email: string } | null> {
   if (!oauthConfigured()) return null
   const { data } = await admin()
     .from('email_oauth_credentials')
@@ -152,9 +166,7 @@ export async function getGmailSender(): Promise<GmailSender | null> {
   })
   const tok = (await res.json()) as TokenResponse
   if (!tok.access_token) return null
-
-  const displayName = process.env.EMAIL_FROM_NAME || 'HyperVerge Academy'
-  return { accessToken: tok.access_token, from: `${encodeHeaderWord(displayName)} <${data.email}>` }
+  return { accessToken: tok.access_token, email: data.email }
 }
 
 // RFC 2047 encode a header value if it contains non-ASCII (Subject / display name).

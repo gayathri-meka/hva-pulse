@@ -3,8 +3,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { nextBookableRound, isSlotBookable, normEmail, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { nextBookableRound, isSlotBookable, normEmail, roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
 import { sendBookingEmails } from '@/lib/interviewInvite'
+import { createInterviewEvent, deleteInterviewEvent } from '@/lib/googleCalendar'
 
 // Candidate-facing booking. Candidates aren't in the users table — identity is the
 // authed Google email; all data access is via the service-role client filtered to
@@ -94,32 +95,47 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   const slot = toSlot(claimed)
 
   // Create the confirmed interview. If this fails (e.g. duplicate round), release the slot.
-  const { error: ivErr } = await admin().from('interviews').insert({
+  const { data: created, error: ivErr } = await admin().from('interviews').insert({
     candidate_email: email,
     round,
     slot_id: slot.id,
     interviewer_email: slot.interviewerEmail,
     scheduled_at: slot.startsAt,
     status: 'confirmed',
-  })
-  if (ivErr) {
+  }).select('id').single()
+  if (ivErr || !created) {
     await admin().from('interview_slots').update({ status: 'open' }).eq('id', slot.id)
     return { ok: false, error: 'Could not complete the booking. Please try again.' }
   }
 
-  // Best-effort confirmation emails (calendar + Meet invite added post re-consent).
   const [{ data: prospect }, { data: interviewer }] = await Promise.all([
     admin().from('prospects').select('name').eq('email', email).maybeSingle(),
     admin().from('users').select('name').eq('email', slot.interviewerEmail).maybeSingle(),
   ])
-  await sendBookingEmails({
+
+  // Preferred: a Google Calendar invite with a Meet link (academy@ organiser,
+  // interviewer + candidate attendees). Google emails everyone automatically.
+  const event = await createInterviewEvent({
     candidateEmail: email,
     candidateName: prospect?.name ?? null,
     interviewerEmail: slot.interviewerEmail,
-    interviewerName: interviewer?.name ?? null,
     round,
+    roundLabel: roundLabel(round),
     scheduledAt: slot.startsAt,
   })
+  if (event) {
+    await admin().from('interviews').update({ meet_link: event.meetLink, calendar_event_id: event.eventId }).eq('id', created.id)
+  } else {
+    // Fallback (calendar not connected yet): plain confirmation email to both.
+    await sendBookingEmails({
+      candidateEmail: email,
+      candidateName: prospect?.name ?? null,
+      interviewerEmail: slot.interviewerEmail,
+      interviewerName: interviewer?.name ?? null,
+      round,
+      scheduledAt: slot.startsAt,
+    })
+  }
 
   revalidatePath('/candidate/interview')
   return { ok: true }
@@ -132,7 +148,7 @@ export async function cancelMyInterview(interviewId: string): Promise<{ ok: true
 
   const { data: iv } = await admin()
     .from('interviews')
-    .select('id, slot_id, status, scheduled_at')
+    .select('id, slot_id, status, scheduled_at, calendar_event_id')
     .eq('id', interviewId)
     .eq('candidate_email', email)
     .maybeSingle()
@@ -149,6 +165,8 @@ export async function cancelMyInterview(interviewId: string): Promise<{ ok: true
   if (error) return { ok: false, error: error.message }
   // Free the slot back to the pool so it (or another) can be re-booked.
   if (iv.slot_id) await admin().from('interview_slots').update({ status: 'open' }).eq('id', iv.slot_id).eq('status', 'booked')
+  // Cancel the Google Calendar event (notifies attendees). Best-effort.
+  if (iv.calendar_event_id) await deleteInterviewEvent(iv.calendar_event_id as string)
 
   revalidatePath('/candidate/interview')
   return { ok: true }
