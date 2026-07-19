@@ -84,12 +84,20 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
         },
       }),
       col.display({
-        id: 'action',
+        id: 'notes',
         header: 'Notes',
-        size: 240,
+        size: 120,
         enableHiding: false,
         enableColumnFilter: false,
-        cell: (info) => <RowActions interview={info.row.original} onError={setError} />,
+        cell: (info) => <NotesCell interview={info.row.original} />,
+      }),
+      col.display({
+        id: 'actions',
+        header: 'Actions',
+        size: 200,
+        enableHiding: false,
+        enableColumnFilter: false,
+        cell: (info) => <OutcomeCell interview={info.row.original} onError={setError} />,
       }),
     ],
     [],
@@ -129,8 +137,19 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
   )
 }
 
-// Conduct link + Done/No-show outcome buttons for a single row.
-function RowActions({ interview, onError }: { interview: Row; onError: (e: string | null) => void }) {
+// The notes link (opens the cockpit). Its own column.
+function NotesCell({ interview }: { interview: Row }) {
+  // A cancelled interview with nothing captured has no notes to take/view.
+  if (interview.status === 'cancelled' && !interview.hasNotes) return <span className="text-xs text-zinc-300">—</span>
+  return (
+    <Link href={`/admissions/interviews/notes/${interview.id}`} className="whitespace-nowrap rounded-lg bg-[#5BAE5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#4e9c4e]">
+      {interview.hasNotes ? 'View notes' : 'Take notes'} →
+    </Link>
+  )
+}
+
+// Outcome actions (Done / No-show / Cancel) — only for a still-open interview.
+function OutcomeCell({ interview, onError }: { interview: Row; onError: (e: string | null) => void }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const active = interview.status === 'booked' || interview.status === 'confirmed'
@@ -153,25 +172,12 @@ function RowActions({ interview, onError }: { interview: Row; onError: (e: strin
     })
   }
 
-  // A cancelled interview with nothing captured has no useful action.
-  const cancelledEmpty = interview.status === 'cancelled' && !interview.hasNotes
-
+  if (!active) return <span className="text-xs text-zinc-300">—</span>
   return (
-    <div className="flex shrink-0 items-center justify-end gap-1.5">
-      {cancelledEmpty ? (
-        <span className="text-xs text-zinc-300">—</span>
-      ) : (
-        <Link href={`/admissions/interviews/notes/${interview.id}`} className="whitespace-nowrap rounded-lg bg-[#5BAE5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#4e9c4e]">
-          {interview.hasNotes ? 'View notes' : 'Take notes'} →
-        </Link>
-      )}
-      {active && (
-        <>
-          <button onClick={() => outcome('completed')} disabled={pending} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Done</button>
-          <button onClick={() => outcome('no_show')} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">No-show</button>
-          <button onClick={cancel} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Cancel</button>
-        </>
-      )}
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button onClick={() => outcome('completed')} disabled={pending} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Done</button>
+      <button onClick={() => outcome('no_show')} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">No-show</button>
+      <button onClick={cancel} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Cancel</button>
     </div>
   )
 }
