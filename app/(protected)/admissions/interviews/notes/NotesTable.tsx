@@ -17,6 +17,14 @@ const REC_LABEL: Record<string, string> = { advance: 'Advance', borderline: 'Bor
 // Weakest → strongest tone for a 1–4 score chip.
 const SCORE_TONE = ['bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-orange-100 text-orange-700', 'bg-emerald-100 text-emerald-700']
 
+// The two long rubric names get concise headers so they don't truncate to
+// "PRO…" / "TIME…"; everything else shows its full label.
+const RUBRIC_SHORT: Record<string, string> = {
+  'Program Alignment': 'Program',
+  'Time Commitment': 'Time',
+}
+const shortRubric = (label: string) => RUBRIC_SHORT[label] ?? label
+
 const col = createColumnHelper<ScoreRow>()
 
 export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; label: string }[]; rows: ScoreRow[] }) {
@@ -60,8 +68,8 @@ export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; 
       ...rubrics.map((rb) =>
         col.accessor((r) => r.scores[rb.key] ?? null, {
           id: `rubric_${rb.key}`,
-          header: rb.label,
-          size: 90,
+          header: shortRubric(rb.label),
+          size: 128,
           enableColumnFilter: false,
           cell: (info) => {
             const s = info.getValue() as number | null
@@ -72,8 +80,8 @@ export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; 
       ),
       col.display({
         id: 'ai',
-        header: '',
-        size: 96,
+        header: 'AI review',
+        size: 110,
         enableHiding: false,
         enableColumnFilter: false,
         cell: (info) => {
@@ -91,7 +99,8 @@ export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; 
       }),
       col.display({
         id: 'action',
-        header: '',
+        header: 'Notes',
+        size: 120,
         enableHiding: false,
         enableColumnFilter: false,
         cell: (info) => (
