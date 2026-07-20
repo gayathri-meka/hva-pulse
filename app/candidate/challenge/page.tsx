@@ -83,7 +83,7 @@ export default async function ChallengePage() {
       <div className="mx-auto max-w-3xl space-y-3 px-4 pt-3 sm:space-y-4 sm:px-6 sm:pt-4">
         {/* ── STATE CARD ──────────────────────────────────────────────── */}
         {state === 'not_started' && <NotStartedCard />}
-        {state === 'in_progress' && <InProgressCard firstName={firstName} percent={progress.percent} />}
+        {state === 'in_progress' && <InProgressCard firstName={firstName} />}
         {state === 'completed' && <CompletedCard firstName={firstName} />}
         {state === 'selected' && <SelectedCard firstName={firstName} />}
         {state === 'rejected' && <RejectedCard firstName={firstName} message={decision?.rejection_message ?? null} />}
@@ -123,24 +123,18 @@ function NotStartedCard() {
   )
 }
 
-// ── State 2: in progress (bold bar) ─────────────────────────────────────────
-function InProgressCard({ firstName, percent }: { firstName: string; percent: number }) {
+// ── State 2: in progress (neutral — no % since it isn't live from SensAI) ────
+function InProgressCard({ firstName }: { firstName: string }) {
   return (
     <div className="rounded-2xl border-[0.5px] border-[#bbf7d0] bg-white p-5 sm:p-6">
-      <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#16a34a]">Keep going</div>
+      <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#16a34a]">You&apos;re under way</div>
       <h2 className="mt-1 text-[21px] font-black text-zinc-900 sm:text-[25px]" style={{ ...jakarta, lineHeight: 1.2 }}>
-        You&apos;re {percent}% there, {firstName}! 🚀
+        You&apos;ve started, {firstName}! 🚀
       </h2>
       <p className="mt-1.5 text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
-        You&apos;ve been doing great — just a bit more to go. Log in and finish what&apos;s left.
+        Keep the momentum going — log in to SensAI and pick up where you left off. Showing up a little every day is what
+        counts.
       </p>
-
-      <div className="mt-4 flex items-center gap-3">
-        <span className="w-11 shrink-0 text-[18px] font-black text-[#16a34a]">{percent}%</span>
-        <div className="h-3 flex-1 overflow-hidden rounded-full bg-[#e8f4e8]">
-          <div className="h-full rounded-full bg-[#5BAE5B] transition-all" style={{ width: `${Math.max(percent, 3)}%` }} />
-        </div>
-      </div>
 
       <a
         href={SENSAI_URL}
@@ -148,11 +142,11 @@ function InProgressCard({ firstName, percent }: { firstName: string; percent: nu
         rel="noopener noreferrer"
         className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-4 text-[15px] font-extrabold text-white shadow-sm transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99] sm:text-[16px]"
       >
-        Log in to SensAI &amp; finish the rest
+        Log in to SensAI &amp; continue
         <IconExternalLink size={18} stroke={2.5} className="transition-transform group-hover:translate-x-0.5" />
       </a>
       <p className="mt-3 rounded-xl bg-[#f0fdf4] px-3 py-2 text-center text-[12px] font-semibold text-[#166534] sm:text-[13px]">
-        A little more each day is all it takes — you&apos;re so close.
+        SensAI always has your exact progress — that&apos;s the place to see what&apos;s left.
       </p>
     </div>
   )
