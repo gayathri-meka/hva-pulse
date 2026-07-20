@@ -6,6 +6,14 @@ import { requireInterviewer, requireStaff } from '@/lib/auth'
 import type { CriterionResult } from '@/lib/challengeReview'
 import { intakeDossierFields, type IntakeGroup } from '@/lib/challengeIntakeDisplay'
 import { isValidScore, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type Recommendation } from '@/lib/interviewCockpit'
+import { chatJSON } from '@/lib/openai'
+import {
+  buildNotesReviewUserPrompt,
+  parseNotesReview,
+  NOTES_REVIEW_SYSTEM,
+  type NotesReviewInput,
+  type NotesReviewResult,
+} from '@/lib/interviewNotesReview'
 
 // Cockpit ops for conducting an interview. requireInterviewer allows admin/staff +
 // dedicated interviewers; a dedicated interviewer may only touch their OWN interview.
@@ -207,6 +215,64 @@ export async function getInterviewScores(): Promise<{ rubrics: { key: string; la
     hasNotes: noted.has(r.id as string) || scoresByIv.has(r.id as string) || !!r.recommendation,
   }))
   return { rubrics, rows }
+}
+
+// ── AI review of an interview's notes (OpenAI) ───────────────────────────────
+export type { NotesReviewResult } from '@/lib/interviewNotesReview'
+
+/** Have the LLM QA one interview's notes: overall quality, per-question gaps,
+ *  and whether the notes justify the interviewer's rubric scores. Staff-only. */
+export async function reviewInterviewNotes(interviewId: string): Promise<Ok<NotesReviewResult> | Err> {
+  await requireStaff()
+  const a = admin()
+
+  const { data: iv } = await a.from('interviews').select('*').eq('id', interviewId).maybeSingle()
+  if (!iv) return { ok: false, error: 'Interview not found.' }
+
+  const [{ data: prospect }, { data: qs }, { data: rs }, { data: ns }, { data: sc }] = await Promise.all([
+    a.from('prospects').select('name').eq('email', iv.candidate_email).maybeSingle(),
+    a.from('interview_questions').select('*').eq('active', true).order('ordering'),
+    a.from('interview_rubrics').select('*').eq('active', true).order('ordering'),
+    a.from('interview_notes').select('question_id, note').eq('interview_id', interviewId),
+    a.from('interview_scores').select('rubric_key, score').eq('interview_id', interviewId),
+  ])
+
+  const round = iv.round as 1 | 2
+  const questions = (qs ?? []).map(toQuestion).filter((q) => q.round === null || q.round === round)
+  const noteBy = new Map((ns ?? []).map((n) => [n.question_id, (n.note ?? '') as string]))
+  const scoreBy = new Map((sc ?? []).map((s) => [s.rubric_key, s.score as number]))
+
+  // Nothing to review if the interviewer wrote no notes and left no scores.
+  const anyNotes = questions.some((q) => (noteBy.get(q.id) ?? '').trim()) || (iv.summary ?? '').trim()
+  if (!anyNotes && scoreBy.size === 0) {
+    return { ok: false, error: 'No notes or scores to review yet.' }
+  }
+
+  const input: NotesReviewInput = {
+    candidateName: (prospect?.name as string) ?? (iv.candidate_email as string),
+    round,
+    questions: questions.map((q, i) => ({
+      n: i + 1,
+      section: q.section,
+      prompt: q.prompt,
+      note: noteBy.get(q.id) ?? '',
+    })),
+    rubrics: (rs ?? []).map(toRubric).map((r) => ({
+      label: r.label,
+      levels: r.levels,
+      lookingFor: r.lookingFor,
+      score: scoreBy.get(r.key) ?? null,
+    })),
+    summary: (iv.summary as string) ?? '',
+    recommendation: (iv.recommendation as string) ?? null,
+  }
+
+  try {
+    const raw = await chatJSON({ system: NOTES_REVIEW_SYSTEM, user: buildNotesReviewUserPrompt(input) })
+    return { ok: true, data: parseNotesReview(raw) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'AI review failed.' }
+  }
 }
 
 // ── Admin config: question bank + rubrics ─────────────────────────────────────

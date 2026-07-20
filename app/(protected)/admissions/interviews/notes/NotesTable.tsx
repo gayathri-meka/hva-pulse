@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import Link from 'next/link'
 import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
+import NotesReviewButton from '@/components/interviews/NotesReviewButton'
 import { roundLabel } from '@/lib/interviews'
 import type { ScoreRow } from '../cockpit-actions'
 
@@ -69,6 +70,25 @@ export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; 
           },
         }),
       ),
+      col.display({
+        id: 'ai',
+        header: '',
+        size: 96,
+        enableHiding: false,
+        enableColumnFilter: false,
+        cell: (info) => {
+          const r = info.row.original
+          // Only offer the AI check once there's something to review.
+          if (!r.hasNotes) return null
+          return (
+            <NotesReviewButton
+              interviewId={r.interviewId}
+              candidateName={r.candidateName ?? r.candidateEmail}
+              round={r.round}
+            />
+          )
+        },
+      }),
       col.display({
         id: 'action',
         header: '',
