@@ -54,12 +54,20 @@ export default async function CandidateLayout({
   // Once a decision is released, the challenge is behind them → mark it green.
   if (decision?.published_at) completedStages.push('challenge')
 
+  // Stages the candidate can't reach yet → the stepper greys them out (no more
+  // "coming soon" pages). Interview unlocks only for a released "selected"
+  // candidate; the final Selection flow isn't built, so it stays locked for now.
+  const interviewUnlocked = decision?.final_decision === 'selected' && decision?.published_at != null
+  const lockedStages: string[] = []
+  if (!interviewUnlocked) lockedStages.push('interview')
+  lockedStages.push('selection')
+
   return (
     <div
       className={`${jakarta.variable} ${nunito.variable} min-h-screen bg-[#f5f7f5]`}
       style={{ fontFamily: 'var(--font-nunito), system-ui, sans-serif' }}
     >
-      <CandidateHeader completedStages={completedStages} />
+      <CandidateHeader completedStages={completedStages} lockedStages={lockedStages} />
       {children}
     </div>
   )

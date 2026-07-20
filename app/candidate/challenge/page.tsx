@@ -5,6 +5,7 @@ import {
   IconConfetti,
   IconExternalLink,
   IconEye,
+  IconSeeding,
   IconTrophy,
 } from '@tabler/icons-react'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
@@ -85,11 +86,17 @@ export default async function ChallengePage() {
         {state === 'in_progress' && <InProgressCard firstName={firstName} percent={progress.percent} />}
         {state === 'completed' && <CompletedCard firstName={firstName} />}
         {state === 'selected' && <SelectedCard firstName={firstName} />}
-        {state === 'rejected' && <RejectedCard message={decision?.rejection_message ?? null} />}
+        {state === 'rejected' && <RejectedCard firstName={firstName} message={decision?.rejection_message ?? null} />}
 
-        {/* ── PERSISTENT: How it works + What we observe (all states) ──── */}
-        <HowItWorks />
-        <WhatWeObserve />
+        {/* ── "How it works" + "What we observe" only while they're still
+             working the challenge — irrelevant (and tone-deaf) once there's a
+             decision or the challenge is done. ─────────────────────────────── */}
+        {(state === 'not_started' || state === 'in_progress') && (
+          <>
+            <HowItWorks />
+            <WhatWeObserve />
+          </>
+        )}
       </div>
     </main>
   )
@@ -196,16 +203,33 @@ function SelectedCard({ firstName }: { firstName: string }) {
   )
 }
 
-// ── State 5: rejected + released — shows the team's chosen rejection message ─
-function RejectedCard({ message }: { message: string | null }) {
+// ── State 5: rejected + released — the team's chosen rejection message, shown
+//   warmly. Every reason template ends with an Orbit-Track link; we lift that
+//   trailing URL out of the prose and turn it into a proper CTA button.
+function RejectedCard({ firstName, message }: { firstName: string; message: string | null }) {
   const fallback =
     'Thank you for taking part in the 14-Day Challenge. We won’t be moving forward with your application this cycle, but we truly appreciate the effort you put in.'
-  const text = message?.trim() || fallback
-  // Render plain text but turn any URLs into clickable links (the Orbit CTA).
-  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+  const text = (message?.trim() || fallback).trim()
+
+  // A URL at the very end is the Orbit invitation → pull it out for the button.
+  const trailing = text.match(/(https?:\/\/[^\s]+)[.\s]*$/)
+  const ctaUrl = trailing ? trailing[1] : null
+  const body = ctaUrl
+    ? text.slice(0, trailing!.index).replace(/[\s:—–-]+$/, '')
+    : text
+  // Linkify any URL still left inline in the body (defensive — usually none).
+  const parts = body.split(/(https?:\/\/[^\s]+)/g)
+
   return (
-    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-6 sm:p-7">
-      <p className="mx-auto max-w-xl whitespace-pre-wrap text-[13px] leading-[1.7] text-zinc-700 sm:text-[14px]">
+    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-6 text-center sm:p-8">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100">
+        <IconSeeding size={30} stroke={2} className="text-zinc-500" />
+      </div>
+      <div className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">Challenge outcome</div>
+      <h2 className="mt-1.5 text-[20px] font-black text-zinc-900 sm:text-[23px]" style={{ ...jakarta, lineHeight: 1.25 }}>
+        Thank you for taking part{firstName && firstName !== 'there' ? `, ${firstName}` : ''}
+      </h2>
+      <p className="mx-auto mt-3 max-w-xl whitespace-pre-wrap text-left text-[13px] leading-[1.7] text-zinc-600 sm:text-center sm:text-[14px]">
         {parts.map((part, i) =>
           /^https?:\/\//.test(part) ? (
             <a key={i} href={part} target="_blank" rel="noreferrer" className="font-semibold text-[#166534] underline underline-offset-2">
@@ -216,6 +240,23 @@ function RejectedCard({ message }: { message: string | null }) {
           ),
         )}
       </p>
+
+      {ctaUrl && (
+        <div className="mt-6">
+          <a
+            href={ctaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-3.5 text-[15px] font-extrabold text-white shadow-sm transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99] sm:text-[16px]"
+          >
+            Explore the Orbit Track
+            <IconExternalLink size={18} stroke={2.5} className="transition-transform group-hover:translate-x-0.5" />
+          </a>
+          <p className="mx-auto mt-2.5 max-w-sm text-[12px] leading-[1.5] text-zinc-400 sm:text-[13px]">
+            A self-paced programme — keep building your skills on your own schedule, and you&apos;re welcome to apply again.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
