@@ -10,6 +10,7 @@ import { chatJSON } from '@/lib/openai'
 import {
   buildNotesReviewUserPrompt,
   parseNotesReview,
+  isNotesOptional,
   NOTES_REVIEW_SYSTEM,
   type NotesReviewInput,
   type NotesReviewResult,
@@ -256,6 +257,7 @@ export async function reviewInterviewNotes(interviewId: string): Promise<Ok<Note
       section: q.section,
       prompt: q.prompt,
       note: noteBy.get(q.id) ?? '',
+      notesOptional: isNotesOptional(q.prompt),
     })),
     rubrics: (rs ?? []).map(toRubric).map((r) => ({
       label: r.label,

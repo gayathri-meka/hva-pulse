@@ -8,6 +8,20 @@ export type ReviewQuestion = {
   section: string | null
   prompt: string
   note: string // '' when the interviewer left it blank
+  notesOptional?: boolean // warm-up/rapport question — a blank note is NOT a gap
+}
+
+// Hardcoded (for now) list of warm-up / rapport prompts that don't require a
+// note. Matched loosely so small edits to the wording still register. If this
+// grows, promote it to a `notes_optional` column on interview_questions.
+const NOTES_OPTIONAL_PATTERNS: RegExp[] = [
+  /before we begin/i,
+  /just a simple conversation to get to know you/i,
+]
+
+export function isNotesOptional(prompt: string): boolean {
+  const p = (prompt ?? '').trim()
+  return NOTES_OPTIONAL_PATTERNS.some((re) => re.test(p))
 }
 
 export type ReviewRubric = {
@@ -54,15 +68,17 @@ Your job is quality control on the NOTES and their consistency with the SCORES. 
 
 Assess three things:
 1. Overall quality of the notes: are they specific and evidence-based (capturing what the candidate actually said/did), or vague, generic, one-word, or missing? Classify as "strong", "adequate", or "thin".
-2. Gaps by question: list the specific questions whose notes are missing, too thin, or don't actually record the candidate's answer — and say concretely what is missing. Only include questions that genuinely have a gap. If a note is fine, do not list it.
+2. Gaps by question: list the specific questions whose notes are missing, too thin, or don't actually record the candidate's answer — and say concretely what is missing. Only include questions that genuinely have a gap. If a note is fine, do not list it. IMPORTANT: some questions are warm-up/rapport openers marked "(notes optional)" — a blank or brief note on those is expected, so NEVER list them as a gap.
 3. Rating alignment: for EACH rubric, decide whether the notes provide evidence that justifies the score the interviewer gave, using the rubric's own level descriptors as the yardstick. If the evidence points to a different level, set aligned=false and suggest the score the notes actually support, with a short rationale that cites the relevant rubric level. If the notes are too thin to judge the rubric at all, set aligned=false, suggestedScore=null, and say the notes don't support any score.
 
 Be direct and specific. Reference the candidate's actual notes. Do not invent evidence that isn't in the notes.
 
+The "overall" field must be SPECIFIC TO THIS CANDIDATE: cite concrete facts the notes actually contain (what the candidate said, their situation, the specific standout or weak spot). Do NOT write generic filler that could describe any interview — phrases like "provides a decent amount of detail", "captures specific aspects of the candidate's background", "could benefit from more specificity", or "generally evidence-based" are banned. Lead with the single most useful observation for a reviewer. Two or three sentences, no hedging.
+
 Return ONLY a JSON object of exactly this shape:
 {
   "quality": "strong" | "adequate" | "thin",
-  "overall": "2-4 sentence overall assessment of the notes",
+  "overall": "2-3 sentences, specific to this candidate, citing concrete details from the notes",
   "questionGaps": [ { "question": "the question prompt", "issue": "what is missing or thin" } ],
   "ratingChecks": [ { "rubric": "rubric label", "givenScore": number|null, "suggestedScore": number|null, "aligned": true|false, "rationale": "why, citing the rubric level" } ]
 }`
@@ -86,8 +102,9 @@ export function buildNotesReviewUserPrompt(input: NotesReviewInput): string {
     ? input.questions
         .map((q) => {
           const sec = q.section ? ` [${q.section}]` : ''
+          const optional = q.notesOptional ? ' (notes optional)' : ''
           const note = q.note.trim() ? q.note.trim() : '(no note written)'
-          return `Q${q.n}${sec}: ${q.prompt}\nNote: ${note}`
+          return `Q${q.n}${sec}${optional}: ${q.prompt}\nNote: ${note}`
         })
         .join('\n\n')
     : '(no questions configured)'

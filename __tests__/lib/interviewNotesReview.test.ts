@@ -2,6 +2,7 @@ import { describe, test, expect } from 'vitest'
 import {
   buildNotesReviewUserPrompt,
   parseNotesReview,
+  isNotesOptional,
   type NotesReviewInput,
 } from '@/lib/interviewNotesReview'
 
@@ -64,6 +65,33 @@ describe('buildNotesReviewUserPrompt', () => {
 
   test('round 2 gets the Coding label', () => {
     expect(buildNotesReviewUserPrompt({ ...baseInput, round: 2 })).toContain('Round 2 (Coding)')
+  })
+
+  test('marks notes-optional questions so the model skips them as gaps', () => {
+    const p = buildNotesReviewUserPrompt({
+      ...baseInput,
+      questions: [{ n: 1, section: 'General', prompt: 'Before we begin…', note: '', notesOptional: true }],
+    })
+    expect(p).toContain('(notes optional)')
+  })
+
+  test('does not add the optional marker to normal questions', () => {
+    expect(buildNotesReviewUserPrompt(baseInput)).not.toContain('(notes optional)')
+  })
+})
+
+describe('isNotesOptional', () => {
+  test('flags the warm-up opener', () => {
+    expect(isNotesOptional('Before we begin, this is just a simple conversation to get to know you better.')).toBe(true)
+  })
+  test('is case-insensitive and tolerant of surrounding text', () => {
+    expect(isNotesOptional('  BEFORE WE BEGIN — your goals?  ')).toBe(true)
+  })
+  test('does not flag a normal scored question', () => {
+    expect(isNotesOptional('Tell us about a hard decision you made.')).toBe(false)
+  })
+  test('handles empty/undefined prompts', () => {
+    expect(isNotesOptional('')).toBe(false)
   })
 })
 
