@@ -30,16 +30,16 @@ const isUpcoming = (r: Row) => (r.status === 'booked' || r.status === 'confirmed
 
 const col = createColumnHelper<Row>()
 
-type View = 'upcoming' | 'past' | 'all'
+type View = 'upcoming' | 'completed' | 'all'
 
 export default function InterviewsListTable({ interviews }: { interviews: Row[] }) {
   const [view, setView] = useState<View>('upcoming')
   const [error, setError] = useState<string | null>(null)
 
   const rows = useMemo(() => {
-    if (view === 'all') return interviews
-    if (view === 'upcoming') return interviews.filter(isUpcoming)
-    return interviews.filter((r) => !isUpcoming(r))
+    if (view === 'all') return interviews // includes cancelled
+    if (view === 'upcoming') return interviews.filter(isUpcoming) // future booked/confirmed only (never cancelled)
+    return interviews.filter((r) => r.status === 'completed') // completed only (never cancelled)
   }, [interviews, view])
 
   const columns = useMemo(
@@ -105,7 +105,7 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
 
   const toggle = (
     <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">
-      {(['upcoming', 'past', 'all'] as View[]).map((v) => (
+      {(['upcoming', 'completed', 'all'] as View[]).map((v) => (
         <button
           key={v}
           onClick={() => setView(v)}

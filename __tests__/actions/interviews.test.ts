@@ -151,6 +151,8 @@ describe('getBookingState (round-scoped slot pool)', () => {
         return { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: { final_decision: 'selected', published_at: '2026-01-01' } })) })) })) }
       if (t === 'interviews')
         return { select: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: [] })) })) } // no interviews → nextRound = 1
+      if (t === 'interview_decisions')
+        return { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: null })) })) })) } // no decision
       // interview_slots
       const b: Record<string, unknown> = {}
       b.select = vi.fn(() => b)

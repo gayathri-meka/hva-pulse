@@ -91,7 +91,25 @@ export default function InterviewBooking({ state }: { state: BookingState }) {
       {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       {state.nextRound === null ? (
-        booked.length > 0 && booked.every((i) => i.status === 'completed') ? (
+        state.final === 'selected' ? (
+          <div className="rounded-2xl border-[0.5px] border-emerald-200 bg-[#f0fdf4] p-5">
+            <div className="text-sm font-extrabold text-[#166534]">You&apos;re through! 🎉</div>
+            <p className="mt-1 text-sm text-emerald-800">You&apos;ve cleared the interviews. Head to the <strong>Selection</strong> tab for what happens next.</p>
+          </div>
+        ) : state.stage1 === 'rejected' || state.final === 'rejected' ? (
+          <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5">
+            <div className="text-sm font-extrabold text-zinc-900">Thank you for interviewing with us</div>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+              We really appreciate the time you gave us. After careful review, we won&apos;t be moving forward with your
+              application at this stage. We wish you the very best, and we&apos;d welcome you to apply again in the future.
+            </p>
+          </div>
+        ) : state.awaitingReview ? (
+          <div className="flex items-start gap-2 rounded-2xl border-[0.5px] border-amber-200 bg-amber-50/60 p-5 text-sm text-amber-800">
+            <IconClock size={18} className="mt-0.5 shrink-0" />
+            <span>Thanks for interviewing — the team is reviewing it now. We&apos;ll update you right here as soon as there&apos;s news.</span>
+          </div>
+        ) : booked.length > 0 && booked.every((i) => i.status === 'completed') ? (
           <div className="flex items-center gap-2 rounded-2xl border-[0.5px] border-emerald-200 bg-[#f0fdf4] p-5 text-sm text-emerald-800">
             <IconCheck size={18} /> You&apos;re all set — both interviews done. We&apos;ll be in touch with the outcome.
           </div>

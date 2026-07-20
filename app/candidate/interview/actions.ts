@@ -41,17 +41,36 @@ export type BookingState = {
   interviews: Interview[]
   nextRound: 1 | 2 | null
   openSlots: InterviewSlot[] // only populated when there's a bookable round
+  stage1: 'advance' | 'rejected' | null // team's post-Round-1 release
+  final: 'selected' | 'rejected' | null // team's post-Round-2 release
+  awaitingReview: boolean // a round is done but the team hasn't released a decision
 }
 
 /** Everything the candidate booking page needs. */
 export async function getBookingState(): Promise<BookingState> {
   const email = await authedCandidateEmail()
   if (!email || !(await isSelectedReleased(email)))
-    return { eligible: false, interviews: [], nextRound: null, openSlots: [] }
+    return { eligible: false, interviews: [], nextRound: null, openSlots: [], stage1: null, final: null, awaitingReview: false }
 
-  const { data: ivRows } = await admin().from('interviews').select('*').eq('candidate_email', email)
+  const [{ data: ivRows }, { data: decision }] = await Promise.all([
+    admin().from('interviews').select('*').eq('candidate_email', email),
+    admin().from('interview_decisions').select('stage1, final').eq('candidate_email', email).maybeSingle(),
+  ])
   const interviews = (ivRows ?? []).map(toInterview)
-  const nextRound = nextBookableRound(interviews)
+  const stage1 = (decision?.stage1 as 'advance' | 'rejected' | null) ?? null
+  const final = (decision?.final as 'selected' | 'rejected' | null) ?? null
+
+  // Base sequential round, then apply the team's release gates:
+  // Round 2 opens only when 'advance' is released; any rejection / final call closes booking.
+  let nextRound = nextBookableRound(interviews)
+  if (nextRound === 2 && stage1 !== 'advance') nextRound = null
+  if (stage1 === 'rejected' || final != null) nextRound = null
+
+  // "Awaiting review" = a round is finished but no decision is out yet, so there's
+  // nothing to book and no rejection — the candidate is waiting on the team.
+  const r1Done = interviews.some((i) => i.round === 1 && (i.status === 'completed' || i.status === 'no_show'))
+  const r2Done = interviews.some((i) => i.round === 2 && (i.status === 'completed' || i.status === 'no_show'))
+  const awaitingReview = (r1Done && stage1 == null) || (stage1 === 'advance' && r2Done && final == null)
 
   let openSlots: InterviewSlot[] = []
   if (nextRound) {
@@ -70,7 +89,7 @@ export async function getBookingState(): Promise<BookingState> {
       if (r1) openSlots = openSlots.filter((s) => s.interviewerEmail !== r1.interviewerEmail)
     }
   }
-  return { eligible: true, interviews, nextRound, openSlots }
+  return { eligible: true, interviews, nextRound, openSlots, stage1, final, awaitingReview }
 }
 
 /** Book an open slot for the candidate's next round. Auto-confirms. */
@@ -82,6 +101,13 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   const { data: ivRows } = await admin().from('interviews').select('round, status').eq('candidate_email', email)
   const round = nextBookableRound((ivRows ?? []).map((r) => ({ round: r.round, status: r.status })))
   if (!round) return { ok: false, error: 'You have no interview round to book right now.' }
+
+  // Release gates: Round 2 needs a released 'advance'; a rejection / final call closes booking.
+  const { data: decision } = await admin().from('interview_decisions').select('stage1, final').eq('candidate_email', email).maybeSingle()
+  if (decision?.stage1 === 'rejected' || decision?.final != null)
+    return { ok: false, error: 'You are not eligible to book an interview right now.' }
+  if (round === 2 && decision?.stage1 !== 'advance')
+    return { ok: false, error: 'The coding round isn’t open for you yet.' }
 
   // Claim the slot atomically: flip open → booked only if still open AND it's for
   // the round the candidate is actually on (a coding slot can't serve round 1, etc.).

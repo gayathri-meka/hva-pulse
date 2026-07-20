@@ -44,9 +44,10 @@ export default async function CandidateLayout({
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
-  const [{ data: prospect }, { data: decision }] = await Promise.all([
+  const [{ data: prospect }, { data: decision }, { data: interviewDecision }] = await Promise.all([
     admin.from('prospects').select('interest_form_submitted_at').eq('email', email).maybeSingle(),
     admin.from('challenge_decisions').select('final_decision, published_at').eq('email', email).maybeSingle(),
+    admin.from('interview_decisions').select('final').eq('candidate_email', email).maybeSingle(),
   ])
 
   const completedStages: string[] = []
@@ -55,12 +56,14 @@ export default async function CandidateLayout({
   if (decision?.published_at) completedStages.push('challenge')
 
   // Stages the candidate can't reach yet → the stepper greys them out (no more
-  // "coming soon" pages). Interview unlocks only for a released "selected"
-  // candidate; the final Selection flow isn't built, so it stays locked for now.
+  // "coming soon" pages). Interview unlocks for a released "selected" challenge
+  // decision; Selection unlocks only once the team makes the final "selected"
+  // call after the interviews (a rejection leaves Selection greyed).
   const interviewUnlocked = decision?.final_decision === 'selected' && decision?.published_at != null
+  const selectionUnlocked = interviewDecision?.final === 'selected'
   const lockedStages: string[] = []
   if (!interviewUnlocked) lockedStages.push('interview')
-  lockedStages.push('selection')
+  if (!selectionUnlocked) lockedStages.push('selection')
 
   return (
     <div

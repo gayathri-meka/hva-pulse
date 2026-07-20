@@ -48,9 +48,11 @@ export default function InterviewsAdmin({
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [round, setRound] = useState<1 | 2>(1)
+  const [hideCancelled, setHideCancelled] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const m = computeInterviewMetrics(slots, interviews)
+  const shownInterviews = hideCancelled ? interviews.filter((i) => i.status !== 'cancelled') : interviews
 
   function add() {
     if (!email.trim()) return
@@ -130,7 +132,7 @@ export default function InterviewsAdmin({
                         onChange={(e) => changeRound(iv.email, Number(e.target.value) as 1 | 2)}
                         disabled={pending}
                         title="Which round this interviewer runs"
-                        className={`rounded-md border-0 px-1.5 py-0.5 text-[11px] font-semibold ring-1 focus:outline-none ${iv.round ? ROUND_STYLE[iv.round] : 'bg-zinc-100 text-zinc-500 ring-zinc-200'}`}
+                        className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 focus:border-[#5BAE5B] focus:outline-none disabled:opacity-50"
                       >
                         <option value="" disabled>Set panel…</option>
                         <option value={1}>Motivation</option>
@@ -159,9 +161,15 @@ export default function InterviewsAdmin({
 
       {/* All interviews */}
       <section className="rounded-xl border border-zinc-200 bg-white p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Interviews</h2>
-        {interviews.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-400">No interviews booked yet.</p>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Interviews</h2>
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-500">
+            <input type="checkbox" checked={hideCancelled} onChange={(e) => setHideCancelled(e.target.checked)} className="h-3.5 w-3.5 rounded border-zinc-300 accent-[#5BAE5B]" />
+            Hide cancelled
+          </label>
+        </div>
+        {shownInterviews.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-400">{interviews.length === 0 ? 'No interviews booked yet.' : 'No interviews to show.'}</p>
         ) : (
           <table className="mt-3 w-full text-sm">
             <thead>
@@ -172,7 +180,7 @@ export default function InterviewsAdmin({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
-              {interviews.map((i) => (
+              {shownInterviews.map((i) => (
                 <tr key={i.id}>
                   <td className="py-1.5 text-zinc-800">{i.candidateName ?? i.candidateEmail}</td>
                   <td className="py-1.5 text-zinc-600">{roundLabel(i.round, true)}</td>
