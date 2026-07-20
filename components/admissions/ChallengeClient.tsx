@@ -433,13 +433,13 @@ function DetailView({
                 <div className="ml-[22px] truncate text-xs text-zinc-400">{m.email}</div>
               </div>
 
-              {/* Progress */}
+              {/* Progress — attempted quiz questions (reading excluded) */}
               <div>
                 <div className="mb-1 flex items-center justify-between text-xs text-zinc-500">
-                  <span>{m.completedItems}/{m.totalItems} items</span>
-                  <span className="font-semibold text-zinc-700">{pct(m.completedItems, m.totalItems)}%</span>
+                  <span>{m.attemptedQuestions}/{m.totalQuestions} questions</span>
+                  <span className="font-semibold text-zinc-700">{pct(m.attemptedQuestions, m.totalQuestions)}%</span>
                 </div>
-                <Bar value={pct(m.completedItems, m.totalItems)} />
+                <Bar value={pct(m.attemptedQuestions, m.totalQuestions)} />
               </div>
 
               {/* Started */}
