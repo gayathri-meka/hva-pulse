@@ -11,6 +11,40 @@ const ROUND_STYLE: Record<number, string> = {
   2: 'bg-amber-50 text-amber-700 ring-amber-200',
 }
 
+// Native <select> renders with OS chrome that clashes with our rounded inputs —
+// strip it (appearance-none) and draw our own chevron so it matches the boxes.
+function PanelSelect({
+  value,
+  onChange,
+  disabled,
+  size = 'md',
+}: {
+  value: number | ''
+  onChange: (v: 1 | 2) => void
+  disabled?: boolean
+  size?: 'sm' | 'md'
+}) {
+  const dims = size === 'sm' ? 'px-2 py-1 pr-7 text-xs' : 'px-2.5 py-1.5 pr-8 text-sm'
+  return (
+    <div className="relative inline-flex">
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value) as 1 | 2)}
+        disabled={disabled}
+        title="Which round this interviewer runs"
+        className={`appearance-none rounded-lg border border-zinc-300 bg-white text-zinc-700 focus:border-[#5BAE5B] focus:outline-none disabled:opacity-50 ${dims}`}
+      >
+        {value === '' && <option value="" disabled>Set panel…</option>}
+        <option value={1}>Motivation panel</option>
+        <option value={2}>Coding panel</option>
+      </select>
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400">
+        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+      </svg>
+    </div>
+  )
+}
+
 type IvRow = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -100,10 +134,7 @@ export default function InterviewsAdmin({
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-[#5BAE5B] focus:outline-none" />
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@hyperverge.co" className="min-w-[220px] flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-[#5BAE5B] focus:outline-none" />
-            <select value={round} onChange={(e) => setRound(Number(e.target.value) as 1 | 2)} title="Which round this interviewer runs" className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-[#5BAE5B] focus:outline-none">
-              <option value={1}>Motivation panel</option>
-              <option value={2}>Coding panel</option>
-            </select>
+            <PanelSelect value={round} onChange={setRound} />
             <button onClick={add} disabled={pending || !email.trim()} className="rounded-lg bg-[#5BAE5B] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#4e9c4e] disabled:opacity-50">Add interviewer</button>
           </div>
         )}
@@ -127,17 +158,7 @@ export default function InterviewsAdmin({
                   <td className="py-1.5 text-zinc-500">{iv.email}</td>
                   <td className="py-1.5">
                     {isAdmin ? (
-                      <select
-                        value={iv.round ?? ''}
-                        onChange={(e) => changeRound(iv.email, Number(e.target.value) as 1 | 2)}
-                        disabled={pending}
-                        title="Which round this interviewer runs"
-                        className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 focus:border-[#5BAE5B] focus:outline-none disabled:opacity-50"
-                      >
-                        <option value="" disabled>Set panel…</option>
-                        <option value={1}>Motivation</option>
-                        <option value={2}>Coding</option>
-                      </select>
+                      <PanelSelect value={iv.round ?? ''} onChange={(v) => changeRound(iv.email, v)} disabled={pending} size="sm" />
                     ) : iv.round ? (
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${ROUND_STYLE[iv.round]}`}>{roundLabel(iv.round, true)}</span>
                     ) : (
