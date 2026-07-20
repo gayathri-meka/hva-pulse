@@ -47,7 +47,7 @@ export default function Modal({ title, onClose, children, wide, full }: Props) {
             </svg>
           </button>
         </div>
-        <div className={full ? 'flex flex-1 flex-col overflow-hidden p-6' : 'p-6'}>
+        <div className={full ? 'flex min-w-0 flex-1 flex-col overflow-hidden p-6' : 'min-w-0 p-6'}>
           {children}
         </div>
       </div>

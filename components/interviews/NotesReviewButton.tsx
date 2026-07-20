@@ -81,9 +81,9 @@ export default function NotesReviewButton({
           {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
           {result && (
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               {/* Overall */}
-              <p className="text-sm leading-relaxed text-zinc-700">{result.overall}</p>
+              <p className="text-sm leading-relaxed text-zinc-700 break-words">{result.overall}</p>
 
               {/* Gaps by question */}
               <section>
@@ -115,17 +115,17 @@ export default function NotesReviewButton({
                         className={`rounded-lg border px-3 py-2 ${c.aligned ? 'border-zinc-200 bg-white' : 'border-red-200 bg-red-50/50'}`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-[13px] font-medium text-zinc-800">{c.rubric}</span>
-                          <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                          <span className="min-w-0 text-[13px] font-medium text-zinc-800">{c.rubric}</span>
+                          <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500">
                             <span className="flex items-center gap-1">given <ScoreChip s={c.givenScore} /></span>
                             {c.aligned ? (
-                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">supported ✓</span>
+                              <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">supported ✓</span>
                             ) : (
-                              <span className="flex items-center gap-1">→ suggests <ScoreChip s={c.suggestedScore} /></span>
+                              <span className="flex items-center gap-1 whitespace-nowrap">→ suggests <ScoreChip s={c.suggestedScore} /></span>
                             )}
                           </div>
                         </div>
-                        {c.rationale && <p className="mt-1 text-[12px] leading-snug text-zinc-600">{c.rationale}</p>}
+                        {c.rationale && <p className="mt-1 text-[12px] leading-snug text-zinc-600 break-words">{c.rationale}</p>}
                       </div>
                     ))}
                   </div>
