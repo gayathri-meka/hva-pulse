@@ -1,9 +1,14 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
-import { requireInterviewer } from '@/lib/auth'
+import { requireInterviewer, getAppUser } from '@/lib/auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { setInterviewOutcome } from '@/app/(protected)/admissions/interviews/actions'
-import { bookSlot, cancelMyInterview } from '@/app/candidate/interview/actions'
+import {
+  setInterviewOutcome,
+  addInterviewer,
+  setInterviewerRound,
+  syncWeekAvailability,
+} from '@/app/(protected)/admissions/interviews/actions'
+import { bookSlot, cancelMyInterview, getBookingState } from '@/app/candidate/interview/actions'
 
 vi.mock('@/lib/auth', () => ({ requireInterviewer: vi.fn(), requireStaff: vi.fn(), getAppUser: vi.fn() }))
 vi.mock('@/lib/supabase-server', () => ({ createServerSupabaseClient: vi.fn() }))
@@ -53,6 +58,112 @@ describe('bookSlot', () => {
     vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
     const res = await bookSlot('slot-1')
     expect(res).toEqual({ ok: false, error: expect.stringContaining('not eligible') })
+  })
+})
+
+describe('addInterviewer (round specialisation)', () => {
+  const adminUser = { id: 'a', email: 'admin@x.com', name: 'A', role: 'admin' as const }
+
+  test('rejects a non-admin', async () => {
+    vi.mocked(getAppUser).mockResolvedValue({ id: 's', email: 's@x.com', name: 'S', role: 'staff' })
+    expect(await addInterviewer({ email: 'i@x.com', name: 'I', round: 1 })).toEqual({ ok: false, error: expect.stringContaining('admins') })
+  })
+
+  test('rejects an invalid round', async () => {
+    vi.mocked(getAppUser).mockResolvedValue(adminUser)
+    expect(await addInterviewer({ email: 'i@x.com', name: 'I', round: 3 as unknown as 1 })).toEqual({ ok: false, error: expect.stringContaining('which round') })
+  })
+
+  test('inserts a new interviewer with their round', async () => {
+    vi.mocked(getAppUser).mockResolvedValue(adminUser)
+    const insert = vi.fn(() => Promise.resolve({ error: null }))
+    const q: Record<string, unknown> = {}
+    q.select = vi.fn(() => q); q.eq = vi.fn(() => q); q.maybeSingle = vi.fn(() => Promise.resolve({ data: null })); q.insert = insert
+    vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
+    const res = await addInterviewer({ email: 'Coder@x.com', name: 'C', round: 2 })
+    expect(res).toEqual({ ok: true })
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ email: 'coder@x.com', role: 'interviewer', interview_round: 2 }))
+  })
+})
+
+describe('setInterviewerRound', () => {
+  test('rejects a non-admin', async () => {
+    vi.mocked(getAppUser).mockResolvedValue({ id: 's', email: 's@x.com', name: 'S', role: 'staff' })
+    expect(await setInterviewerRound({ email: 'i@x.com', round: 2 })).toEqual({ ok: false, error: expect.stringContaining('admins') })
+  })
+
+  test('updates the user round and re-tags their open slots', async () => {
+    vi.mocked(getAppUser).mockResolvedValue({ id: 'a', email: 'admin@x.com', name: 'A', role: 'admin' })
+    const usersUpdate = vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) }))
+    const slotsEq2 = vi.fn(() => Promise.resolve({ error: null }))
+    const slotsUpdate = vi.fn(() => ({ eq: vi.fn(() => ({ eq: slotsEq2 })) }))
+    const from = vi.fn((t: string) => (t === 'users' ? { update: usersUpdate } : { update: slotsUpdate }))
+    vi.mocked(createClient).mockReturnValue({ from } as never)
+    const res = await setInterviewerRound({ email: 'iv@x.com', round: 2 })
+    expect(res).toEqual({ ok: true })
+    expect(usersUpdate).toHaveBeenCalledWith({ interview_round: 2 })
+    expect(slotsUpdate).toHaveBeenCalledWith({ round: 2 })
+  })
+})
+
+describe('syncWeekAvailability (round inheritance)', () => {
+  test('blocks a dedicated interviewer with no round set', async () => {
+    vi.mocked(requireInterviewer).mockResolvedValue({ id: 'u', email: 'iv@x.com', name: 'IV', role: 'interviewer' })
+    const q: Record<string, unknown> = {}
+    q.select = vi.fn(() => q); q.eq = vi.fn(() => q)
+    q.maybeSingle = vi.fn(() => Promise.resolve({ data: { interview_round: null, role: 'interviewer' } }))
+    vi.mocked(createClient).mockReturnValue({ from: vi.fn(() => q) } as never)
+    const res = await syncWeekAvailability({ weekStartIso: '2030-08-01T00:00:00Z', starts: ['2030-08-01T10:00:00Z'] })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('interview round') })
+  })
+
+  test('stamps new slots with the interviewer’s round', async () => {
+    vi.mocked(requireInterviewer).mockResolvedValue({ id: 'u', email: 'coder@x.com', name: 'C', role: 'interviewer' })
+    const insert = vi.fn((_rows: unknown) => Promise.resolve({ error: null }))
+    const users: Record<string, unknown> = {}
+    users.select = vi.fn(() => users); users.eq = vi.fn(() => users)
+    users.maybeSingle = vi.fn(() => Promise.resolve({ data: { interview_round: 2, role: 'interviewer' } }))
+    const slots: Record<string, unknown> = {}
+    slots.select = vi.fn(() => slots); slots.eq = vi.fn(() => slots); slots.gte = vi.fn(() => slots); slots.lt = vi.fn(() => slots)
+    slots.then = (res: (v: unknown) => void) => res({ data: [] }) // existing slots = none
+    slots.insert = insert
+    const from = vi.fn((t: string) => (t === 'users' ? users : slots))
+    vi.mocked(createClient).mockReturnValue({ from } as never)
+    const res = await syncWeekAvailability({ weekStartIso: '2030-08-01T00:00:00Z', starts: ['2030-08-01T10:00:00Z'] })
+    expect(res).toEqual({ ok: true })
+    const inserted = insert.mock.calls[0][0] as unknown as Array<{ round: number }>
+    expect(inserted[0].round).toBe(2)
+  })
+})
+
+describe('getBookingState (round-scoped slot pool)', () => {
+  function authEmail(email: string) {
+    vi.mocked(createServerSupabaseClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { email } } }) },
+    } as never)
+  }
+
+  test('only offers slots for the round the candidate is on', async () => {
+    authEmail('cand@x.com')
+    const slotsEq = vi.fn()
+    const from = vi.fn((t: string) => {
+      if (t === 'challenge_decisions')
+        return { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: { final_decision: 'selected', published_at: '2026-01-01' } })) })) })) }
+      if (t === 'interviews')
+        return { select: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: [] })) })) } // no interviews → nextRound = 1
+      // interview_slots
+      const b: Record<string, unknown> = {}
+      b.select = vi.fn(() => b)
+      b.eq = vi.fn((...args: unknown[]) => { slotsEq(...args); return b })
+      b.gt = vi.fn(() => b)
+      b.order = vi.fn(() => Promise.resolve({ data: [] }))
+      return b
+    })
+    vi.mocked(createClient).mockReturnValue({ from } as never)
+    const res = await getBookingState()
+    expect(res.eligible).toBe(true)
+    expect(res.nextRound).toBe(1)
+    expect(slotsEq).toHaveBeenCalledWith('round', 1)
   })
 })
 

@@ -32,7 +32,7 @@ async function isSelectedReleased(email: string): Promise<boolean> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status })
+const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status, round: r.round ?? null })
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toInterview = (r: any): Interview => ({ id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id, interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null })
 
@@ -59,10 +59,12 @@ export async function getBookingState(): Promise<BookingState> {
       .from('interview_slots')
       .select('*')
       .eq('status', 'open')
+      .eq('round', nextRound) // only the panel for the round they're on
       .gt('starts_at', new Date().toISOString())
       .order('starts_at')
     openSlots = (slotRows ?? []).map(toSlot)
-    // Round 2 prefers a different interviewer than round 1.
+    // Round 2 prefers a different interviewer than round 1 (belt-and-braces —
+    // the coding panel is already separate from the motivation panel).
     if (nextRound === 2) {
       const r1 = interviews.find((i) => i.round === 1 && i.status !== 'cancelled')
       if (r1) openSlots = openSlots.filter((s) => s.interviewerEmail !== r1.interviewerEmail)
@@ -81,12 +83,14 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   const round = nextBookableRound((ivRows ?? []).map((r) => ({ round: r.round, status: r.status })))
   if (!round) return { ok: false, error: 'You have no interview round to book right now.' }
 
-  // Claim the slot atomically: flip open → booked only if still open.
+  // Claim the slot atomically: flip open → booked only if still open AND it's for
+  // the round the candidate is actually on (a coding slot can't serve round 1, etc.).
   const { data: claimed, error: claimErr } = await admin()
     .from('interview_slots')
     .update({ status: 'booked', updated_at: new Date().toISOString() })
     .eq('id', slotId)
     .eq('status', 'open')
+    .eq('round', round)
     .gt('starts_at', new Date().toISOString())
     .select('*')
     .maybeSingle()

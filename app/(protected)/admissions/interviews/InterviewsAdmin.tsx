@@ -3,8 +3,13 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { addInterviewer, removeInterviewer, type InterviewerRow } from './actions'
+import { addInterviewer, removeInterviewer, setInterviewerRound, type InterviewerRow } from './actions'
 import { computeInterviewMetrics, roundLabel, formatDateTimeIST, type InterviewSlot, type Interview } from '@/lib/interviews'
+
+const ROUND_STYLE: Record<number, string> = {
+  1: 'bg-violet-50 text-violet-700 ring-violet-200',
+  2: 'bg-amber-50 text-amber-700 ring-amber-200',
+}
 
 type IvRow = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 
@@ -42,6 +47,7 @@ export default function InterviewsAdmin({
   const [pending, startTransition] = useTransition()
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [round, setRound] = useState<1 | 2>(1)
   const [error, setError] = useState<string | null>(null)
 
   const m = computeInterviewMetrics(slots, interviews)
@@ -50,10 +56,18 @@ export default function InterviewsAdmin({
     if (!email.trim()) return
     setError(null)
     startTransition(async () => {
-      const res = await addInterviewer({ email, name })
+      const res = await addInterviewer({ email, name, round })
       if (!res.ok) { setError(res.error); return }
-      setEmail(''); setName('')
+      setEmail(''); setName(''); setRound(1)
       router.refresh()
+    })
+  }
+  function changeRound(e: string, r: 1 | 2) {
+    setError(null)
+    startTransition(async () => {
+      const res = await setInterviewerRound({ email: e, round: r })
+      if (!res.ok) setError(res.error)
+      else router.refresh()
     })
   }
   function remove(e: string) {
@@ -84,9 +98,14 @@ export default function InterviewsAdmin({
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-[#5BAE5B] focus:outline-none" />
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@hyperverge.co" className="min-w-[220px] flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-[#5BAE5B] focus:outline-none" />
+            <select value={round} onChange={(e) => setRound(Number(e.target.value) as 1 | 2)} title="Which round this interviewer runs" className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-[#5BAE5B] focus:outline-none">
+              <option value={1}>Motivation panel</option>
+              <option value={2}>Coding panel</option>
+            </select>
             <button onClick={add} disabled={pending || !email.trim()} className="rounded-lg bg-[#5BAE5B] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#4e9c4e] disabled:opacity-50">Add interviewer</button>
           </div>
         )}
+        <p className="mt-1.5 text-[11px] text-zinc-400">Each interviewer runs one panel. Their published availability is only offered to candidates on that round.</p>
         {interviewers.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-400">No interviewers yet. {isAdmin ? 'Add one above — they sign in with Google and publish their availability.' : 'An admin can add interviewers.'}</p>
         ) : (
@@ -94,6 +113,7 @@ export default function InterviewsAdmin({
             <thead>
               <tr className="border-b border-zinc-100 text-left text-xs text-zinc-400">
                 <th className="py-1.5 font-medium">Name</th><th className="py-1.5 font-medium">Email</th>
+                <th className="py-1.5 font-medium">Panel</th>
                 <th className="py-1.5 text-right font-medium">Open</th><th className="py-1.5 text-right font-medium">Booked</th>
                 <th className="py-1.5 text-right font-medium">Done</th>{isAdmin && <th />}
               </tr>
@@ -103,6 +123,25 @@ export default function InterviewsAdmin({
                 <tr key={iv.email}>
                   <td className="py-1.5 text-zinc-800">{iv.name ?? '—'}</td>
                   <td className="py-1.5 text-zinc-500">{iv.email}</td>
+                  <td className="py-1.5">
+                    {isAdmin ? (
+                      <select
+                        value={iv.round ?? ''}
+                        onChange={(e) => changeRound(iv.email, Number(e.target.value) as 1 | 2)}
+                        disabled={pending}
+                        title="Which round this interviewer runs"
+                        className={`rounded-md border-0 px-1.5 py-0.5 text-[11px] font-semibold ring-1 focus:outline-none ${iv.round ? ROUND_STYLE[iv.round] : 'bg-zinc-100 text-zinc-500 ring-zinc-200'}`}
+                      >
+                        <option value="" disabled>Set panel…</option>
+                        <option value={1}>Motivation</option>
+                        <option value={2}>Coding</option>
+                      </select>
+                    ) : iv.round ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${ROUND_STYLE[iv.round]}`}>{roundLabel(iv.round, true)}</span>
+                    ) : (
+                      <span className="text-[11px] text-zinc-400">—</span>
+                    )}
+                  </td>
                   <td className="py-1.5 text-right tabular-nums text-zinc-600">{iv.openSlots}</td>
                   <td className="py-1.5 text-right tabular-nums text-zinc-600">{iv.booked}</td>
                   <td className="py-1.5 text-right tabular-nums text-zinc-600">{iv.completed}</td>
