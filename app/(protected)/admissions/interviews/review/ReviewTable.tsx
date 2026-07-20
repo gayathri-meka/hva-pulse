@@ -89,92 +89,104 @@ export default function ReviewTable({ rows }: { rows: InterviewReviewTableRow[] 
         cell: (info) => <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STAGE_STYLE[info.row.original.stage]}`}>{info.getValue()}</span>,
       }),
 
-      // ── Round 1 · Motivation — status / decision / notes ──────────────────
+      // ── Round 1 · Motivation — status / recommendation / decision / interviewer ─
       col.accessor((r) => STATUS_LABEL[r.round1.status], {
         id: 'r1_status',
         header: 'R1 status',
         size: 120,
         cell: (info) => <StatusChip status={info.row.original.round1.status} />,
       }),
+      col.accessor((r) => (r.round1.recommendation ? REC_LABEL[r.round1.recommendation] : '—'), {
+        id: 'r1_rec',
+        header: 'R1 recommendation',
+        size: 150,
+        cell: (info) => {
+          const rec = info.row.original.round1.recommendation
+          return rec ? <RecChip rec={rec} /> : <span className="text-zinc-300">—</span>
+        },
+      }),
       col.accessor((r) => decisionLabel(r.stage1, r.canReleaseStage1, { advance: 'Advanced', rejected: 'Rejected' }), {
         id: 'r1_decision',
         header: 'R1 decision',
-        size: 180,
+        size: 170,
         enableHiding: false,
         cell: (info) => {
           const r = info.row.original
           if (r.stage1) return <DecisionBadge label={r.stage1 === 'advance' ? 'Advanced' : 'Rejected'} tone={r.stage1 === 'advance' ? 'green' : 'red'} onUndo={() => setAction(undoAction(r.email, 'stage1', r.name ?? r.email))} />
           if (r.canReleaseStage1)
             return (
-              <div className="flex flex-col items-start gap-1.5">
-                {r.round1.recommendation && <RecChip rec={r.round1.recommendation} />}
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => setAction({ title: 'Release advance', body: `Are you sure? ${r.name ?? r.email} will move to the Coding round and be able to book a Round 2 slot.`, confirmLabel: 'Release advance', tone: 'green', run: () => setInterviewDecision({ email: r.email, gate: 'stage1', decision: 'advance' }) })}
-                    className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
-                  >
-                    Advance
-                  </button>
-                  <button
-                    onClick={() => setAction({ title: 'Reject after Round 1', body: `Are you sure? ${r.name ?? r.email} will see a rejection on their portal.`, confirmLabel: 'Reject', tone: 'red', run: () => setInterviewDecision({ email: r.email, gate: 'stage1', decision: 'rejected' }) })}
-                    className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
-                  >
-                    Reject
-                  </button>
-                </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setAction({ title: 'Release advance', body: `Are you sure? ${r.name ?? r.email} will move to the Coding round and be able to book a Round 2 slot.`, confirmLabel: 'Release advance', tone: 'green', run: () => setInterviewDecision({ email: r.email, gate: 'stage1', decision: 'advance' }) })}
+                  className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                >
+                  Advance
+                </button>
+                <button
+                  onClick={() => setAction({ title: 'Reject after Round 1', body: `Are you sure? ${r.name ?? r.email} will see a rejection on their portal.`, confirmLabel: 'Reject', tone: 'red', run: () => setInterviewDecision({ email: r.email, gate: 'stage1', decision: 'rejected' }) })}
+                  className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                >
+                  Reject
+                </button>
               </div>
             )
           return <span className="text-zinc-300">—</span>
         },
       }),
       col.accessor((r) => r.round1.interviewerName ?? '', {
-        id: 'r1_notes',
-        header: 'R1 notes',
+        id: 'r1_interviewer',
+        header: 'R1 interviewer',
         size: 150,
         cell: (info) => <NotesCell cell={info.row.original.round1} />,
       }),
 
-      // ── Round 2 · Coding — status / decision / notes ──────────────────────
+      // ── Round 2 · Coding — status / recommendation / decision / interviewer ─
       col.accessor((r) => STATUS_LABEL[r.round2.status], {
         id: 'r2_status',
         header: 'R2 status',
         size: 120,
         cell: (info) => <StatusChip status={info.row.original.round2.status} />,
       }),
+      col.accessor((r) => (r.round2.recommendation ? REC_LABEL[r.round2.recommendation] : '—'), {
+        id: 'r2_rec',
+        header: 'R2 recommendation',
+        size: 150,
+        cell: (info) => {
+          const rec = info.row.original.round2.recommendation
+          return rec ? <RecChip rec={rec} /> : <span className="text-zinc-300">—</span>
+        },
+      }),
       col.accessor((r) => decisionLabel(r.final, r.canReleaseFinal, { selected: 'Selected', rejected: 'Rejected' }), {
         id: 'r2_decision',
         header: 'R2 decision',
-        size: 180,
+        size: 170,
         enableHiding: false,
         cell: (info) => {
           const r = info.row.original
           if (r.final) return <DecisionBadge label={r.final === 'selected' ? 'Selected' : 'Rejected'} tone={r.final === 'selected' ? 'green' : 'red'} onUndo={() => setAction(undoAction(r.email, 'final', r.name ?? r.email))} />
           if (r.canReleaseFinal)
             return (
-              <div className="flex flex-col items-start gap-1.5">
-                {r.round2.recommendation && <RecChip rec={r.round2.recommendation} />}
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => setAction({ title: 'Select', body: `Are you sure? ${r.name ?? r.email} will be recorded as selected into the programme.`, confirmLabel: 'Select', tone: 'green', run: () => setInterviewDecision({ email: r.email, gate: 'final', decision: 'selected' }) })}
-                    className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
-                  >
-                    Select
-                  </button>
-                  <button
-                    onClick={() => setAction({ title: 'Reject after Round 2', body: `Are you sure? ${r.name ?? r.email} will see a rejection on their portal.`, confirmLabel: 'Reject', tone: 'red', run: () => setInterviewDecision({ email: r.email, gate: 'final', decision: 'rejected' }) })}
-                    className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
-                  >
-                    Reject
-                  </button>
-                </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setAction({ title: 'Select', body: `Are you sure? ${r.name ?? r.email} will be recorded as selected into the programme.`, confirmLabel: 'Select', tone: 'green', run: () => setInterviewDecision({ email: r.email, gate: 'final', decision: 'selected' }) })}
+                  className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                >
+                  Select
+                </button>
+                <button
+                  onClick={() => setAction({ title: 'Reject after Round 2', body: `Are you sure? ${r.name ?? r.email} will see a rejection on their portal.`, confirmLabel: 'Reject', tone: 'red', run: () => setInterviewDecision({ email: r.email, gate: 'final', decision: 'rejected' }) })}
+                  className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                >
+                  Reject
+                </button>
               </div>
             )
           return <span className="text-zinc-300">—</span>
         },
       }),
       col.accessor((r) => r.round2.interviewerName ?? '', {
-        id: 'r2_notes',
-        header: 'R2 notes',
+        id: 'r2_interviewer',
+        header: 'R2 interviewer',
         size: 150,
         cell: (info) => <NotesCell cell={info.row.original.round2} />,
       }),

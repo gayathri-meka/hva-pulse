@@ -48,8 +48,8 @@ export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; 
         cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
       }),
       col.accessor((r) => (r.recommendation ? REC_LABEL[r.recommendation] : 'Pending'), {
-        id: 'decision',
-        header: 'Decision',
+        id: 'recommendation',
+        header: 'Interviewer rec',
         cell: (info) => {
           const rec = info.row.original.recommendation
           if (!rec) return <span className="text-xs text-zinc-400">Pending</span>
