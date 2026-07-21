@@ -6,6 +6,12 @@ import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
 import type { ChallengeFunnel, ChallengeEventDates } from '@/lib/challengeFunnel'
 import type { AnalyticsRow } from './page'
 
+export type InterviewFunnel = {
+  selectedForInterviews: number // challenge-selected + released → eligible to interview
+  clearedRound1: number // team released 'advance' after Round 1
+  selectedForProgram: number // final 'selected' after Round 2
+}
+
 const norm = (e: string | null) => (e ?? '').trim().toLowerCase()
 // First non-empty value wins — treats null and '' as missing.
 const firstFilled = (...vals: (string | null | undefined)[]) =>
@@ -105,11 +111,13 @@ export default function AnalyticsClient({
   signups,
   challenge,
   challengeDates,
+  interviews,
 }: {
   hits:           AnalyticsRow[]
   signups:        AnalyticsRow[]
   challenge:      ChallengeFunnel
   challengeDates: ChallengeEventDates
+  interviews:     InterviewFunnel
 }) {
   const m = useMemo(() => {
     const index = buildProspectIndex(signups)
@@ -243,6 +251,30 @@ export default function AnalyticsClient({
             sublabel={`attempted all items · ${challenge.joined > 0 ? Math.round((challenge.attemptedAllItems / challenge.joined) * 100) : 0}% of joined`}
             series={challengeWeekly.completed}
             unit="completed"
+          />
+        </div>
+      </section>
+
+      {/* Interviews funnel */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
+          Interviews <span className="font-normal normal-case tracking-normal text-zinc-300">· current</span>
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatCard
+            label="Selected for interviews"
+            value={interviews.selectedForInterviews}
+            sublabel="cleared the challenge"
+          />
+          <StatCard
+            label="Cleared Round 1"
+            value={interviews.clearedRound1}
+            sublabel={`advanced to Coding · ${interviews.selectedForInterviews > 0 ? Math.round((interviews.clearedRound1 / interviews.selectedForInterviews) * 100) : 0}% of selected`}
+          />
+          <StatCard
+            label="Selected for the program"
+            value={interviews.selectedForProgram}
+            sublabel={`cleared both rounds · ${interviews.selectedForInterviews > 0 ? Math.round((interviews.selectedForProgram / interviews.selectedForInterviews) * 100) : 0}% of selected`}
           />
         </div>
       </section>
