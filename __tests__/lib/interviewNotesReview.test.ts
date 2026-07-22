@@ -14,7 +14,16 @@ const baseInput: NotesReviewInput = {
     { n: 2, section: null, prompt: 'Tell us about a hard decision.', note: '' },
   ],
   rubrics: [
-    { label: 'Drive', levels: ['low', 'some', 'good', 'exceptional'], lookingFor: ['', '', 'concrete example', ''], score: 4 },
+    {
+      label: 'Drive',
+      levels: [
+        { score: 1, descriptor: 'low' },
+        { score: 2, descriptor: 'some' },
+        { score: 3, descriptor: 'good', lookingFor: 'concrete example' },
+        { score: 4, descriptor: 'exceptional' },
+      ],
+      score: 4,
+    },
   ],
   summary: 'Strong candidate.',
   recommendation: 'advance',
@@ -44,7 +53,7 @@ describe('buildNotesReviewUserPrompt', () => {
   test('unscored rubric shows "not scored"', () => {
     const p = buildNotesReviewUserPrompt({
       ...baseInput,
-      rubrics: [{ label: 'Drive', levels: ['a', 'b', 'c', 'd'], lookingFor: ['', '', '', ''], score: null }],
+      rubrics: [{ label: 'Drive', levels: [{ score: 1, descriptor: 'a' }, { score: 4, descriptor: 'd' }], score: null }],
     })
     expect(p).toContain('not scored')
   })

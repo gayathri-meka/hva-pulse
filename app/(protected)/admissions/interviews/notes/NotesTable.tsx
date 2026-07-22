@@ -6,6 +6,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
 import NotesReviewButton from '@/components/interviews/NotesReviewButton'
 import { roundLabel } from '@/lib/interviews'
+import { scoreTone, formatScore } from '@/lib/interviewCockpit'
 import type { ScoreRow } from '../cockpit-actions'
 
 const REC_STYLE: Record<string, string> = {
@@ -14,8 +15,13 @@ const REC_STYLE: Record<string, string> = {
   no: 'bg-red-50 text-red-700',
 }
 const REC_LABEL: Record<string, string> = { advance: 'Advance', borderline: 'Borderline', no: 'Do not advance' }
-// Weakest → strongest tone for a 1–4 score chip.
-const SCORE_TONE = ['bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-orange-100 text-orange-700', 'bg-emerald-100 text-emerald-700']
+// Weak → strong tone for a score chip (scales can be fractional).
+const TONE_CHIP: Record<string, string> = {
+  red: 'bg-red-100 text-red-700',
+  amber: 'bg-amber-100 text-amber-700',
+  orange: 'bg-orange-100 text-orange-700',
+  emerald: 'bg-emerald-100 text-emerald-700',
+}
 
 const col = createColumnHelper<ScoreRow>()
 
@@ -67,7 +73,7 @@ export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; 
           cell: (info) => {
             const s = info.getValue() as number | null
             if (s == null) return <span className="text-zinc-300">—</span>
-            return <span className={`inline-flex h-6 w-6 items-center justify-center rounded text-[12px] font-bold ${SCORE_TONE[s - 1] ?? 'bg-zinc-100'}`}>{s}</span>
+            return <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded px-1 text-[12px] font-bold ${TONE_CHIP[scoreTone(s)]}`}>{formatScore(s)}</span>
           },
         }),
       ),

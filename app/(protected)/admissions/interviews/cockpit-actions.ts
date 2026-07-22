@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireInterviewer, requireStaff } from '@/lib/auth'
 import type { CriterionResult } from '@/lib/challengeReview'
 import { intakeDossierFields, type IntakeGroup } from '@/lib/challengeIntakeDisplay'
-import { isValidScore, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type Recommendation } from '@/lib/interviewCockpit'
+import { rubricsForRound, isValidScoreForRubric, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type RubricLevel, type Recommendation } from '@/lib/interviewCockpit'
 import { chatJSON } from '@/lib/openai'
 import {
   buildNotesReviewUserPrompt,
@@ -31,13 +31,40 @@ type Err = { ok: false; error: string }
 function toQuestion(r: any): InterviewQuestion {
   return { id: r.id, round: r.round ?? null, section: r.section ?? null, ordering: r.ordering, prompt: r.prompt, purpose: r.purpose ?? null, strongAnswer: r.strong_answer ?? null, weakAnswer: r.weak_answer ?? null, probe: r.probe ?? null, active: r.active }
 }
+// Normalise a rubric row → variable levels. Prefers the new `levels` jsonb; falls
+// back to the legacy level_1..4 columns (scores 1–4) for rows not yet migrated.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toLevels(r: any): RubricLevel[] {
+  if (Array.isArray(r.levels) && r.levels.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (r.levels as any[])
+      .map((l) => ({
+        score: Number(l.score),
+        descriptor: (l.descriptor ?? '').toString(),
+        lookingFor: (l.looking_for ?? l.lookingFor ?? '').toString(),
+        example: (l.example ?? '').toString(),
+      }))
+      .filter((l) => Number.isFinite(l.score))
+      .sort((a, b) => a.score - b.score)
+  }
+  return [1, 2, 3, 4]
+    .map((s) => ({
+      score: s,
+      descriptor: (r[`level_${s}`] ?? '').toString(),
+      lookingFor: (r[`looking_for_${s}`] ?? '').toString(),
+      example: (r[`example_${s}`] ?? '').toString(),
+    }))
+    .filter((l) => l.descriptor.trim() !== '')
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toRubric(r: any): InterviewRubric {
   return {
-    key: r.key, label: r.label, ordering: r.ordering,
-    levels: [r.level_1 ?? '', r.level_2 ?? '', r.level_3 ?? '', r.level_4 ?? ''],
-    lookingFor: [r.looking_for_1 ?? '', r.looking_for_2 ?? '', r.looking_for_3 ?? '', r.looking_for_4 ?? ''],
-    examples: [r.example_1 ?? '', r.example_2 ?? '', r.example_3 ?? '', r.example_4 ?? ''],
+    key: r.key,
+    label: r.label,
+    round: (r.round as 1 | 2 | null) ?? null,
+    ordering: r.ordering,
+    note: r.note ?? null,
+    levels: toLevels(r),
     active: r.active,
   }
 }
@@ -107,9 +134,9 @@ export async function getCockpit(interviewId: string): Promise<Ok<CockpitData> |
       dossier: (decision?.criteria_snapshot ?? []) as CriterionResult[],
       intake,
       questions,
-      rubrics: (rs ?? []).map(toRubric),
+      rubrics: rubricsForRound((rs ?? []).map(toRubric), round),
       notes: Object.fromEntries((ns ?? []).map((n) => [n.question_id, n.note ?? ''])),
-      scores: Object.fromEntries((sc ?? []).map((s) => [s.rubric_key, s.score])),
+      scores: Object.fromEntries((sc ?? []).map((s) => [s.rubric_key, Number(s.score)])),
     },
   }
 }
@@ -125,9 +152,12 @@ export async function saveNote(interviewId: string, questionId: string, note: st
 }
 
 export async function saveScore(interviewId: string, rubricKey: string, score: number): Promise<Ok<null> | Err> {
-  if (!isValidScore(score)) return { ok: false, error: 'Score must be 1–4.' }
   const res = await loadOwnedInterview(interviewId)
   if (!res.ok) return { ok: false, error: res.error }
+  // Validate the score against the rubric's own scale (fractional / uneven).
+  const { data: rub } = await admin().from('interview_rubrics').select('*').eq('key', rubricKey).maybeSingle()
+  if (!rub || !isValidScoreForRubric(score, toRubric(rub)))
+    return { ok: false, error: 'That score isn’t on this rubric’s scale.' }
   const { error } = await admin()
     .from('interview_scores')
     .upsert({ interview_id: interviewId, rubric_key: rubricKey, score, updated_at: new Date().toISOString() }, { onConflict: 'interview_id,rubric_key' })
@@ -199,7 +229,7 @@ export async function getInterviewScores(): Promise<{ rubrics: { key: string; la
   const scoresByIv = new Map<string, Record<string, number>>()
   for (const s of scoreRows ?? []) {
     const m = scoresByIv.get(s.interview_id) ?? {}
-    m[s.rubric_key] = s.score as number
+    m[s.rubric_key] = Number(s.score)
     scoresByIv.set(s.interview_id, m)
   }
   const noted = new Set<string>()
@@ -241,7 +271,7 @@ export async function reviewInterviewNotes(interviewId: string): Promise<Ok<Note
   const round = iv.round as 1 | 2
   const questions = (qs ?? []).map(toQuestion).filter((q) => q.round === null || q.round === round)
   const noteBy = new Map((ns ?? []).map((n) => [n.question_id, (n.note ?? '') as string]))
-  const scoreBy = new Map((sc ?? []).map((s) => [s.rubric_key, s.score as number]))
+  const scoreBy = new Map((sc ?? []).map((s) => [s.rubric_key, Number(s.score)]))
 
   // Nothing to review if the interviewer wrote no notes and left no scores.
   const anyNotes = questions.some((q) => (noteBy.get(q.id) ?? '').trim()) || (iv.summary ?? '').trim()
@@ -259,10 +289,9 @@ export async function reviewInterviewNotes(interviewId: string): Promise<Ok<Note
       note: noteBy.get(q.id) ?? '',
       notesOptional: isNotesOptional(q.prompt),
     })),
-    rubrics: (rs ?? []).map(toRubric).map((r) => ({
+    rubrics: rubricsForRound((rs ?? []).map(toRubric), round).map((r) => ({
       label: r.label,
-      levels: r.levels,
-      lookingFor: r.lookingFor,
+      levels: r.levels.map((l) => ({ score: l.score, descriptor: l.descriptor, lookingFor: l.lookingFor })),
       score: scoreBy.get(r.key) ?? null,
     })),
     summary: (iv.summary as string) ?? '',
@@ -326,22 +355,37 @@ export async function deleteQuestion(id: string): Promise<Ok<null> | Err> {
 export async function upsertRubric(input: {
   key: string
   label: string
+  round: 1 | 2 | null
   ordering: number
-  levels: [string, string, string, string]
-  lookingFor?: [string, string, string, string]
-  examples?: [string, string, string, string]
+  note?: string
+  levels: { score: number; descriptor: string; lookingFor?: string; example?: string }[]
   active?: boolean
 }): Promise<Ok<null> | Err> {
   await requireStaff()
   if (!input.key?.trim() || !input.label?.trim()) return { ok: false, error: 'Rubric key and label are required.' }
-  const lf = input.lookingFor ?? ['', '', '', '']
-  const ex = input.examples ?? ['', '', '', '']
+  // Keep only levels with a real descriptor, normalise + sort by score.
+  const levels = input.levels
+    .filter((l) => Number.isFinite(l.score) && (l.descriptor ?? '').trim() !== '')
+    .map((l) => ({
+      score: l.score,
+      descriptor: l.descriptor.trim(),
+      looking_for: l.lookingFor?.trim() || null,
+      example: l.example?.trim() || null,
+    }))
+    .sort((a, b) => a.score - b.score)
+  if (!levels.length) return { ok: false, error: 'Add at least one score level.' }
+  if (new Set(levels.map((l) => l.score)).size !== levels.length)
+    return { ok: false, error: 'Each level needs a distinct score.' }
+
   const { error } = await admin().from('interview_rubrics').upsert({
-    key: input.key.trim(), label: input.label.trim(), ordering: input.ordering,
-    level_1: input.levels[0] || null, level_2: input.levels[1] || null, level_3: input.levels[2] || null, level_4: input.levels[3] || null,
-    looking_for_1: lf[0]?.trim() || null, looking_for_2: lf[1]?.trim() || null, looking_for_3: lf[2]?.trim() || null, looking_for_4: lf[3]?.trim() || null,
-    example_1: ex[0]?.trim() || null, example_2: ex[1]?.trim() || null, example_3: ex[2]?.trim() || null, example_4: ex[3]?.trim() || null,
-    active: input.active ?? true, updated_at: new Date().toISOString(),
+    key: input.key.trim(),
+    label: input.label.trim(),
+    round: input.round,
+    ordering: input.ordering,
+    note: input.note?.trim() || null,
+    levels,
+    active: input.active ?? true,
+    updated_at: new Date().toISOString(),
   })
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admissions/interviews/questions')

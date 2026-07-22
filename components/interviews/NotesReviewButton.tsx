@@ -5,6 +5,7 @@ import { IconSparkles } from '@tabler/icons-react'
 import Modal from '@/components/placements/Modal'
 import { reviewInterviewNotes, type NotesReviewResult } from '@/app/(protected)/admissions/interviews/cockpit-actions'
 import { roundLabel } from '@/lib/interviews'
+import { scoreTone, formatScore } from '@/lib/interviewCockpit'
 
 const QUALITY_STYLE: Record<NotesReviewResult['quality'], string> = {
   strong: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
@@ -16,11 +17,16 @@ const QUALITY_LABEL: Record<NotesReviewResult['quality'], string> = {
   adequate: 'Adequate notes',
   thin: 'Thin notes',
 }
-const SCORE_TONE = ['bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-orange-100 text-orange-700', 'bg-emerald-100 text-emerald-700']
+const TONE_CHIP: Record<string, string> = {
+  red: 'bg-red-100 text-red-700',
+  amber: 'bg-amber-100 text-amber-700',
+  orange: 'bg-orange-100 text-orange-700',
+  emerald: 'bg-emerald-100 text-emerald-700',
+}
 
 function ScoreChip({ s }: { s: number | null }) {
   if (s == null) return <span className="text-zinc-300">—</span>
-  return <span className={`inline-flex h-6 w-6 items-center justify-center rounded text-[12px] font-bold ${SCORE_TONE[s - 1] ?? 'bg-zinc-100'}`}>{s}</span>
+  return <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded px-1 text-[12px] font-bold ${TONE_CHIP[scoreTone(s)]}`}>{formatScore(s)}</span>
 }
 
 export default function NotesReviewButton({

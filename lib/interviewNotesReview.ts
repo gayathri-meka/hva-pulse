@@ -26,9 +26,8 @@ export function isNotesOptional(prompt: string): boolean {
 
 export type ReviewRubric = {
   label: string
-  levels: string[] // level_1..4 descriptors ('' if not set)
-  lookingFor: string[] // per-level "what we're looking for" ('' if not set)
-  score: number | null // 1–4 the interviewer gave, or null
+  levels: { score: number; descriptor: string; lookingFor?: string }[] // scale anchors (fractional/uneven ok)
+  score: number | null // the score the interviewer gave, or null
 }
 
 export type NotesReviewInput = {
@@ -85,13 +84,14 @@ Return ONLY a JSON object of exactly this shape:
 
 function rubricBlock(r: ReviewRubric): string {
   const levels = r.levels
-    .map((lv, i) => {
-      const lf = r.lookingFor[i]?.trim()
-      const base = `  ${i + 1}: ${lv?.trim() || '(no descriptor)'}`
+    .map((lv) => {
+      const lf = lv.lookingFor?.trim()
+      const base = `  ${lv.score}: ${lv.descriptor?.trim() || '(no descriptor)'}`
       return lf ? `${base}\n     Looking for: ${lf}` : base
     })
     .join('\n')
-  const given = r.score == null ? 'not scored' : `${r.score}/4`
+  const max = r.levels.length ? Math.max(...r.levels.map((l) => l.score)) : 4
+  const given = r.score == null ? 'not scored' : `${r.score}/${max}`
   return `Rubric "${r.label}" — interviewer's score: ${given}\n${levels}`
 }
 
