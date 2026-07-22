@@ -32,6 +32,7 @@ export type InterviewSlot = {
   startsAt: string // ISO
   endsAt: string // ISO
   status: SlotStatus
+  round: InterviewRound | null // which round this slot serves (inherited from the interviewer)
 }
 
 export type Interview = {

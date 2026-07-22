@@ -33,8 +33,10 @@ export default function Modal({ title, onClose, children, wide, full }: Props) {
         onClick={onClose}
         aria-hidden="true"
       />
-      {/* Panel */}
-      <div className={`relative flex flex-col max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl ${panelClass}`}>
+      {/* Panel — whitespace-normal resets any inherited `white-space: nowrap`
+          (e.g. when a trigger lives inside a `truncate` table cell), otherwise
+          the modal text won't wrap and its min-content blows past max-width. */}
+      <div className={`relative flex flex-col max-h-[90vh] overflow-y-auto whitespace-normal rounded-xl bg-white shadow-xl ${panelClass}`}>
         <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-100 px-6 py-4">
           <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
           <button
@@ -47,7 +49,7 @@ export default function Modal({ title, onClose, children, wide, full }: Props) {
             </svg>
           </button>
         </div>
-        <div className={full ? 'flex flex-1 flex-col overflow-hidden p-6' : 'p-6'}>
+        <div className={full ? 'flex min-w-0 flex-1 flex-col overflow-hidden p-6' : 'min-w-0 p-6'}>
           {children}
         </div>
       </div>

@@ -53,6 +53,8 @@ export type DayProgress = {
   ordering: number; name: string; tasks: TaskItem[]
   completed: number; total: number
   itemsTotal: number; itemsAttempted: number; itemsCompleted: number
+  // Question-only counts (reading excluded) — admin Day-by-day / Detailed views.
+  questionsTotal: number; questionsAttempted: number; questionsPassed: number
 }
 export type Member = {
   email: string
@@ -68,12 +70,14 @@ export type Member = {
   completedItems: number
   attemptedQuestions: number  // Σ questions attempted across all tasks
   passedQuestions: number     // Σ questions passed across all tasks
+  totalQuestions: number      // Σ quiz questions in the challenge (reading excluded)
   keyQuestionScorePct?: number // % passed across "[Coding] Challenges" tasks (informational)
   keyQuestionAvgScore?: number // avg grader score (0–4) across those questions (informational)
   started: boolean
   firstActive: string | null
   lastActive: string | null
   activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
+  questionsByDate: Record<string, number> // IST date -> attempted quiz questions that day
 }
 export type ChallengeTotals = {
   days: number
@@ -88,6 +92,7 @@ export type CohortDay = {
   name: string
   totalTasks: number
   totalItems: number
+  totalQuestions: number
   avgPct: number
   fullyCompleted: number
   started: number
@@ -480,13 +485,13 @@ function DetailView({
                 <div className="ml-[22px] truncate text-xs text-zinc-400">{m.email}</div>
               </div>
 
-              {/* Progress */}
+              {/* Progress — attempted quiz questions (reading excluded) */}
               <div>
                 <div className="mb-1 flex items-center justify-between text-xs text-zinc-500">
-                  <span>{m.completedItems}/{m.totalItems} items</span>
-                  <span className="font-semibold text-zinc-700">{pct(m.completedItems, m.totalItems)}%</span>
+                  <span>{m.attemptedQuestions}/{m.totalQuestions} questions</span>
+                  <span className="font-semibold text-zinc-700">{pct(m.attemptedQuestions, m.totalQuestions)}%</span>
                 </div>
-                <Bar value={pct(m.completedItems, m.totalItems)} />
+                <Bar value={pct(m.attemptedQuestions, m.totalQuestions)} />
               </div>
 
               {/* Started */}
@@ -521,14 +526,15 @@ function DetailView({
                         <Chevron open={dayOpen} />
                         <span className="w-28 shrink-0 text-sm font-medium text-zinc-800">{d.name}</span>
                         <div className="flex-1">
-                          <Bar value={pct(d.itemsCompleted, d.itemsTotal)} />
+                          <Bar value={pct(d.questionsAttempted, d.questionsTotal)} />
                         </div>
-                        <span className="w-24 shrink-0 text-right text-xs text-zinc-500">{d.itemsCompleted}/{d.itemsTotal} items</span>
+                        <span className="w-24 shrink-0 text-right text-xs text-zinc-500">{d.questionsAttempted}/{d.questionsTotal} questions</span>
                       </button>
 
                       {dayOpen && (
                         <div className="border-t border-zinc-100 px-3 py-2">
-                          {d.tasks.map((t) => {
+                          {/* Reading material excluded — only quiz tasks (with sub-questions). */}
+                          {d.tasks.filter((t) => t.type === 'quiz').map((t) => {
                             const isQuiz = t.type === 'quiz'
                             const taskKey = `${m.email}:${t.taskId}`
                             const taskOpen = isQuiz && openTask === taskKey

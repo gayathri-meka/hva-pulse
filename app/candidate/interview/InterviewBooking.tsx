@@ -8,15 +8,31 @@ import { roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews
 
 const jakarta = { fontFamily: 'var(--font-jakarta), sans-serif' } as const
 
-const dayKey = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+// All times are shown in IST (the programme runs in India) — pin the timezone so
+// the candidate sees the same time regardless of their device's timezone.
+const IST = 'Asia/Kolkata'
+const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: IST }) // YYYY-MM-DD (IST)
+const weekday = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', timeZone: IST })
+const dayNum = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', timeZone: IST })
+const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { month: 'short', timeZone: IST })
+const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: IST })
+const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: IST })
+
+// A "quick add" Google Calendar link so the candidate can drop the interview onto
+// their own calendar in one click (needed since external invites don't auto-add).
+function gcalUrl(interview: Interview): string {
+  const start = new Date(interview.scheduledAt)
+  const end = new Date(start.getTime() + 60 * 60_000)
+  const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '') // YYYYMMDDTHHmmssZ (UTC)
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `HVA Interview · ${roundLabel(interview.round)}`,
+    dates: `${stamp(start)}/${stamp(end)}`,
+    details: interview.meetLink ? `Join the interview: ${interview.meetLink}` : 'HyperVerge Academy admissions interview.',
+    ctz: IST,
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
-const weekday = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short' })
-const dayNum = (iso: string) => new Date(iso).getDate()
-const monthShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { month: 'short' })
-const fullDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 export default function InterviewBooking({ state }: { state: BookingState }) {
   const router = useRouter()
@@ -75,7 +91,25 @@ export default function InterviewBooking({ state }: { state: BookingState }) {
       {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       {state.nextRound === null ? (
-        booked.length > 0 && booked.every((i) => i.status === 'completed') ? (
+        state.final === 'selected' ? (
+          <div className="rounded-2xl border-[0.5px] border-emerald-200 bg-[#f0fdf4] p-5">
+            <div className="text-sm font-extrabold text-[#166534]">You&apos;re through! 🎉</div>
+            <p className="mt-1 text-sm text-emerald-800">You&apos;ve cleared the interviews. Head to the <strong>Selection</strong> tab for what happens next.</p>
+          </div>
+        ) : state.stage1 === 'rejected' || state.final === 'rejected' ? (
+          <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-5">
+            <div className="text-sm font-extrabold text-zinc-900">Thank you for interviewing with us</div>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+              We really appreciate the time you gave us. After careful review, we won&apos;t be moving forward with your
+              application at this stage. We wish you the very best, and we&apos;d welcome you to apply again in the future.
+            </p>
+          </div>
+        ) : state.awaitingReview ? (
+          <div className="flex items-start gap-2 rounded-2xl border-[0.5px] border-amber-200 bg-amber-50/60 p-5 text-sm text-amber-800">
+            <IconClock size={18} className="mt-0.5 shrink-0" />
+            <span>Thanks for interviewing — the team is reviewing it now. We&apos;ll update you right here as soon as there&apos;s news.</span>
+          </div>
+        ) : booked.length > 0 && booked.every((i) => i.status === 'completed') ? (
           <div className="flex items-center gap-2 rounded-2xl border-[0.5px] border-emerald-200 bg-[#f0fdf4] p-5 text-sm text-emerald-800">
             <IconCheck size={18} /> You&apos;re all set — both interviews done. We&apos;ll be in touch with the outcome.
           </div>
@@ -117,11 +151,16 @@ function RoundCard({ interview, onReschedule, pending }: { interview: Interview;
         </span>
       </div>
       <div className="mt-1.5 text-[15px] font-bold text-zinc-900" style={jakarta}>{fullDay(interview.scheduledAt)}</div>
-      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 1 hour</div>
+      <div className="text-sm text-zinc-600">{timeLabel(interview.scheduledAt)} · 1 hour · IST</div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         {interview.meetLink && (
           <a href={interview.meetLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-[#0f1f0f] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#15301a]">
             <IconVideo size={15} /> Join Google Meet
+          </a>
+        )}
+        {upcoming && (
+          <a href={gcalUrl(interview)} target="_blank" rel="noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-[13px] font-bold text-zinc-700 transition-colors hover:border-[#5BAE5B] hover:bg-[#f0fdf4]">
+            Add to calendar
           </a>
         )}
         {upcoming && (
@@ -221,7 +260,7 @@ function Picker({
               {pending
                 ? 'Booking…'
                 : chosen
-                  ? <>Confirm · {new Date(chosen.startsAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}, {timeLabel(chosen.startsAt)} <span aria-hidden>→</span></>
+                  ? <>Confirm · {new Date(chosen.startsAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: IST })}, {timeLabel(chosen.startsAt)} <span aria-hidden>→</span></>
                   : 'Pick a time to confirm'}
             </button>
           </div>

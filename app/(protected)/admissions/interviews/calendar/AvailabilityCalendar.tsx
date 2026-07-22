@@ -12,15 +12,20 @@ const ROWS = 24 // one-hour cells across 24h; each cell = one 1-hour slot
 
 type Iv = Interview & { candidateName: string | null }
 
-function startOfWeekMonday(base: Date): Date {
-  const x = new Date(base)
-  x.setHours(0, 0, 0, 0)
-  const day = (x.getDay() + 6) % 7 // Mon=0
-  x.setDate(x.getDate() - day)
-  return x
+// The grid is fixed to IST (the programme runs in India), independent of the
+// interviewer's device timezone — so a "1 PM" cell is 1 PM IST for everyone.
+const IST = 'Asia/Kolkata'
+const IST_OFFSET_MS = 5.5 * 60 * 60_000 // IST = UTC+5:30, no DST
+
+// UTC instant of Monday 00:00 IST for the week containing `base`.
+function startOfWeekMondayIST(base: Date): Date {
+  const ist = new Date(base.getTime() + IST_OFFSET_MS) // shift so UTC accessors read IST wall clock
+  const day = (ist.getUTCDay() + 6) % 7 // Mon=0 in IST
+  const mondayMidnightIstWall = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - day, 0, 0, 0)
+  return new Date(mondayMidnightIstWall - IST_OFFSET_MS) // IST wall clock → real UTC instant
 }
 const isoOf = (s: string) => new Date(s).toISOString()
-const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
+const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: IST })
 const firstName = (s: string | null | undefined, email: string) => (s ? s.split(' ')[0] : email.split('@')[0])
 
 export default function AvailabilityCalendar({ slots, interviews, showBookings = true }: { slots: InterviewSlot[]; interviews: Iv[]; showBookings?: boolean }) {
@@ -28,18 +33,24 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
   const [pending, startTransition] = useTransition()
   const [weekOffset, setWeekOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   // Painted availability = all OPEN slot start times (ISO). paintedRef is the
   // synchronous source of truth (read on mouse-up); `painted` state drives render.
-  const initial = () => new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt)))
-  const [painted, setPaintedState] = useState<Set<string>>(initial)
+  // `published` is the last-released baseline — painting only becomes bookable on
+  // Publish, so we diff painted vs published to know there are unpublished changes.
+  const openSlotIsos = () => new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt)))
+  const [painted, setPaintedState] = useState<Set<string>>(openSlotIsos)
+  const [published, setPublished] = useState<Set<string>>(openSlotIsos)
   const paintedRef = useRef(painted)
   function setPainted(next: Set<string>) {
     paintedRef.current = next
     setPaintedState(next)
   }
   useEffect(() => {
-    setPainted(new Set(slots.filter((s) => s.status === 'open').map((s) => isoOf(s.startsAt))))
+    const cur = openSlotIsos()
+    setPainted(cur)
+    setPublished(cur) // external slot changes (e.g. a new booking) reset the baseline
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots])
 
@@ -47,7 +58,7 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
   for (const i of interviews) bookedByIso.set(isoOf(i.scheduledAt), i)
 
   const now = Date.now()
-  const weekStart = new Date(startOfWeekMonday(new Date()).getTime() + weekOffset * 7 * DAY)
+  const weekStart = new Date(startOfWeekMondayIST(new Date()).getTime() + weekOffset * 7 * DAY)
   const days = Array.from({ length: 7 }, (_, d) => new Date(weekStart.getTime() + d * DAY))
 
   const dragging = useRef(false)
@@ -62,30 +73,41 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
     else next.delete(iso)
     setPainted(next)
   }
-  function commitWeek(nextPainted: Set<string>) {
-    const ws = weekStart.getTime()
-    const we = ws + 7 * DAY
-    const starts = [...nextPainted].filter((iso) => {
-      const t = new Date(iso).getTime()
-      return t >= ws && t < we
-    })
+  const ws = weekStart.getTime()
+  const we = ws + 7 * DAY
+  const inWeek = (iso: string) => { const t = new Date(iso).getTime(); return t >= ws && t < we }
+  // Already-published open slots for this week, and what's painted now.
+  const publishedThisWeek = new Set([...published].filter(inWeek))
+  const paintedThisWeek = [...painted].filter(inWeek)
+  // Unpublished changes = painted differs from the published baseline for this week.
+  const dirty = paintedThisWeek.length !== publishedThisWeek.size || paintedThisWeek.some((iso) => !publishedThisWeek.has(iso))
+
+  // Publish the painted availability for this week (confirmed via the popup).
+  // Only this week's baseline advances, so unpublished paint on other weeks is kept.
+  function publishThisWeek() {
+    setConfirmOpen(false)
+    setError(null)
+    const releasing = paintedThisWeek
     startTransition(async () => {
-      const res = await syncWeekAvailability({ weekStartIso: weekStart.toISOString(), starts })
-      if (!res.ok) { setError(res.error); router.refresh() }
+      const res = await syncWeekAvailability({ weekStartIso: weekStart.toISOString(), starts: releasing })
+      if (!res.ok) { setError(res.error); return }
+      const nextPublished = new Set([...published].filter((iso) => !inWeek(iso)))
+      releasing.forEach((iso) => nextPublished.add(iso))
+      setPublished(nextPublished)
     })
+  }
+  // Revert this week's painting back to what's currently published.
+  function discardThisWeek() {
+    const next = new Set([...painted].filter((iso) => !inWeek(iso)))
+    publishedThisWeek.forEach((iso) => next.add(iso))
+    setPainted(next)
   }
 
   useEffect(() => {
-    function up() {
-      if (dragging.current) {
-        dragging.current = false
-        commitWeek(paintedRef.current)
-      }
-    }
+    function up() { dragging.current = false } // painting stays local until Publish
     window.addEventListener('mouseup', up)
     return () => window.removeEventListener('mouseup', up)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOffset])
+  }, [])
 
   function onDown(dayIdx: number, row: number) {
     const start = cellStart(dayIdx, row)
@@ -104,22 +126,12 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
     apply(iso, dragMode.current)
   }
 
+  // Copy this week's painting into next week (local only — publish next week to release).
   function copyToNextWeek() {
-    const ws = weekStart.getTime()
-    const we = ws + 7 * DAY
-    const shifted = [...painted].filter((iso) => { const t = new Date(iso).getTime(); return t >= ws && t < we })
-      .map((iso) => new Date(new Date(iso).getTime() + 7 * DAY).toISOString())
+    const shifted = paintedThisWeek.map((iso) => new Date(new Date(iso).getTime() + 7 * DAY).toISOString())
     const next = new Set(painted)
     shifted.forEach((iso) => next.add(iso))
     setPainted(next)
-    const nextWeekStart = new Date(weekStart.getTime() + 7 * DAY)
-    startTransition(async () => {
-      const res = await syncWeekAvailability({
-        weekStartIso: nextWeekStart.toISOString(),
-        starts: [...next].filter((iso) => { const t = new Date(iso).getTime(); return t >= we && t < we + 7 * DAY }),
-      })
-      if (!res.ok) { setError(res.error); router.refresh() }
-    })
   }
 
   function outcome(id: string, o: 'completed' | 'no_show') {
@@ -142,15 +154,25 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
           <button onClick={() => setWeekOffset(0)} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${weekOffset === 0 ? 'bg-zinc-900 text-white' : 'border border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}>This week</button>
           <button onClick={() => setWeekOffset(1)} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${weekOffset === 1 ? 'bg-zinc-900 text-white' : 'border border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}>Next week</button>
         </div>
-        <span className="text-xs text-zinc-400">Week of {days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-        {weekOffset === 0 && (
-          <button onClick={copyToNextWeek} disabled={pending} className="ml-auto rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">Copy to next week →</button>
-        )}
-        <div className="flex items-center gap-3 text-[11px] text-zinc-400">
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-[#5BAE5B]" /> available</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-sky-500" /> booked</span>
+        <span className="text-xs text-zinc-400">Week of {days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: IST })} · IST</span>
+        {dirty && <span className="text-[11px] font-semibold text-amber-600">● Unpublished changes</span>}
+        <div className="ml-auto flex items-center gap-2">
+          {weekOffset === 0 && (
+            <button onClick={copyToNextWeek} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">Copy to next week →</button>
+          )}
+          {dirty && (
+            <button onClick={discardThisWeek} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50">Discard</button>
+          )}
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={pending || !dirty}
+            className={`rounded-lg px-3 py-1 text-xs font-semibold text-white ${dirty ? 'bg-[#5BAE5B] hover:bg-[#4e9c4e]' : 'cursor-not-allowed bg-zinc-300'}`}
+          >
+            {pending ? 'Publishing…' : 'Publish availability'}
+          </button>
         </div>
       </div>
+      <p className="mb-3 text-[11px] text-zinc-400">Paint the cells you&apos;re free, then <span className="font-medium text-zinc-500">Publish</span> to release them for booking. Nothing is bookable until you publish.</p>
 
       {error && <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
@@ -208,6 +230,25 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
           </ul>
         )}
       </section>
+      )}
+
+      {/* Publish confirmation */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-zinc-900">Publish availability?</h3>
+            <p className="mt-1 text-sm text-zinc-600">
+              This releases <span className="font-semibold text-zinc-900">{paintedThisWeek.length}</span> one-hour slot{paintedThisWeek.length === 1 ? '' : 's'} for the week of{' '}
+              {days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: IST })} (IST) so candidates can book them. Already-booked interviews are not affected.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirmOpen(false)} disabled={pending} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">Cancel</button>
+              <button onClick={publishThisWeek} disabled={pending} className="rounded-lg bg-[#5BAE5B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4e9c4e] disabled:opacity-50">
+                {pending ? 'Publishing…' : 'Publish'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

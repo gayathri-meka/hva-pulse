@@ -5,6 +5,7 @@ import {
   IconConfetti,
   IconExternalLink,
   IconEye,
+  IconSeeding,
   IconTrophy,
 } from '@tabler/icons-react'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
@@ -82,14 +83,20 @@ export default async function ChallengePage() {
       <div className="mx-auto max-w-3xl space-y-3 px-4 pt-3 sm:space-y-4 sm:px-6 sm:pt-4">
         {/* ── STATE CARD ──────────────────────────────────────────────── */}
         {state === 'not_started' && <NotStartedCard />}
-        {state === 'in_progress' && <InProgressCard firstName={firstName} percent={progress.percent} />}
+        {state === 'in_progress' && <InProgressCard firstName={firstName} />}
         {state === 'completed' && <CompletedCard firstName={firstName} />}
         {state === 'selected' && <SelectedCard firstName={firstName} />}
-        {state === 'rejected' && <RejectedCard message={decision?.rejection_message ?? null} />}
+        {state === 'rejected' && <RejectedCard firstName={firstName} message={decision?.rejection_message ?? null} />}
 
-        {/* ── PERSISTENT: How it works + What we observe (all states) ──── */}
-        <HowItWorks />
-        <WhatWeObserve />
+        {/* ── "How it works" + "What we observe" only while they're still
+             working the challenge — irrelevant (and tone-deaf) once there's a
+             decision or the challenge is done. ─────────────────────────────── */}
+        {(state === 'not_started' || state === 'in_progress') && (
+          <>
+            <HowItWorks />
+            <WhatWeObserve />
+          </>
+        )}
       </div>
     </main>
   )
@@ -116,24 +123,18 @@ function NotStartedCard() {
   )
 }
 
-// ── State 2: in progress (bold bar) ─────────────────────────────────────────
-function InProgressCard({ firstName, percent }: { firstName: string; percent: number }) {
+// ── State 2: in progress (neutral — no % since it isn't live from SensAI) ────
+function InProgressCard({ firstName }: { firstName: string }) {
   return (
     <div className="rounded-2xl border-[0.5px] border-[#bbf7d0] bg-white p-5 sm:p-6">
-      <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#16a34a]">Keep going</div>
+      <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#16a34a]">You&apos;re under way</div>
       <h2 className="mt-1 text-[21px] font-black text-zinc-900 sm:text-[25px]" style={{ ...jakarta, lineHeight: 1.2 }}>
-        You&apos;re {percent}% there, {firstName}! 🚀
+        You&apos;ve started, {firstName}! 🚀
       </h2>
       <p className="mt-1.5 text-[13px] leading-[1.55] text-zinc-600 sm:text-[14px]">
-        You&apos;ve been doing great — just a bit more to go. Log in and finish what&apos;s left.
+        Keep the momentum going — log in to SensAI and pick up where you left off. Showing up a little every day is what
+        counts.
       </p>
-
-      <div className="mt-4 flex items-center gap-3">
-        <span className="w-11 shrink-0 text-[18px] font-black text-[#16a34a]">{percent}%</span>
-        <div className="h-3 flex-1 overflow-hidden rounded-full bg-[#e8f4e8]">
-          <div className="h-full rounded-full bg-[#5BAE5B] transition-all" style={{ width: `${Math.max(percent, 3)}%` }} />
-        </div>
-      </div>
 
       <a
         href={SENSAI_URL}
@@ -141,11 +142,11 @@ function InProgressCard({ firstName, percent }: { firstName: string; percent: nu
         rel="noopener noreferrer"
         className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-4 text-[15px] font-extrabold text-white shadow-sm transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99] sm:text-[16px]"
       >
-        Log in to SensAI &amp; finish the rest
+        Log in to SensAI &amp; continue
         <IconExternalLink size={18} stroke={2.5} className="transition-transform group-hover:translate-x-0.5" />
       </a>
       <p className="mt-3 rounded-xl bg-[#f0fdf4] px-3 py-2 text-center text-[12px] font-semibold text-[#166534] sm:text-[13px]">
-        A little more each day is all it takes — you&apos;re so close.
+        SensAI always has your exact progress — that&apos;s the place to see what&apos;s left.
       </p>
     </div>
   )
@@ -196,16 +197,33 @@ function SelectedCard({ firstName }: { firstName: string }) {
   )
 }
 
-// ── State 5: rejected + released — shows the team's chosen rejection message ─
-function RejectedCard({ message }: { message: string | null }) {
+// ── State 5: rejected + released — the team's chosen rejection message, shown
+//   warmly. Every reason template ends with an Orbit-Track link; we lift that
+//   trailing URL out of the prose and turn it into a proper CTA button.
+function RejectedCard({ firstName, message }: { firstName: string; message: string | null }) {
   const fallback =
     'Thank you for taking part in the 14-Day Challenge. We won’t be moving forward with your application this cycle, but we truly appreciate the effort you put in.'
-  const text = message?.trim() || fallback
-  // Render plain text but turn any URLs into clickable links (the Orbit CTA).
-  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+  const text = (message?.trim() || fallback).trim()
+
+  // A URL at the very end is the Orbit invitation → pull it out for the button.
+  const trailing = text.match(/(https?:\/\/[^\s]+)[.\s]*$/)
+  const ctaUrl = trailing ? trailing[1] : null
+  const body = ctaUrl
+    ? text.slice(0, trailing!.index).replace(/[\s:—–-]+$/, '')
+    : text
+  // Linkify any URL still left inline in the body (defensive — usually none).
+  const parts = body.split(/(https?:\/\/[^\s]+)/g)
+
   return (
-    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-6 sm:p-7">
-      <p className="mx-auto max-w-xl whitespace-pre-wrap text-[13px] leading-[1.7] text-zinc-700 sm:text-[14px]">
+    <div className="rounded-2xl border-[0.5px] border-zinc-200 bg-white p-6 text-center sm:p-8">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100">
+        <IconSeeding size={30} stroke={2} className="text-zinc-500" />
+      </div>
+      <div className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">Challenge outcome</div>
+      <h2 className="mt-1.5 text-[20px] font-black text-zinc-900 sm:text-[23px]" style={{ ...jakarta, lineHeight: 1.25 }}>
+        Thank you for taking part{firstName && firstName !== 'there' ? `, ${firstName}` : ''}
+      </h2>
+      <p className="mx-auto mt-3 max-w-xl whitespace-pre-wrap text-left text-[13px] leading-[1.7] text-zinc-600 sm:text-center sm:text-[14px]">
         {parts.map((part, i) =>
           /^https?:\/\//.test(part) ? (
             <a key={i} href={part} target="_blank" rel="noreferrer" className="font-semibold text-[#166534] underline underline-offset-2">
@@ -216,6 +234,23 @@ function RejectedCard({ message }: { message: string | null }) {
           ),
         )}
       </p>
+
+      {ctaUrl && (
+        <div className="mt-6">
+          <a
+            href={ctaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0f1f0f] px-6 py-3.5 text-[15px] font-extrabold text-white shadow-sm transition-all hover:bg-[#15301a] hover:shadow-md active:scale-[0.99] sm:text-[16px]"
+          >
+            Explore the Orbit Track
+            <IconExternalLink size={18} stroke={2.5} className="transition-transform group-hover:translate-x-0.5" />
+          </a>
+          <p className="mx-auto mt-2.5 max-w-sm text-[12px] leading-[1.5] text-zinc-400 sm:text-[13px]">
+            A self-paced programme — keep building your skills on your own schedule, and you&apos;re welcome to apply again.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

@@ -12,6 +12,7 @@ const TABS = [
   { key: 'questions', fallback: '/admissions/interviews/questions', label: 'Questions & rubrics', exact: false },
 ] as const
 
+
 export default function InterviewsSubNav() {
   const pathname = usePathname()
   const rememberedHref = useRememberedNavRoutes('admissions-interviews', TABS)

@@ -3,8 +3,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { nextBookableRound, isSlotBookable, normEmail, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { nextBookableRound, isSlotBookable, normEmail, roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
 import { sendBookingEmails } from '@/lib/interviewInvite'
+import { createInterviewEvent, deleteInterviewEvent } from '@/lib/googleCalendar'
 
 // Candidate-facing booking. Candidates aren't in the users table — identity is the
 // authed Google email; all data access is via the service-role client filtered to
@@ -31,7 +32,7 @@ async function isSelectedReleased(email: string): Promise<boolean> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status })
+const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status, round: r.round ?? null })
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toInterview = (r: any): Interview => ({ id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id, interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null })
 
@@ -40,17 +41,36 @@ export type BookingState = {
   interviews: Interview[]
   nextRound: 1 | 2 | null
   openSlots: InterviewSlot[] // only populated when there's a bookable round
+  stage1: 'advance' | 'rejected' | null // team's post-Round-1 release
+  final: 'selected' | 'rejected' | null // team's post-Round-2 release
+  awaitingReview: boolean // a round is done but the team hasn't released a decision
 }
 
 /** Everything the candidate booking page needs. */
 export async function getBookingState(): Promise<BookingState> {
   const email = await authedCandidateEmail()
   if (!email || !(await isSelectedReleased(email)))
-    return { eligible: false, interviews: [], nextRound: null, openSlots: [] }
+    return { eligible: false, interviews: [], nextRound: null, openSlots: [], stage1: null, final: null, awaitingReview: false }
 
-  const { data: ivRows } = await admin().from('interviews').select('*').eq('candidate_email', email)
+  const [{ data: ivRows }, { data: decision }] = await Promise.all([
+    admin().from('interviews').select('*').eq('candidate_email', email),
+    admin().from('interview_decisions').select('stage1, final').eq('candidate_email', email).maybeSingle(),
+  ])
   const interviews = (ivRows ?? []).map(toInterview)
-  const nextRound = nextBookableRound(interviews)
+  const stage1 = (decision?.stage1 as 'advance' | 'rejected' | null) ?? null
+  const final = (decision?.final as 'selected' | 'rejected' | null) ?? null
+
+  // Base sequential round, then apply the team's release gates:
+  // Round 2 opens only when 'advance' is released; any rejection / final call closes booking.
+  let nextRound = nextBookableRound(interviews)
+  if (nextRound === 2 && stage1 !== 'advance') nextRound = null
+  if (stage1 === 'rejected' || final != null) nextRound = null
+
+  // "Awaiting review" = a round is finished but no decision is out yet, so there's
+  // nothing to book and no rejection — the candidate is waiting on the team.
+  const r1Done = interviews.some((i) => i.round === 1 && (i.status === 'completed' || i.status === 'no_show'))
+  const r2Done = interviews.some((i) => i.round === 2 && (i.status === 'completed' || i.status === 'no_show'))
+  const awaitingReview = (r1Done && stage1 == null) || (stage1 === 'advance' && r2Done && final == null)
 
   let openSlots: InterviewSlot[] = []
   if (nextRound) {
@@ -58,16 +78,18 @@ export async function getBookingState(): Promise<BookingState> {
       .from('interview_slots')
       .select('*')
       .eq('status', 'open')
+      .eq('round', nextRound) // only the panel for the round they're on
       .gt('starts_at', new Date().toISOString())
       .order('starts_at')
     openSlots = (slotRows ?? []).map(toSlot)
-    // Round 2 prefers a different interviewer than round 1.
+    // Round 2 prefers a different interviewer than round 1 (belt-and-braces —
+    // the coding panel is already separate from the motivation panel).
     if (nextRound === 2) {
       const r1 = interviews.find((i) => i.round === 1 && i.status !== 'cancelled')
       if (r1) openSlots = openSlots.filter((s) => s.interviewerEmail !== r1.interviewerEmail)
     }
   }
-  return { eligible: true, interviews, nextRound, openSlots }
+  return { eligible: true, interviews, nextRound, openSlots, stage1, final, awaitingReview }
 }
 
 /** Book an open slot for the candidate's next round. Auto-confirms. */
@@ -80,12 +102,21 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   const round = nextBookableRound((ivRows ?? []).map((r) => ({ round: r.round, status: r.status })))
   if (!round) return { ok: false, error: 'You have no interview round to book right now.' }
 
-  // Claim the slot atomically: flip open → booked only if still open.
+  // Release gates: Round 2 needs a released 'advance'; a rejection / final call closes booking.
+  const { data: decision } = await admin().from('interview_decisions').select('stage1, final').eq('candidate_email', email).maybeSingle()
+  if (decision?.stage1 === 'rejected' || decision?.final != null)
+    return { ok: false, error: 'You are not eligible to book an interview right now.' }
+  if (round === 2 && decision?.stage1 !== 'advance')
+    return { ok: false, error: 'The coding round isn’t open for you yet.' }
+
+  // Claim the slot atomically: flip open → booked only if still open AND it's for
+  // the round the candidate is actually on (a coding slot can't serve round 1, etc.).
   const { data: claimed, error: claimErr } = await admin()
     .from('interview_slots')
     .update({ status: 'booked', updated_at: new Date().toISOString() })
     .eq('id', slotId)
     .eq('status', 'open')
+    .eq('round', round)
     .gt('starts_at', new Date().toISOString())
     .select('*')
     .maybeSingle()
@@ -94,32 +125,47 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   const slot = toSlot(claimed)
 
   // Create the confirmed interview. If this fails (e.g. duplicate round), release the slot.
-  const { error: ivErr } = await admin().from('interviews').insert({
+  const { data: created, error: ivErr } = await admin().from('interviews').insert({
     candidate_email: email,
     round,
     slot_id: slot.id,
     interviewer_email: slot.interviewerEmail,
     scheduled_at: slot.startsAt,
     status: 'confirmed',
-  })
-  if (ivErr) {
+  }).select('id').single()
+  if (ivErr || !created) {
     await admin().from('interview_slots').update({ status: 'open' }).eq('id', slot.id)
     return { ok: false, error: 'Could not complete the booking. Please try again.' }
   }
 
-  // Best-effort confirmation emails (calendar + Meet invite added post re-consent).
   const [{ data: prospect }, { data: interviewer }] = await Promise.all([
     admin().from('prospects').select('name').eq('email', email).maybeSingle(),
     admin().from('users').select('name').eq('email', slot.interviewerEmail).maybeSingle(),
   ])
-  await sendBookingEmails({
+
+  // Preferred: a Google Calendar invite with a Meet link (academy@ organiser,
+  // interviewer + candidate attendees). Google emails everyone automatically.
+  const event = await createInterviewEvent({
     candidateEmail: email,
     candidateName: prospect?.name ?? null,
     interviewerEmail: slot.interviewerEmail,
-    interviewerName: interviewer?.name ?? null,
     round,
+    roundLabel: roundLabel(round),
     scheduledAt: slot.startsAt,
   })
+  if (event) {
+    await admin().from('interviews').update({ meet_link: event.meetLink, calendar_event_id: event.eventId }).eq('id', created.id)
+  } else {
+    // Fallback (calendar not connected yet): plain confirmation email to both.
+    await sendBookingEmails({
+      candidateEmail: email,
+      candidateName: prospect?.name ?? null,
+      interviewerEmail: slot.interviewerEmail,
+      interviewerName: interviewer?.name ?? null,
+      round,
+      scheduledAt: slot.startsAt,
+    })
+  }
 
   revalidatePath('/candidate/interview')
   return { ok: true }
@@ -132,7 +178,7 @@ export async function cancelMyInterview(interviewId: string): Promise<{ ok: true
 
   const { data: iv } = await admin()
     .from('interviews')
-    .select('id, slot_id, status, scheduled_at')
+    .select('id, slot_id, status, scheduled_at, calendar_event_id')
     .eq('id', interviewId)
     .eq('candidate_email', email)
     .maybeSingle()
@@ -149,6 +195,8 @@ export async function cancelMyInterview(interviewId: string): Promise<{ ok: true
   if (error) return { ok: false, error: error.message }
   // Free the slot back to the pool so it (or another) can be re-booked.
   if (iv.slot_id) await admin().from('interview_slots').update({ status: 'open' }).eq('id', iv.slot_id).eq('status', 'booked')
+  // Cancel the Google Calendar event (notifies attendees). Best-effort.
+  if (iv.calendar_event_id) await deleteInterviewEvent(iv.calendar_event_id as string)
 
   revalidatePath('/candidate/interview')
   return { ok: true }

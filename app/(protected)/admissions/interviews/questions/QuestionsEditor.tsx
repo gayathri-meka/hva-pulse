@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { upsertQuestion, deleteQuestion, upsertRubric } from '../cockpit-actions'
-import type { InterviewQuestion, InterviewRubric } from '@/lib/interviewCockpit'
+import { scoreTone, formatScore, type InterviewQuestion, type InterviewRubric } from '@/lib/interviewCockpit'
 import { roundLabel } from '@/lib/interviews'
 
 const ROUND_LABEL = (r: 1 | 2 | null) => (r === null ? 'Both rounds' : roundLabel(r))
@@ -63,13 +63,14 @@ export default function QuestionsEditor({ questions, rubrics }: { questions: Int
   )
 }
 
-// Weakest → strongest gradient for the 1–4 anchors.
-const LEVEL_TONE = [
-  { n: 'bg-red-100 text-red-700', bg: 'bg-red-50', tag: 'weakest' },
-  { n: 'bg-amber-100 text-amber-700', bg: 'bg-amber-50', tag: '' },
-  { n: 'bg-orange-100 text-orange-700', bg: 'bg-orange-50', tag: '' },
-  { n: 'bg-emerald-100 text-emerald-700', bg: 'bg-emerald-50', tag: 'strongest' },
-] as const
+const TONE_CHIP: Record<string, string> = {
+  red: 'bg-red-100 text-red-700',
+  amber: 'bg-amber-100 text-amber-700',
+  orange: 'bg-orange-100 text-orange-700',
+  emerald: 'bg-emerald-100 text-emerald-700',
+}
+type EditLevel = { score: number; descriptor: string; lookingFor: string; example: string }
+const DEFAULT_LEVELS: EditLevel[] = [1, 2, 3, 4].map((s) => ({ score: s, descriptor: '', lookingFor: '', example: '' }))
 
 // ── Rubric card (view + inline edit) ────────────────────────────────────────
 function RubricCard({ rubric, nextOrder, onDone }: { rubric: InterviewRubric | null; nextOrder?: number; onDone?: () => void }) {
@@ -78,18 +79,21 @@ function RubricCard({ rubric, nextOrder, onDone }: { rubric: InterviewRubric | n
   const [editing, setEditing] = useState(!rubric)
   const [key, setKey] = useState(rubric?.key ?? '')
   const [label, setLabel] = useState(rubric?.label ?? '')
-  const [levels, setLevels] = useState<[string, string, string, string]>(rubric?.levels ?? ['', '', '', ''])
-  const [lookingFor, setLookingFor] = useState<[string, string, string, string]>(rubric?.lookingFor ?? ['', '', '', ''])
-  const [examples, setExamples] = useState<[string, string, string, string]>(rubric?.examples ?? ['', '', '', ''])
+  const [round, setRound] = useState<1 | 2 | null>(rubric?.round ?? 1)
+  const [note, setNote] = useState(rubric?.note ?? '')
+  const [levels, setLevels] = useState<EditLevel[]>(
+    rubric?.levels?.length ? rubric.levels.map((l) => ({ score: l.score, descriptor: l.descriptor, lookingFor: l.lookingFor, example: l.example })) : DEFAULT_LEVELS,
+  )
   const [active, setActive] = useState(rubric?.active ?? true)
   const [error, setError] = useState<string | null>(null)
 
   const isNew = !rubric
+  const setLevel = (i: number, patch: Partial<EditLevel>) => setLevels((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
 
   function save() {
     setError(null)
     start(async () => {
-      const r = await upsertRubric({ key, label, ordering: rubric?.ordering ?? nextOrder ?? 0, levels, lookingFor, examples, active })
+      const r = await upsertRubric({ key, label, round, ordering: rubric?.ordering ?? nextOrder ?? 0, note, levels, active })
       if (!r.ok) { setError(r.error); return }
       setEditing(false)
       onDone?.()
@@ -100,24 +104,22 @@ function RubricCard({ rubric, nextOrder, onDone }: { rubric: InterviewRubric | n
   if (!editing && rubric) {
     return (
       <div className={`rounded-xl border border-zinc-200 bg-white p-4 ${rubric.active ? '' : 'opacity-60'}`}>
-        <div className="flex items-start justify-between">
-          <span className="text-sm font-semibold text-zinc-800">{rubric.label}{!rubric.active && <span className="ml-2 text-[11px] font-normal text-zinc-400">(inactive)</span>}</span>
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-sm font-semibold text-zinc-800">
+            {rubric.label}
+            <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{ROUND_LABEL(rubric.round)}</span>
+            {!rubric.active && <span className="ml-2 text-[11px] font-normal text-zinc-400">(inactive)</span>}
+          </span>
           <button onClick={() => setEditing(true)} className="shrink-0 text-[11px] font-medium text-zinc-400 hover:text-zinc-600">Edit</button>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {rubric.levels.map((lv, i) => (
-            <div key={i} className={`rounded-lg border border-zinc-100 ${LEVEL_TONE[i].bg} p-2.5`}>
-              <div className="flex items-center gap-1.5">
-                <span className={`flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold ${LEVEL_TONE[i].n}`}>{i + 1}</span>
-                {LEVEL_TONE[i].tag && <span className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">{LEVEL_TONE[i].tag}</span>}
-              </div>
-              <p className="mt-1.5 text-[12px] leading-snug text-zinc-600">{lv || <span className="text-zinc-300">—</span>}</p>
-              {rubric.lookingFor[i]?.trim() && (
-                <p className="mt-1 text-[11px] leading-snug text-zinc-500"><span className="text-zinc-400">Looking for: </span>{rubric.lookingFor[i]}</p>
-              )}
-              {rubric.examples[i]?.trim() && (
-                <p className="mt-1 whitespace-pre-wrap text-[11px] italic leading-snug text-zinc-400">e.g. {rubric.examples[i]}</p>
-              )}
+        {rubric.note?.trim() && <p className="mt-1.5 text-[11px] leading-snug text-zinc-500"><span className="text-zinc-400">How to assess: </span>{rubric.note}</p>}
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {rubric.levels.map((lv) => (
+            <div key={lv.score} className="rounded-lg border border-zinc-100 bg-zinc-50/60 p-2.5">
+              <span className={`flex h-5 w-fit min-w-5 items-center justify-center rounded px-1 text-[11px] font-bold ${TONE_CHIP[scoreTone(lv.score)]}`}>{formatScore(lv.score)}</span>
+              <p className="mt-1.5 text-[12px] leading-snug text-zinc-600">{lv.descriptor || <span className="text-zinc-300">—</span>}</p>
+              {lv.lookingFor.trim() && <p className="mt-1 text-[11px] leading-snug text-zinc-500"><span className="text-zinc-400">Looking for: </span>{lv.lookingFor}</p>}
+              {lv.example.trim() && <p className="mt-1 whitespace-pre-wrap text-[11px] italic leading-snug text-zinc-400">e.g. {lv.example}</p>}
             </div>
           ))}
         </div>
@@ -127,7 +129,7 @@ function RubricCard({ rubric, nextOrder, onDone }: { rubric: InterviewRubric | n
 
   return (
     <div className="rounded-xl border border-zinc-300 bg-white p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <label className={labelCls}>Key {isNew && <span className="font-normal normal-case text-zinc-300">(unique, e.g. drive)</span>}</label>
           <input value={key} onChange={(e) => setKey(e.target.value)} disabled={!isNew} placeholder="drive" className={`${inputCls} mt-1 ${!isNew ? 'bg-zinc-50 text-zinc-400' : ''}`} />
@@ -136,37 +138,38 @@ function RubricCard({ rubric, nextOrder, onDone }: { rubric: InterviewRubric | n
           <label className={labelCls}>Label</label>
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Drive" className={`${inputCls} mt-1`} />
         </div>
+        <div>
+          <label className={labelCls}>Round</label>
+          <select value={round === null ? 'both' : round} onChange={(e) => setRound(e.target.value === 'both' ? null : (Number(e.target.value) as 1 | 2))} className={`${inputCls} mt-1`}>
+            <option value={1}>Motivation</option>
+            <option value={2}>Coding</option>
+            <option value="both">Both rounds</option>
+          </select>
+        </div>
+      </div>
+      <div className="mt-3">
+        <label className={labelCls}>Interviewer note <span className="font-normal normal-case text-zinc-400">— how to assess this rubric (optional)</span></label>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="e.g. Check this mainly through open-ended questions…" className={`${inputCls} mt-1 resize-y`} />
       </div>
       <div className="mt-4">
-        <label className={labelCls}>Score levels <span className="font-normal normal-case text-zinc-400">— per score: what it means, what to look for, example quotes</span></label>
+        <div className="flex items-center justify-between">
+          <label className={labelCls}>Score levels <span className="font-normal normal-case text-zinc-400">— each level: its score, what it means, what to look for, example</span></label>
+          <button onClick={() => setLevels((ls) => [...ls, { score: (ls.at(-1)?.score ?? 0) + 1, descriptor: '', lookingFor: '', example: '' }])} className="text-[11px] font-medium text-[#5BAE5B] hover:underline">+ Add level</button>
+        </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {levels.map((lv, i) => (
-            <div key={i} className={`rounded-lg border border-zinc-100 ${LEVEL_TONE[i].bg} p-2`}>
-              <div className="mb-1.5 flex items-center gap-1.5">
-                <span className={`flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold ${LEVEL_TONE[i].n}`}>{i + 1}</span>
-                {LEVEL_TONE[i].tag && <span className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">{LEVEL_TONE[i].tag}</span>}
+            <div key={i} className="rounded-lg border border-zinc-100 bg-zinc-50/60 p-2">
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className={`flex h-5 min-w-5 items-center justify-center rounded px-1 text-[11px] font-bold ${TONE_CHIP[scoreTone(lv.score)]}`}>{formatScore(lv.score)}</span>
+                <label className="flex items-center gap-1 text-[10px] text-zinc-400">
+                  score
+                  <input type="number" step={0.5} value={lv.score} onChange={(e) => setLevel(i, { score: Number(e.target.value) })} className="w-16 rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[12px] text-zinc-700 focus:border-[#5BAE5B] focus:outline-none" />
+                </label>
+                <button onClick={() => setLevels((ls) => ls.filter((_, j) => j !== i))} className="ml-auto text-[11px] text-zinc-300 hover:text-red-500" title="Remove level">✕</button>
               </div>
-              <textarea
-                value={lv}
-                onChange={(e) => { const n = [...levels] as [string, string, string, string]; n[i] = e.target.value; setLevels(n) }}
-                rows={2}
-                placeholder={`What a ${i + 1} means…`}
-                className="w-full resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-[12px] focus:border-[#5BAE5B] focus:outline-none"
-              />
-              <textarea
-                value={lookingFor[i]}
-                onChange={(e) => { const n = [...lookingFor] as [string, string, string, string]; n[i] = e.target.value; setLookingFor(n) }}
-                rows={2}
-                placeholder="What to look for at this score…"
-                className="mt-1 w-full resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] focus:border-[#5BAE5B] focus:outline-none"
-              />
-              <textarea
-                value={examples[i]}
-                onChange={(e) => { const n = [...examples] as [string, string, string, string]; n[i] = e.target.value; setExamples(n) }}
-                rows={2}
-                placeholder="Example quotes (one per line)…"
-                className="mt-1 w-full resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] italic text-zinc-600 focus:border-[#5BAE5B] focus:outline-none"
-              />
+              <textarea value={lv.descriptor} onChange={(e) => setLevel(i, { descriptor: e.target.value })} rows={2} placeholder="What this score means…" className="w-full resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-[12px] focus:border-[#5BAE5B] focus:outline-none" />
+              <textarea value={lv.lookingFor} onChange={(e) => setLevel(i, { lookingFor: e.target.value })} rows={1} placeholder="What to look for (optional)…" className="mt-1 w-full resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] focus:border-[#5BAE5B] focus:outline-none" />
+              <textarea value={lv.example} onChange={(e) => setLevel(i, { example: e.target.value })} rows={1} placeholder="Example (optional)…" className="mt-1 w-full resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] italic text-zinc-600 focus:border-[#5BAE5B] focus:outline-none" />
             </div>
           ))}
         </div>

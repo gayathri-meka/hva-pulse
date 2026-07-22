@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
-import { setInterviewOutcome } from '../actions'
+import { setInterviewOutcome, cancelInterview } from '../actions'
 import { roundLabel, type Interview } from '@/lib/interviews'
 import { usePersistentState } from '@/hooks/usePersistentState'
 
@@ -31,7 +31,7 @@ const isUpcoming = (r: Row) => (r.status === 'booked' || r.status === 'confirmed
 
 const col = createColumnHelper<Row>()
 
-type View = 'upcoming' | 'past' | 'all'
+type View = 'upcoming' | 'completed' | 'all'
 
 export default function InterviewsListTable({ interviews }: { interviews: Row[] }) {
   const [view, setView] = usePersistentState<View>(
@@ -41,9 +41,9 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
   const [error, setError] = useState<string | null>(null)
 
   const rows = useMemo(() => {
-    if (view === 'all') return interviews
-    if (view === 'upcoming') return interviews.filter(isUpcoming)
-    return interviews.filter((r) => !isUpcoming(r))
+    if (view === 'all') return interviews // includes cancelled
+    if (view === 'upcoming') return interviews.filter(isUpcoming) // future booked/confirmed only (never cancelled)
+    return interviews.filter((r) => r.status === 'completed') // completed only (never cancelled)
   }, [interviews, view])
 
   const columns = useMemo(
@@ -88,12 +88,20 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
         },
       }),
       col.display({
-        id: 'action',
+        id: 'notes',
         header: 'Notes',
-        size: 240,
+        size: 120,
         enableHiding: false,
         enableColumnFilter: false,
-        cell: (info) => <RowActions interview={info.row.original} onError={setError} />,
+        cell: (info) => <NotesCell interview={info.row.original} />,
+      }),
+      col.display({
+        id: 'actions',
+        header: 'Actions',
+        size: 200,
+        enableHiding: false,
+        enableColumnFilter: false,
+        cell: (info) => <OutcomeCell interview={info.row.original} onError={setError} />,
       }),
     ],
     [],
@@ -101,7 +109,7 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
 
   const toggle = (
     <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">
-      {(['upcoming', 'past', 'all'] as View[]).map((v) => (
+      {(['upcoming', 'completed', 'all'] as View[]).map((v) => (
         <button
           key={v}
           onClick={() => setView(v)}
@@ -133,8 +141,19 @@ export default function InterviewsListTable({ interviews }: { interviews: Row[] 
   )
 }
 
-// Conduct link + Done/No-show outcome buttons for a single row.
-function RowActions({ interview, onError }: { interview: Row; onError: (e: string | null) => void }) {
+// The notes link (opens the cockpit). Its own column.
+function NotesCell({ interview }: { interview: Row }) {
+  // A cancelled interview with nothing captured has no notes to take/view.
+  if (interview.status === 'cancelled' && !interview.hasNotes) return <span className="text-xs text-zinc-300">—</span>
+  return (
+    <Link href={`/admissions/interviews/notes/${interview.id}`} className="whitespace-nowrap rounded-lg bg-[#5BAE5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#4e9c4e]">
+      {interview.hasNotes ? 'View notes' : 'Take notes'} →
+    </Link>
+  )
+}
+
+// Outcome actions (Done / No-show / Cancel) — only for a still-open interview.
+function OutcomeCell({ interview, onError }: { interview: Row; onError: (e: string | null) => void }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const active = interview.status === 'booked' || interview.status === 'confirmed'
@@ -147,25 +166,22 @@ function RowActions({ interview, onError }: { interview: Row; onError: (e: strin
       else router.refresh()
     })
   }
+  function cancel() {
+    if (!confirm('Cancel this interview? The Google Calendar invite will be removed and attendees notified.')) return
+    onError(null)
+    start(async () => {
+      const res = await cancelInterview(interview.id)
+      if (!res.ok) onError(res.error)
+      else router.refresh()
+    })
+  }
 
-  // A cancelled interview with nothing captured has no useful action.
-  const cancelledEmpty = interview.status === 'cancelled' && !interview.hasNotes
-
+  if (!active) return <span className="text-xs text-zinc-300">—</span>
   return (
-    <div className="flex shrink-0 items-center justify-end gap-1.5">
-      {cancelledEmpty ? (
-        <span className="text-xs text-zinc-300">—</span>
-      ) : (
-        <Link href={`/admissions/interviews/notes/${interview.id}`} className="whitespace-nowrap rounded-lg bg-[#5BAE5B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#4e9c4e]">
-          {interview.hasNotes ? 'View notes' : 'Take notes'} →
-        </Link>
-      )}
-      {active && (
-        <>
-          <button onClick={() => outcome('completed')} disabled={pending} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Done</button>
-          <button onClick={() => outcome('no_show')} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">No-show</button>
-        </>
-      )}
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button onClick={() => outcome('completed')} disabled={pending} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Done</button>
+      <button onClick={() => outcome('no_show')} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">No-show</button>
+      <button onClick={cancel} disabled={pending} className="rounded-lg border border-zinc-200 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Cancel</button>
     </div>
   )
 }

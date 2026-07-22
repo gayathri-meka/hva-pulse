@@ -71,6 +71,14 @@ export default async function AdmissionsAnalyticsPage() {
   const challenge = challengeFunnel(challengeRows)
   const challengeDates = challengeEventDates(challengeRows)
 
+  // Interviews funnel — challenge-selected+released (eligible), cleared Round 1
+  // (released 'advance'), and finally selected for the programme.
+  const [{ count: selectedForInterviews }, { count: clearedRound1 }, { count: selectedForProgram }] = await Promise.all([
+    supabase.from('challenge_decisions').select('email', { count: 'exact', head: true }).eq('final_decision', 'selected').not('published_at', 'is', null),
+    supabase.from('interview_decisions').select('candidate_email', { count: 'exact', head: true }).eq('stage1', 'advance'),
+    supabase.from('interview_decisions').select('candidate_email', { count: 'exact', head: true }).eq('final', 'selected'),
+  ])
+
   return (
     <div>
       <AdmissionsSummary description="All the admissions data in one place — website applications and Pulse signups over time." />
@@ -79,6 +87,11 @@ export default async function AdmissionsAnalyticsPage() {
         signups={(signups ?? []) as AnalyticsRow[]}
         challenge={challenge}
         challengeDates={challengeDates}
+        interviews={{
+          selectedForInterviews: selectedForInterviews ?? 0,
+          clearedRound1: clearedRound1 ?? 0,
+          selectedForProgram: selectedForProgram ?? 0,
+        }}
       />
     </div>
   )

@@ -46,11 +46,11 @@ function dayOf(m: Member, ordering: number) {
   return m.days.find((d) => d.ordering === ordering)
 }
 function dayFrac(m: Member, ordering: number, fallbackTotal: number) {
-  // Item-based (reading tasks + questions), not task-based.
+  // Attempted quiz questions (reading excluded), not tasks/items.
   const d = dayOf(m, ordering)
-  const completed = d?.itemsCompleted ?? 0
-  const total = d?.itemsTotal ?? fallbackTotal
-  return { completed, total }
+  const attempted = d?.questionsAttempted ?? 0
+  const total = d?.questionsTotal ?? fallbackTotal
+  return { attempted, total }
 }
 
 const multiSelectFilter: FilterFn<Member> = (row, colId, filterValues: string[]) =>
@@ -128,7 +128,7 @@ export default function ChallengeMatrixTable({
             </span>
           ),
       }),
-      col.accessor((m) => pct(m.completedItems, m.totalItems), {
+      col.accessor((m) => pct(m.attemptedQuestions, m.totalQuestions), {
         id: 'overall',
         header: 'Overall',
         size: 150,
@@ -145,20 +145,20 @@ export default function ChallengeMatrixTable({
           )
         },
       }),
-      col.accessor((m) => `${m.completedItems}/${m.totalItems}`, {
+      col.accessor((m) => `${m.passedQuestions}/${m.totalQuestions}`, {
         id: 'completed',
         header: 'Completed',
         size: 110,
         enableColumnFilter: false,
-        sortingFn: (a, b) => a.original.completedItems - b.original.completedItems,
+        sortingFn: (a, b) => a.original.passedQuestions - b.original.passedQuestions,
         cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
       }),
-      col.accessor((m) => `${m.attemptedItems}/${m.totalItems}`, {
+      col.accessor((m) => `${m.attemptedQuestions}/${m.totalQuestions}`, {
         id: 'attempted',
         header: 'Attempted',
         size: 110,
         enableColumnFilter: false,
-        sortingFn: (a, b) => a.original.attemptedItems - b.original.attemptedItems,
+        sortingFn: (a, b) => a.original.attemptedQuestions - b.original.attemptedQuestions,
         cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
       }),
       // One column per challenge day — heatmap X/Y cells, sortable by completion
@@ -168,30 +168,30 @@ export default function ChallengeMatrixTable({
       // opens the Detailed accordion for that learner + that day.
       ...cohortDays.map((cd) =>
         col.accessor((m) => {
-          const { completed, total } = dayFrac(m, cd.ordering, cd.totalTasks)
+          const { attempted, total } = dayFrac(m, cd.ordering, cd.totalQuestions)
           if (total === 0) return ''
-          return completed >= total ? 'Completed' : completed > 0 ? 'In progress' : 'Not started'
+          return attempted >= total ? 'Completed' : attempted > 0 ? 'In progress' : 'Not started'
         }, {
           id: `day_${cd.ordering}`,
           header: cd.name,
           size: 110,
           filterFn: multiSelectFilter,
           sortingFn: (a, b) => {
-            const fa = dayFrac(a.original, cd.ordering, cd.totalItems)
-            const fb = dayFrac(b.original, cd.ordering, cd.totalItems)
-            return (fa.total ? fa.completed / fa.total : 0) - (fb.total ? fb.completed / fb.total : 0)
+            const fa = dayFrac(a.original, cd.ordering, cd.totalQuestions)
+            const fb = dayFrac(b.original, cd.ordering, cd.totalQuestions)
+            return (fa.total ? fa.attempted / fa.total : 0) - (fb.total ? fb.attempted / fb.total : 0)
           },
           cell: (info) => {
             const m = info.row.original
-            const { completed, total } = dayFrac(m, cd.ordering, cd.totalItems)
+            const { attempted, total } = dayFrac(m, cd.ordering, cd.totalQuestions)
             return (
               <button
                 type="button"
                 onClick={() => onOpenDay(m.email, cd.ordering)}
-                title={`${m.name} · ${cd.name} — view tasks`}
-                className={`mx-auto block w-full rounded-md px-2 py-1 text-center text-xs font-medium transition hover:ring-2 hover:ring-[#5BAE5B]/50 focus:outline-none focus:ring-2 focus:ring-[#5BAE5B] ${cellTone(completed, total)}`}
+                title={`${m.name} · ${cd.name} — questions attempted`}
+                className={`mx-auto block w-full rounded-md px-2 py-1 text-center text-xs font-medium transition hover:ring-2 hover:ring-[#5BAE5B]/50 focus:outline-none focus:ring-2 focus:ring-[#5BAE5B] ${cellTone(attempted, total)}`}
               >
-                {completed}/{total}
+                {attempted}/{total}
               </button>
             )
           },

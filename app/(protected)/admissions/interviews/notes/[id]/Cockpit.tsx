@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { saveNote, saveScore, submitAssessment, type CockpitData } from '../../cockpit-actions'
-import { averageScore, RECOMMENDATIONS, type InterviewQuestion, type InterviewRubric } from '@/lib/interviewCockpit'
+import { averageScore, scoreTone, formatScore, RECOMMENDATIONS, type InterviewQuestion, type InterviewRubric } from '@/lib/interviewCockpit'
 import { roundLabel, formatDateTimeIST } from '@/lib/interviews'
 import type { CriterionResult } from '@/lib/challengeReview'
 import type { IntakeGroup } from '@/lib/challengeIntakeDisplay'
@@ -294,20 +294,25 @@ function QuestionCard({ n, question, interviewId, initialNote, onError }: {
   )
 }
 
-// Weakest → strongest tone for a selected score.
-const SCORE_TONE = [
-  'bg-red-600 text-white',
-  'bg-amber-500 text-white',
-  'bg-orange-500 text-white',
-  'bg-emerald-600 text-white',
-]
+// Weak → strong tone for a selected score button + a level chip.
+const TONE_SOLID: Record<string, string> = {
+  red: 'bg-red-600 text-white',
+  amber: 'bg-amber-500 text-white',
+  orange: 'bg-orange-500 text-white',
+  emerald: 'bg-emerald-600 text-white',
+}
+const TONE_CHIP: Record<string, string> = {
+  red: 'bg-red-100 text-red-700',
+  amber: 'bg-amber-100 text-amber-700',
+  orange: 'bg-orange-100 text-orange-700',
+  emerald: 'bg-emerald-100 text-emerald-700',
+}
 
-const LEVEL_CHIP = ['bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-orange-100 text-orange-700', 'bg-emerald-100 text-emerald-700']
-
-// ── Rubric row: 1–4 buttons on a weak→strong scale, with collapsible guidance ─
+// ── Rubric row: one button per level on this rubric's scale, with guidance ────
 function RubricRow({ rubric, value, onPick }: { rubric: InterviewRubric; value: number | null; onPick: (s: number) => void }) {
   const [open, setOpen] = useState(false)
-  const hasGuide = rubric.examples.some((e) => e.trim()) || rubric.lookingFor.some((e) => e.trim())
+  const hasGuide = !!rubric.note?.trim() || rubric.levels.some((l) => l.lookingFor.trim() || l.example.trim())
+  const selected = value != null ? rubric.levels.find((l) => l.score === value) : undefined
 
   return (
     <div>
@@ -322,18 +327,18 @@ function RubricRow({ rubric, value, onPick }: { rubric: InterviewRubric; value: 
             )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           <span className="mr-1 hidden text-[10px] uppercase tracking-wide text-zinc-300 sm:inline">weak</span>
-          {[1, 2, 3, 4].map((s) => {
-            const active = value === s
+          {rubric.levels.map((lv) => {
+            const active = value === lv.score
             return (
               <button
-                key={s}
-                onClick={() => onPick(s)}
-                title={rubric.levels[s - 1] || `Score ${s}`}
-                className={`h-8 w-8 rounded-md text-sm font-semibold transition-colors ${active ? SCORE_TONE[s - 1] : 'border border-zinc-200 text-zinc-400 hover:bg-zinc-50'}`}
+                key={lv.score}
+                onClick={() => onPick(lv.score)}
+                title={lv.descriptor || `Score ${formatScore(lv.score)}`}
+                className={`h-8 min-w-8 rounded-md px-1.5 text-sm font-semibold transition-colors ${active ? TONE_SOLID[scoreTone(lv.score)] : 'border border-zinc-200 text-zinc-400 hover:bg-zinc-50'}`}
               >
-                {s}
+                {formatScore(lv.score)}
               </button>
             )
           })}
@@ -341,22 +346,23 @@ function RubricRow({ rubric, value, onPick }: { rubric: InterviewRubric; value: 
         </div>
       </div>
 
-      {value != null && rubric.levels[value - 1] && (
-        <p className="mt-1 text-[11px] leading-snug text-zinc-500">{rubric.levels[value - 1]}</p>
-      )}
+      {selected?.descriptor && <p className="mt-1 text-[11px] leading-snug text-zinc-500">{selected.descriptor}</p>}
 
       {open && (
         <div className="mt-2 space-y-2.5 rounded-lg bg-zinc-50 p-3">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex gap-2">
-              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] font-bold ${LEVEL_CHIP[i]}`}>{i + 1}</span>
+          {rubric.note?.trim() && (
+            <p className="text-[11px] leading-snug text-zinc-500"><span className="font-semibold text-zinc-600">How to assess: </span>{rubric.note}</p>
+          )}
+          {rubric.levels.map((lv) => (
+            <div key={lv.score} className="flex gap-2">
+              <span className={`flex h-5 min-w-5 shrink-0 items-center justify-center rounded px-1 text-[11px] font-bold ${TONE_CHIP[scoreTone(lv.score)]}`}>{formatScore(lv.score)}</span>
               <div className="min-w-0 text-[12px] leading-snug">
-                <span className="font-medium text-zinc-700">{rubric.levels[i] || <span className="font-normal text-zinc-300">—</span>}</span>
-                {rubric.lookingFor[i]?.trim() && (
-                  <p className="mt-0.5 text-[11px] text-zinc-500"><span className="text-zinc-400">Looking for: </span>{rubric.lookingFor[i]}</p>
+                <span className="font-medium text-zinc-700">{lv.descriptor || <span className="font-normal text-zinc-300">—</span>}</span>
+                {lv.lookingFor.trim() && (
+                  <p className="mt-0.5 text-[11px] text-zinc-500"><span className="text-zinc-400">Looking for: </span>{lv.lookingFor}</p>
                 )}
-                {rubric.examples[i]?.trim() && (
-                  <p className="mt-0.5 whitespace-pre-wrap text-[11px] italic text-zinc-400">e.g. {rubric.examples[i]}</p>
+                {lv.example.trim() && (
+                  <p className="mt-0.5 whitespace-pre-wrap text-[11px] italic text-zinc-400">e.g. {lv.example}</p>
                 )}
               </div>
             </div>

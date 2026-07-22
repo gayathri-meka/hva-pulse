@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { IconCheck, IconLogout } from '@tabler/icons-react'
+import { IconCheck, IconLock, IconLogout } from '@tabler/icons-react'
 import { createClient } from '@/lib/supabase'
 
 const STAGES = [
@@ -22,8 +22,10 @@ const SLACK_URL =
 
 export default function CandidateHeader({
   completedStages = [],
+  lockedStages = [],
 }: {
   completedStages?: string[]
+  lockedStages?: string[]
 }) {
   const pathname = usePathname()
   const currentSlug = pathname.split('/')[2] ?? 'welcome'
@@ -71,9 +73,27 @@ export default function CandidateHeader({
           {STAGES.map((stage, i) => {
             const isCurrent = stage.slug === currentSlug
             const isCompleted = completedStages.includes(stage.slug)
+            const isLocked = lockedStages.includes(stage.slug) && !isCompleted
             // The Personal Information step is required before anything else —
             // flag it red until the form is submitted, even while it's current.
             const needsAction = stage.slug === 'interest-form' && !isCompleted
+
+            // Locked stage → greyed, non-clickable (no "coming soon" page).
+            if (isLocked) {
+              return (
+                <div
+                  key={stage.slug}
+                  aria-disabled="true"
+                  title="You'll unlock this once you reach this stage"
+                  className="flex flex-shrink-0 cursor-not-allowed items-center gap-2 rounded-full px-2 py-1 opacity-45"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white/20 bg-white/5 text-white/40">
+                    <IconLock size={13} stroke={2.2} />
+                  </span>
+                  <span className="whitespace-nowrap text-[13px] font-bold text-white/40">{stage.label}</span>
+                </div>
+              )
+            }
             return (
               <Link
                 key={stage.slug}

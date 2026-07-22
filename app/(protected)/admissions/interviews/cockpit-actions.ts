@@ -5,7 +5,16 @@ import { revalidatePath } from 'next/cache'
 import { requireInterviewer, requireStaff } from '@/lib/auth'
 import type { CriterionResult } from '@/lib/challengeReview'
 import { intakeDossierFields, type IntakeGroup } from '@/lib/challengeIntakeDisplay'
-import { isValidScore, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type Recommendation } from '@/lib/interviewCockpit'
+import { rubricsForRound, isValidScoreForRubric, isValidRecommendation, type InterviewQuestion, type InterviewRubric, type RubricLevel, type Recommendation } from '@/lib/interviewCockpit'
+import { chatJSON } from '@/lib/openai'
+import {
+  buildNotesReviewUserPrompt,
+  parseNotesReview,
+  isNotesOptional,
+  NOTES_REVIEW_SYSTEM,
+  type NotesReviewInput,
+  type NotesReviewResult,
+} from '@/lib/interviewNotesReview'
 
 // Cockpit ops for conducting an interview. requireInterviewer allows admin/staff +
 // dedicated interviewers; a dedicated interviewer may only touch their OWN interview.
@@ -22,13 +31,40 @@ type Err = { ok: false; error: string }
 function toQuestion(r: any): InterviewQuestion {
   return { id: r.id, round: r.round ?? null, section: r.section ?? null, ordering: r.ordering, prompt: r.prompt, purpose: r.purpose ?? null, strongAnswer: r.strong_answer ?? null, weakAnswer: r.weak_answer ?? null, probe: r.probe ?? null, active: r.active }
 }
+// Normalise a rubric row → variable levels. Prefers the new `levels` jsonb; falls
+// back to the legacy level_1..4 columns (scores 1–4) for rows not yet migrated.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toLevels(r: any): RubricLevel[] {
+  if (Array.isArray(r.levels) && r.levels.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (r.levels as any[])
+      .map((l) => ({
+        score: Number(l.score),
+        descriptor: (l.descriptor ?? '').toString(),
+        lookingFor: (l.looking_for ?? l.lookingFor ?? '').toString(),
+        example: (l.example ?? '').toString(),
+      }))
+      .filter((l) => Number.isFinite(l.score))
+      .sort((a, b) => a.score - b.score)
+  }
+  return [1, 2, 3, 4]
+    .map((s) => ({
+      score: s,
+      descriptor: (r[`level_${s}`] ?? '').toString(),
+      lookingFor: (r[`looking_for_${s}`] ?? '').toString(),
+      example: (r[`example_${s}`] ?? '').toString(),
+    }))
+    .filter((l) => l.descriptor.trim() !== '')
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toRubric(r: any): InterviewRubric {
   return {
-    key: r.key, label: r.label, ordering: r.ordering,
-    levels: [r.level_1 ?? '', r.level_2 ?? '', r.level_3 ?? '', r.level_4 ?? ''],
-    lookingFor: [r.looking_for_1 ?? '', r.looking_for_2 ?? '', r.looking_for_3 ?? '', r.looking_for_4 ?? ''],
-    examples: [r.example_1 ?? '', r.example_2 ?? '', r.example_3 ?? '', r.example_4 ?? ''],
+    key: r.key,
+    label: r.label,
+    round: (r.round as 1 | 2 | null) ?? null,
+    ordering: r.ordering,
+    note: r.note ?? null,
+    levels: toLevels(r),
     active: r.active,
   }
 }
@@ -98,9 +134,9 @@ export async function getCockpit(interviewId: string): Promise<Ok<CockpitData> |
       dossier: (decision?.criteria_snapshot ?? []) as CriterionResult[],
       intake,
       questions,
-      rubrics: (rs ?? []).map(toRubric),
+      rubrics: rubricsForRound((rs ?? []).map(toRubric), round),
       notes: Object.fromEntries((ns ?? []).map((n) => [n.question_id, n.note ?? ''])),
-      scores: Object.fromEntries((sc ?? []).map((s) => [s.rubric_key, s.score])),
+      scores: Object.fromEntries((sc ?? []).map((s) => [s.rubric_key, Number(s.score)])),
     },
   }
 }
@@ -116,9 +152,12 @@ export async function saveNote(interviewId: string, questionId: string, note: st
 }
 
 export async function saveScore(interviewId: string, rubricKey: string, score: number): Promise<Ok<null> | Err> {
-  if (!isValidScore(score)) return { ok: false, error: 'Score must be 1–4.' }
   const res = await loadOwnedInterview(interviewId)
   if (!res.ok) return { ok: false, error: res.error }
+  // Validate the score against the rubric's own scale (fractional / uneven).
+  const { data: rub } = await admin().from('interview_rubrics').select('*').eq('key', rubricKey).maybeSingle()
+  if (!rub || !isValidScoreForRubric(score, toRubric(rub)))
+    return { ok: false, error: 'That score isn’t on this rubric’s scale.' }
   const { error } = await admin()
     .from('interview_scores')
     .upsert({ interview_id: interviewId, rubric_key: rubricKey, score, updated_at: new Date().toISOString() }, { onConflict: 'interview_id,rubric_key' })
@@ -154,103 +193,117 @@ export async function submitAssessment(input: {
   return { ok: true, data: null }
 }
 
-// ── Notes lookup by candidate (Interviews → Notes tab) ───────────────────────
-export type NoteBundle = {
+// ── Scores table (Interviews → Notes tab) ────────────────────────────────────
+export type ScoreRow = {
   interviewId: string
   candidateName: string | null
   candidateEmail: string
   round: 1 | 2
   interviewerName: string | null
-  scheduledAt: string
-  status: string
   recommendation: Recommendation | null
-  summary: string | null
-  notes: { prompt: string; note: string }[]
-  scores: { label: string; score: number }[]
+  scores: Record<string, number> // rubricKey → 1–4
+  hasNotes: boolean
 }
 
-/** Search interviews by candidate name/email and return their captured notes + scores.
- *  Empty query returns the most recent interviews that already have notes. */
-export async function searchInterviewNotes(query: string): Promise<NoteBundle[]> {
+/** One row per (non-cancelled) interview with its rubric scores + decision, plus
+ *  the rubric column list. Powers the Notes tab table. */
+export async function getInterviewScores(): Promise<{ rubrics: { key: string; label: string }[]; rows: ScoreRow[] }> {
   await requireStaff()
   const a = admin()
-  const q = query.trim().toLowerCase()
-
-  // Resolve which candidate emails match the query.
-  let ivRows: { data: Record<string, unknown>[] | null } = { data: [] }
-  if (q) {
-    const emails = new Set<string>()
-    const [{ data: p }, { data: directIv }] = await Promise.all([
-      a.from('prospects').select('email').or(`name.ilike.%${q}%,email.ilike.%${q}%`),
-      a.from('interviews').select('candidate_email').ilike('candidate_email', `%${q}%`),
-    ])
-    for (const r of p ?? []) emails.add(r.email)
-    for (const r of directIv ?? []) emails.add(r.candidate_email)
-    if (emails.size === 0) return []
-    ivRows = await a.from('interviews').select('*').in('candidate_email', [...emails]).order('scheduled_at', { ascending: false })
-  } else {
-    // No query → recent interviews that have notes/scores/assessment.
-    const [{ data: nIds }, { data: sIds }, { data: aIds }] = await Promise.all([
-      a.from('interview_notes').select('interview_id'),
-      a.from('interview_scores').select('interview_id'),
-      a.from('interviews').select('id').not('recommendation', 'is', null),
-    ])
-    const ids = [...new Set([...(nIds ?? []).map((r) => r.interview_id), ...(sIds ?? []).map((r) => r.interview_id), ...(aIds ?? []).map((r) => r.id)])]
-    if (ids.length === 0) return []
-    ivRows = await a.from('interviews').select('*').in('id', ids).order('scheduled_at', { ascending: false }).limit(40)
-  }
-
-  const rows = ivRows.data ?? []
-  if (rows.length === 0) return []
-  const ivIds = rows.map((r) => r.id as string)
-
-  const [{ data: nRows }, { data: sRows }, { data: prospects }, { data: users }, { data: questions }, { data: rubrics }] = await Promise.all([
-    a.from('interview_notes').select('interview_id, question_id, note').in('interview_id', ivIds),
-    a.from('interview_scores').select('interview_id, rubric_key, score').in('interview_id', ivIds),
-    a.from('prospects').select('email, name').in('email', [...new Set(rows.map((r) => r.candidate_email as string))]),
-    a.from('users').select('email, name').in('email', [...new Set(rows.map((r) => r.interviewer_email as string))]),
-    a.from('interview_questions').select('id, prompt, ordering'),
-    a.from('interview_rubrics').select('key, label, ordering'),
+  const [{ data: ivs }, { data: rubricRows }, { data: scoreRows }, { data: noteRows }] = await Promise.all([
+    a.from('interviews').select('id, candidate_email, round, interviewer_email, recommendation').neq('status', 'cancelled').order('scheduled_at', { ascending: false }),
+    a.from('interview_rubrics').select('key, label, ordering').eq('active', true).order('ordering'),
+    a.from('interview_scores').select('interview_id, rubric_key, score'),
+    a.from('interview_notes').select('interview_id, note'),
   ])
+  const interviews = ivs ?? []
+  const rubrics = (rubricRows ?? []).map((r) => ({ key: r.key as string, label: r.label as string }))
 
+  const [{ data: prospects }, { data: users }] = await Promise.all([
+    a.from('prospects').select('email, name').in('email', [...new Set(interviews.map((r) => r.candidate_email as string))]),
+    a.from('users').select('email, name').in('email', [...new Set(interviews.map((r) => r.interviewer_email as string))]),
+  ])
   const candName = new Map((prospects ?? []).map((p) => [p.email, p.name as string | null]))
   const ivrName = new Map((users ?? []).map((u) => [u.email, u.name as string | null]))
-  const qMeta = new Map((questions ?? []).map((x) => [x.id, { prompt: x.prompt as string, ordering: x.ordering as number }]))
-  const rMeta = new Map((rubrics ?? []).map((x) => [x.key, { label: x.label as string, ordering: x.ordering as number }]))
 
-  return rows
-    // A cancelled interview with nothing captured wasn't conducted — drop it.
-    .filter((r) =>
-      r.status !== 'cancelled' ||
-      !!r.recommendation ||
-      (nRows ?? []).some((n) => n.interview_id === r.id && (n.note ?? '').trim()) ||
-      (sRows ?? []).some((s) => s.interview_id === r.id),
-    )
-    .map((r) => {
-    const notes = (nRows ?? [])
-      .filter((n) => n.interview_id === r.id && (n.note ?? '').trim())
-      .map((n) => ({ prompt: qMeta.get(n.question_id)?.prompt ?? 'Question', note: n.note as string, ordering: qMeta.get(n.question_id)?.ordering ?? 0 }))
-      .sort((x, y) => x.ordering - y.ordering)
-      .map(({ prompt, note }) => ({ prompt, note }))
-    const scores = (sRows ?? [])
-      .filter((s) => s.interview_id === r.id)
-      .map((s) => ({ label: rMeta.get(s.rubric_key)?.label ?? s.rubric_key, score: s.score as number, ordering: rMeta.get(s.rubric_key)?.ordering ?? 0 }))
-      .sort((x, y) => x.ordering - y.ordering)
-      .map(({ label, score }) => ({ label, score }))
-    return {
-      interviewId: r.id as string,
-      candidateName: candName.get(r.candidate_email as string) ?? null,
-      candidateEmail: r.candidate_email as string,
-      round: r.round as 1 | 2,
-      interviewerName: ivrName.get(r.interviewer_email as string) ?? null,
-      scheduledAt: r.scheduled_at as string,
-      status: r.status as string,
-      recommendation: (r.recommendation as Recommendation) ?? null,
-      summary: (r.summary as string) ?? null,
-      notes,
-      scores,
-    }
-  })
+  const scoresByIv = new Map<string, Record<string, number>>()
+  for (const s of scoreRows ?? []) {
+    const m = scoresByIv.get(s.interview_id) ?? {}
+    m[s.rubric_key] = Number(s.score)
+    scoresByIv.set(s.interview_id, m)
+  }
+  const noted = new Set<string>()
+  for (const n of noteRows ?? []) if ((n.note ?? '').trim()) noted.add(n.interview_id)
+
+  const rows: ScoreRow[] = interviews.map((r) => ({
+    interviewId: r.id as string,
+    candidateName: candName.get(r.candidate_email as string) ?? null,
+    candidateEmail: r.candidate_email as string,
+    round: r.round as 1 | 2,
+    interviewerName: ivrName.get(r.interviewer_email as string) ?? null,
+    recommendation: (r.recommendation as Recommendation) ?? null,
+    scores: scoresByIv.get(r.id as string) ?? {},
+    hasNotes: noted.has(r.id as string) || scoresByIv.has(r.id as string) || !!r.recommendation,
+  }))
+  return { rubrics, rows }
+}
+
+// ── AI review of an interview's notes (OpenAI) ───────────────────────────────
+export type { NotesReviewResult } from '@/lib/interviewNotesReview'
+
+/** Have the LLM QA one interview's notes: overall quality, per-question gaps,
+ *  and whether the notes justify the interviewer's rubric scores. Staff-only. */
+export async function reviewInterviewNotes(interviewId: string): Promise<Ok<NotesReviewResult> | Err> {
+  await requireStaff()
+  const a = admin()
+
+  const { data: iv } = await a.from('interviews').select('*').eq('id', interviewId).maybeSingle()
+  if (!iv) return { ok: false, error: 'Interview not found.' }
+
+  const [{ data: prospect }, { data: qs }, { data: rs }, { data: ns }, { data: sc }] = await Promise.all([
+    a.from('prospects').select('name').eq('email', iv.candidate_email).maybeSingle(),
+    a.from('interview_questions').select('*').eq('active', true).order('ordering'),
+    a.from('interview_rubrics').select('*').eq('active', true).order('ordering'),
+    a.from('interview_notes').select('question_id, note').eq('interview_id', interviewId),
+    a.from('interview_scores').select('rubric_key, score').eq('interview_id', interviewId),
+  ])
+
+  const round = iv.round as 1 | 2
+  const questions = (qs ?? []).map(toQuestion).filter((q) => q.round === null || q.round === round)
+  const noteBy = new Map((ns ?? []).map((n) => [n.question_id, (n.note ?? '') as string]))
+  const scoreBy = new Map((sc ?? []).map((s) => [s.rubric_key, Number(s.score)]))
+
+  // Nothing to review if the interviewer wrote no notes and left no scores.
+  const anyNotes = questions.some((q) => (noteBy.get(q.id) ?? '').trim()) || (iv.summary ?? '').trim()
+  if (!anyNotes && scoreBy.size === 0) {
+    return { ok: false, error: 'No notes or scores to review yet.' }
+  }
+
+  const input: NotesReviewInput = {
+    candidateName: (prospect?.name as string) ?? (iv.candidate_email as string),
+    round,
+    questions: questions.map((q, i) => ({
+      n: i + 1,
+      section: q.section,
+      prompt: q.prompt,
+      note: noteBy.get(q.id) ?? '',
+      notesOptional: isNotesOptional(q.prompt),
+    })),
+    rubrics: rubricsForRound((rs ?? []).map(toRubric), round).map((r) => ({
+      label: r.label,
+      levels: r.levels.map((l) => ({ score: l.score, descriptor: l.descriptor, lookingFor: l.lookingFor })),
+      score: scoreBy.get(r.key) ?? null,
+    })),
+    summary: (iv.summary as string) ?? '',
+    recommendation: (iv.recommendation as string) ?? null,
+  }
+
+  try {
+    const raw = await chatJSON({ system: NOTES_REVIEW_SYSTEM, user: buildNotesReviewUserPrompt(input) })
+    return { ok: true, data: parseNotesReview(raw) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'AI review failed.' }
+  }
 }
 
 // ── Admin config: question bank + rubrics ─────────────────────────────────────
@@ -302,22 +355,37 @@ export async function deleteQuestion(id: string): Promise<Ok<null> | Err> {
 export async function upsertRubric(input: {
   key: string
   label: string
+  round: 1 | 2 | null
   ordering: number
-  levels: [string, string, string, string]
-  lookingFor?: [string, string, string, string]
-  examples?: [string, string, string, string]
+  note?: string
+  levels: { score: number; descriptor: string; lookingFor?: string; example?: string }[]
   active?: boolean
 }): Promise<Ok<null> | Err> {
   await requireStaff()
   if (!input.key?.trim() || !input.label?.trim()) return { ok: false, error: 'Rubric key and label are required.' }
-  const lf = input.lookingFor ?? ['', '', '', '']
-  const ex = input.examples ?? ['', '', '', '']
+  // Keep only levels with a real descriptor, normalise + sort by score.
+  const levels = input.levels
+    .filter((l) => Number.isFinite(l.score) && (l.descriptor ?? '').trim() !== '')
+    .map((l) => ({
+      score: l.score,
+      descriptor: l.descriptor.trim(),
+      looking_for: l.lookingFor?.trim() || null,
+      example: l.example?.trim() || null,
+    }))
+    .sort((a, b) => a.score - b.score)
+  if (!levels.length) return { ok: false, error: 'Add at least one score level.' }
+  if (new Set(levels.map((l) => l.score)).size !== levels.length)
+    return { ok: false, error: 'Each level needs a distinct score.' }
+
   const { error } = await admin().from('interview_rubrics').upsert({
-    key: input.key.trim(), label: input.label.trim(), ordering: input.ordering,
-    level_1: input.levels[0] || null, level_2: input.levels[1] || null, level_3: input.levels[2] || null, level_4: input.levels[3] || null,
-    looking_for_1: lf[0]?.trim() || null, looking_for_2: lf[1]?.trim() || null, looking_for_3: lf[2]?.trim() || null, looking_for_4: lf[3]?.trim() || null,
-    example_1: ex[0]?.trim() || null, example_2: ex[1]?.trim() || null, example_3: ex[2]?.trim() || null, example_4: ex[3]?.trim() || null,
-    active: input.active ?? true, updated_at: new Date().toISOString(),
+    key: input.key.trim(),
+    label: input.label.trim(),
+    round: input.round,
+    ordering: input.ordering,
+    note: input.note?.trim() || null,
+    levels,
+    active: input.active ?? true,
+    updated_at: new Date().toISOString(),
   })
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admissions/interviews/questions')

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { requireStaff, requireInterviewer, getAppUser } from '@/lib/auth'
 import { normEmail, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { deleteInterviewEvent } from '@/lib/googleCalendar'
 
 // Admin/staff view of the whole interview programme: interviewers, the slot pool,
 // all bookings, and metrics. Adding an interviewer = a users row with role
@@ -16,23 +17,45 @@ function admin() {
 type Err = { ok: false; error: string }
 type Ok = { ok: true }
 
-/** Add an interviewer (a Pulse user with role 'interviewer'). Admin only. */
-export async function addInterviewer(input: { email: string; name: string }): Promise<Ok | Err> {
+/** Add an interviewer (a Pulse user with role 'interviewer'), specialised to one
+ *  round (1 = Motivation, 2 = Coding). Admin only. */
+export async function addInterviewer(input: { email: string; name: string; round: 1 | 2 }): Promise<Ok | Err> {
   const user = await getAppUser()
   if (!user || user.role !== 'admin') return { ok: false, error: 'Only admins can add interviewers.' }
   const email = normEmail(input.email)
   const name = input.name?.trim()
+  const round = input.round
   if (!email || !email.includes('@')) return { ok: false, error: 'Enter a valid email.' }
+  if (round !== 1 && round !== 2) return { ok: false, error: 'Pick which round this interviewer runs.' }
 
   const { data: existing } = await admin().from('users').select('id, role').eq('email', email).maybeSingle()
   if (existing) {
     if (existing.role !== 'interviewer')
       return { ok: false, error: `That email is already a Pulse ${existing.role}.` }
-    return { ok: true } // already an interviewer
+    // Already an interviewer — just (re)set their specialisation.
+    await admin().from('users').update({ interview_round: round }).eq('email', email)
+    revalidatePath('/admissions/interviews')
+    return { ok: true }
   }
-  const { error } = await admin().from('users').insert({ email, name: name || null, role: 'interviewer' })
+  const { error } = await admin().from('users').insert({ email, name: name || null, role: 'interviewer', interview_round: round })
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admissions/interviews')
+  return { ok: true }
+}
+
+/** Change an interviewer's round specialisation. Re-tags their OPEN slots so the
+ *  availability they've already published moves to the new panel too. Admin only. */
+export async function setInterviewerRound(input: { email: string; round: 1 | 2 }): Promise<Ok | Err> {
+  const user = await getAppUser()
+  if (!user || user.role !== 'admin') return { ok: false, error: 'Only admins can change interviewer roles.' }
+  const email = normEmail(input.email)
+  if (input.round !== 1 && input.round !== 2) return { ok: false, error: 'Pick a valid round.' }
+  const { error } = await admin().from('users').update({ interview_round: input.round }).eq('email', email)
+  if (error) return { ok: false, error: error.message }
+  // Move their unbooked availability to the new round (booked slots are left alone).
+  await admin().from('interview_slots').update({ round: input.round }).eq('interviewer_email', email).eq('status', 'open')
+  revalidatePath('/admissions/interviews')
+  revalidatePath('/admissions/interviews/calendar')
   return { ok: true }
 }
 
@@ -58,21 +81,24 @@ export async function removeInterviewer(email: string): Promise<Ok | Err> {
 const SLOT_MINUTES = 60
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status })
+const toSlot = (r: any): InterviewSlot => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status, round: r.round ?? null })
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toInterview = (r: any): Interview => ({ id: r.id, candidateEmail: r.candidate_email, round: r.round, slotId: r.slot_id, interviewerEmail: r.interviewer_email, scheduledAt: r.scheduled_at, status: r.status, meetLink: r.meet_link ?? null, recommendation: r.recommendation ?? null })
 
-/** The logged-in interviewer's own slots + interviews (for the paint-week grid). */
+/** The logged-in interviewer's own slots + interviews (for the paint-week grid),
+ *  plus their round specialisation so the grid can label what they're publishing. */
 export async function getMyCalendar(): Promise<{
   slots: InterviewSlot[]
   interviews: (Interview & { candidateName: string | null })[]
+  round: 1 | 2 | null
 }> {
   const user = await requireInterviewer()
   const email = normEmail(user.email)
   const a = admin()
-  const [slotsRes, ivRes] = await Promise.all([
+  const [slotsRes, ivRes, meRes] = await Promise.all([
     a.from('interview_slots').select('*').eq('interviewer_email', email).order('starts_at'),
     a.from('interviews').select('*').eq('interviewer_email', email).neq('status', 'cancelled').order('scheduled_at'),
+    a.from('users').select('interview_round').eq('email', email).maybeSingle(),
   ])
   const interviews = (ivRes.data ?? []).map(toInterview)
   const candEmails = [...new Set(interviews.map((i) => i.candidateEmail))]
@@ -84,6 +110,7 @@ export async function getMyCalendar(): Promise<{
   return {
     slots: (slotsRes.data ?? []).map(toSlot),
     interviews: interviews.map((i) => ({ ...i, candidateName: candName.get(i.candidateEmail) ?? null })),
+    round: (meRes.data?.interview_round as 1 | 2 | null) ?? null,
   }
 }
 
@@ -103,6 +130,14 @@ export async function syncWeekAvailability(input: {
   const weekStart = new Date(input.weekStartIso)
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60_000)
   if (Number.isNaN(weekStart.getTime())) return { ok: false, error: 'Invalid week.' }
+
+  // Slots inherit the interviewer's round specialisation. A dedicated interviewer
+  // must have one set; admin/staff without one default to Motivation (round 1).
+  const { data: me } = await a.from('users').select('interview_round, role').eq('email', email).maybeSingle()
+  const slotRound = (me?.interview_round as 1 | 2 | null) ?? null
+  if (slotRound == null && me?.role === 'interviewer')
+    return { ok: false, error: 'Your interview round isn’t set yet — ask an admin to set it in the Interviews overview.' }
+  const round = slotRound ?? 1
 
   const now = Date.now()
   const wanted = new Set(input.starts.filter((s) => new Date(s).getTime() > now))
@@ -133,6 +168,7 @@ export async function syncWeekAvailability(input: {
       starts_at: iso,
       ends_at: new Date(new Date(iso).getTime() + SLOT_MINUTES * 60_000).toISOString(),
       status: 'open' as const,
+      round,
     }))
   if (toInsert.length) {
     const { error } = await a.from('interview_slots').insert(toInsert)
@@ -167,7 +203,33 @@ export async function setInterviewOutcome(
   return { ok: true }
 }
 
-export type InterviewerRow = { email: string; name: string | null; openSlots: number; booked: number; completed: number }
+/** Cancel an interview: mark cancelled, free the slot back to the pool, and delete
+ *  the Google Calendar event (notifies attendees). The proper way to cancel — never
+ *  delete the interviews row directly (that orphans the calendar event). */
+export async function cancelInterview(interviewId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireInterviewer()
+  const isStaff = user.role === 'admin' || user.role === 'staff'
+  let q = admin().from('interviews').select('id, slot_id, calendar_event_id, status').eq('id', interviewId)
+  if (!isStaff) q = q.eq('interviewer_email', normEmail(user.email))
+  const { data: iv } = await q.maybeSingle()
+  if (!iv) return { ok: false, error: 'Interview not found.' }
+  if (iv.status === 'cancelled') return { ok: true } // already cancelled — idempotent
+
+  const { error } = await admin()
+    .from('interviews')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', interviewId)
+  if (error) return { ok: false, error: error.message }
+  if (iv.slot_id) await admin().from('interview_slots').update({ status: 'open' }).eq('id', iv.slot_id).eq('status', 'booked')
+  if (iv.calendar_event_id) await deleteInterviewEvent(iv.calendar_event_id as string)
+
+  revalidatePath('/admissions/interviews')
+  revalidatePath('/admissions/interviews/list')
+  revalidatePath('/admissions/interviews/calendar')
+  return { ok: true }
+}
+
+export type InterviewerRow = { email: string; name: string | null; round: 1 | 2 | null; openSlots: number; booked: number; completed: number }
 
 /** Everything the admin Interviews tab renders. */
 export async function getInterviewOverview(): Promise<{
@@ -178,13 +240,13 @@ export async function getInterviewOverview(): Promise<{
   await requireStaff()
   const a = admin()
   const [usersRes, slotsRes, ivRes] = await Promise.all([
-    a.from('users').select('email, name').eq('role', 'interviewer').order('name'),
+    a.from('users').select('email, name, interview_round').eq('role', 'interviewer').order('name'),
     a.from('interview_slots').select('*').order('starts_at'),
     a.from('interviews').select('*').order('scheduled_at', { ascending: false }),
   ])
   const roleInterviewers = usersRes.data ?? []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const slots: InterviewSlot[] = (slotsRes.data ?? []).map((r: any) => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status }))
+  const slots: InterviewSlot[] = (slotsRes.data ?? []).map((r: any) => ({ id: r.id, interviewerEmail: r.interviewer_email, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status, round: r.round ?? null }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawIv = (ivRes.data ?? []) as any[]
 
@@ -206,9 +268,13 @@ export async function getInterviewOverview(): Promise<{
     ...rawIv.map((r) => r.interviewer_email),
   ])]
   const nameByEmail = new Map<string, string | null>()
+  const roundByEmail = new Map<string, 1 | 2 | null>()
   if (interviewerEmails.length) {
-    const { data } = await a.from('users').select('email, name').in('email', interviewerEmails)
-    for (const u of data ?? []) nameByEmail.set(u.email, (u.name as string | null) ?? null)
+    const { data } = await a.from('users').select('email, name, interview_round').in('email', interviewerEmails)
+    for (const u of data ?? []) {
+      nameByEmail.set(u.email, (u.name as string | null) ?? null)
+      roundByEmail.set(u.email, (u.interview_round as 1 | 2 | null) ?? null)
+    }
   }
 
   const candEmails = [...new Set(rawIv.map((r) => r.candidate_email))]
@@ -245,6 +311,7 @@ export async function getInterviewOverview(): Promise<{
   const interviewers: InterviewerRow[] = listedEmails.map((email) => ({
     email,
     name: nameByEmail.get(email) ?? null,
+    round: roundByEmail.get(email) ?? null,
     openSlots: slots.filter((s) => s.interviewerEmail === email && s.status === 'open').length,
     booked: interviews.filter((i) => i.interviewerEmail === email && (i.status === 'booked' || i.status === 'confirmed')).length,
     completed: interviews.filter((i) => i.interviewerEmail === email && i.status === 'completed').length,
