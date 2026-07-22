@@ -13,12 +13,11 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
   type ColumnSizingState,
-  type ColumnFiltersState,
   type Column,
   type FilterFn,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 type ColumnVisibilityState = Record<string, boolean>
 
@@ -392,10 +391,10 @@ export default function LearnersTable({ learners, cohorts = [], isLF = false, vi
   const searchParams   = useSearchParams()
   const activeCohort   = searchParams.get('fy') ?? ''
 
-  const [sorting, setSorting]               = useState<SortingState>([])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('learners', [])
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(DEFAULT_VISIBILITY)
-  const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [showColMenu, setShowColMenu]       = useState(false)
   const colMenuRef                          = useRef<HTMLDivElement>(null)
 
@@ -434,8 +433,8 @@ export default function LearnersTable({ learners, cohorts = [], isLF = false, vi
     data: learners,
     columns,
     state: { sorting, columnSizing, columnVisibility, columnFilters },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnVisibilityChange: (updater) => {
       setColumnVisibility((old: ColumnVisibilityState) => {
         const next = typeof updater === 'function' ? updater(old) : updater

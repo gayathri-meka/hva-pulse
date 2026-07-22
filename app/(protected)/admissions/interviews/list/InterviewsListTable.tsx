@@ -7,6 +7,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
 import { setInterviewOutcome } from '../actions'
 import { roundLabel, type Interview } from '@/lib/interviews'
+import { usePersistentState } from '@/hooks/usePersistentState'
 
 type Row = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 
@@ -33,7 +34,10 @@ const col = createColumnHelper<Row>()
 type View = 'upcoming' | 'past' | 'all'
 
 export default function InterviewsListTable({ interviews }: { interviews: Row[] }) {
-  const [view, setView] = useState<View>('upcoming')
+  const [view, setView] = usePersistentState<View>(
+    'admissions-interviews-list:view', 'upcoming', { validate: (value): value is View =>
+      value === 'upcoming' || value === 'past' || value === 'all' },
+  )
   const [error, setError] = useState<string | null>(null)
 
   const rows = useMemo(() => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import ChallengeMatrixTable from './ChallengeMatrixTable'
 import ChallengeQuestionsView, { type TaskCatalogDay } from './ChallengeQuestionsView'
 import ChallengeReviewTable, { type ChallengeReviewRow } from './ChallengeReviewTable'
@@ -9,6 +10,12 @@ import LearnerTaskQuestions from './LearnerTaskQuestions'
 import ConversationThreadModal from '@/components/sensai/ConversationThreadModal'
 import type { ChatMessage, ScorecardCategory } from '@/lib/sensaiChat'
 import { syncRowsToSheet, type SyncColumn } from '@/app/(protected)/admissions/challenge/actions'
+import { enumParam } from '@/lib/urlState'
+import { useClientUrlUpdates } from '@/hooks/useClientUrlUpdates'
+import { usePersistentState } from '@/hooks/usePersistentState'
+
+const CHALLENGE_VIEWS = ['detail', 'matrix', 'questions', 'review'] as const
+type ChallengeView = typeof CHALLENGE_VIEWS[number]
 
 const SYNC_COLUMNS: SyncColumn[] = [
   { header: 'Name', field: 'name' },
@@ -143,8 +150,50 @@ export default function ChallengeClient({
   isAdmin: boolean
   currentUserEmail: string
 }) {
-  const [view, setView] = useState<'detail' | 'matrix' | 'questions' | 'review'>('review')
-  const [progressOpen, setProgressOpen] = useState(false)
+  const searchParams = useSearchParams()
+  const scheduleUrl = useClientUrlUpdates()
+  const hasViewParam = searchParams.has('view')
+  const hasSearchParam = searchParams.has('q')
+  const urlView = enumParam(searchParams, 'view', CHALLENGE_VIEWS, 'review')
+  const urlSearch = searchParams.get('q') ?? ''
+  const [view, setViewState, viewReady] = usePersistentState<ChallengeView>(
+    'admissions-challenge:view',
+    urlView,
+    { restore: !hasViewParam, validate: (value): value is ChallengeView =>
+      typeof value === 'string' && CHALLENGE_VIEWS.includes(value as ChallengeView) },
+  )
+  const [search, setSearchState, searchReady] = usePersistentState(
+    'admissions-challenge:search',
+    urlSearch,
+    { restore: !hasSearchParam, validate: (value): value is string => typeof value === 'string' },
+  )
+
+  useEffect(() => {
+    if (hasViewParam) setViewState(urlView)
+  }, [hasViewParam, setViewState, urlView])
+  useEffect(() => {
+    if (hasSearchParam) setSearchState(urlSearch)
+  }, [hasSearchParam, setSearchState, urlSearch])
+  useEffect(() => {
+    if (viewReady && !hasViewParam && view !== 'review') scheduleUrl({ view })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewReady, view, hasViewParam])
+  useEffect(() => {
+    if (searchReady && !hasSearchParam && search) scheduleUrl({ q: search }, 'replace')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchReady, search, hasSearchParam])
+
+
+  function setView(next: ChallengeView) {
+    setViewState(next)
+    scheduleUrl({ view: next === 'review' ? null : next })
+  }
+
+  function setSearch(next: string) {
+    setSearchState(next)
+    scheduleUrl({ q: next || null }, 'replace')
+  }
+  const [progressOpen, setProgressOpen] = usePersistentState('admissions-challenge:progress-open', false)
 
   // Per-member summary + a sync action shared by the Day-by-day and Score tables.
   const syncRows = useMemo(
@@ -171,9 +220,12 @@ export default function ChallengeClient({
       rows: syncRows,
     })
 
-  const [openMember, setOpenMember] = useState<string | null>(null)
-  const [openDay, setOpenDay] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
+  const [openMember, setOpenMember] = usePersistentState<string | null>(
+    'admissions-challenge:open-member', null, { validate: (value): value is string | null => value == null || typeof value === 'string' },
+  )
+  const [openDay, setOpenDay] = usePersistentState<string | null>(
+    'admissions-challenge:open-day', null, { validate: (value): value is string | null => value == null || typeof value === 'string' },
+  )
   const [thread, setThread] = useState<ThreadView | null>(null)
 
   // Day → tasks catalog (union across members), powering the By-question tree.

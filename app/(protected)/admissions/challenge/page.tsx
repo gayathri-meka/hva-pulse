@@ -65,11 +65,18 @@ export default async function AdmissionsChallengePage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const { data: src } = await supabase
-    .from('metric_sources')
-    .select('id, name, last_synced_at, sync_error, row_count')
-    .eq('bq_table', CHALLENGE_VIEW)
-    .maybeSingle()
+  const [{ data: src }, { data: intakeSrc }] = await Promise.all([
+    supabase
+      .from('metric_sources')
+      .select('id, name, last_synced_at, sync_error, row_count')
+      .eq('bq_table', CHALLENGE_VIEW)
+      .maybeSingle(),
+    supabase
+      .from('metric_sources')
+      .select('id')
+      .eq('bq_table', 'pulse_challenge_intake')
+      .maybeSingle(),
+  ])
 
   if (!src) {
     return (
@@ -88,28 +95,34 @@ export default async function AdmissionsChallengePage() {
   // alone silently truncates — page through with .range() to load every row.
   async function fetchAllRawRows(sourceId: string) {
     const PAGE = 1000
+    const CONCURRENCY = 4
     const all: { learner_id: string | null; dimensions: Dim | null }[] = []
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
-        .from('metric_raw_rows')
-        .select('learner_id, dimensions')
-        .eq('source_id', sourceId)
-        // Stable sort is REQUIRED: without it, offset pagination silently skips
-        // and duplicates rows across pages once the table is large — which under-
-        // counts distinct tasks (the "320 items → 257" bug).
-        .order('id', { ascending: true })
-        .range(from, from + PAGE - 1)
-      if (error) throw error
-      if (!data?.length) break
-      all.push(...(data as { learner_id: string | null; dimensions: Dim | null }[]))
-      if (data.length < PAGE) break
+    for (let batchStart = 0; ; batchStart += PAGE * CONCURRENCY) {
+      const pages = await Promise.all(
+        Array.from({ length: CONCURRENCY }, async (_, index) => {
+          const from = batchStart + index * PAGE
+          const { data, error } = await supabase
+            .from('metric_raw_rows')
+            .select('learner_id, dimensions')
+            .eq('source_id', sourceId)
+            // Stable sort is REQUIRED: without it, offset pagination silently skips
+            // and duplicates rows across pages once the table is large.
+            .order('id', { ascending: true })
+            .range(from, from + PAGE - 1)
+          if (error) throw error
+          return (data ?? []) as { learner_id: string | null; dimensions: Dim | null }[]
+        }),
+      )
+      for (const page of pages) all.push(...page)
+      if (pages.some((page) => page.length < PAGE)) break
     }
     return all
   }
 
-  const [fetchedRows, { data: prospectRows }, { data: configRows }, { data: decisionRows }] =
+  const [fetchedRows, intakeRows, { data: prospectRows }, { data: configRows }, { data: decisionRows }] =
     await Promise.all([
       fetchAllRawRows(src.id),
+      intakeSrc ? fetchAllRawRows(intakeSrc.id) : Promise.resolve([]),
       supabase.from('prospects').select('email, name, phone'),
       supabase.from('challenge_review_config').select('*'),
       supabase.from('challenge_decisions').select('*'),
@@ -294,18 +307,10 @@ export default async function AdmissionsChallengePage() {
 
   // Eligibility signals from the challenge intake answers, if that source is
   // connected + synced. Absent → eligibility criteria stay placeholders.
-  const { data: intakeSrc } = await supabase
-    .from('metric_sources')
-    .select('id')
-    .eq('bq_table', 'pulse_challenge_intake')
-    .maybeSingle()
   const intakeByEmail = new Map<string, IntakeRaw>()
-  if (intakeSrc) {
-    const intakeRows = await fetchAllRawRows(intakeSrc.id)
-    for (const r of intakeRows) {
-      const email = (r.learner_id ?? '').trim().toLowerCase()
-      if (email) intakeByEmail.set(email, (r.dimensions ?? {}) as IntakeRaw)
-    }
+  for (const r of intakeRows) {
+    const email = (r.learner_id ?? '').trim().toLowerCase()
+    if (email) intakeByEmail.set(email, (r.dimensions ?? {}) as IntakeRaw)
   }
 
   const reviewRows: ChallengeReviewRow[] = members.map((m) => {

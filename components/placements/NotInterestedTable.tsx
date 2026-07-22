@@ -11,11 +11,10 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
-  type ColumnFiltersState,
   type FilterFn,
   type Column,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 export type NotInterestedRow = {
   user_id:      string
@@ -171,8 +170,8 @@ const columns = [
 ]
 
 export default function NotInterestedTable({ rows }: { rows: NotInterestedRow[] }) {
-  const [sorting, setSorting]             = useState<SortingState>([{ id: 'learner_name', desc: false }])
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('placement-not-interested', [{ id: 'learner_name', desc: false }])
 
   const allReasons = useMemo(
     () => Array.from(new Set(rows.flatMap((r) => r.reasons))).sort(),
@@ -183,8 +182,8 @@ export default function NotInterestedTable({ rows }: { rows: NotInterestedRow[] 
     data: rows,
     columns,
     state: { sorting, columnFilters },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

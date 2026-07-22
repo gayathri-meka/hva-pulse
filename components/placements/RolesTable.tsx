@@ -13,13 +13,12 @@ import {
   createColumnHelper,
   type FilterFn,
   type Column,
-  type SortingState,
-  type ColumnFiltersState,
   type ColumnSizingState,
 } from '@tanstack/react-table'
 import Link from 'next/link'
 import { exportToCsv } from '@/lib/exportToCsv'
 import type { CompanyWithRoles, RoleWithCounts } from '@/types'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 const SIZING_KEY = 'hva-col-roles-table'
 function loadSizing(): ColumnSizingState {
@@ -189,8 +188,8 @@ const RolesTable = forwardRef<RolesTableHandle, { companies: CompanyWithRoles[] 
   const searchParams = useSearchParams()
   const weekParam    = searchParams.get('week')
 
-  const [sorting, setSorting]             = useState<SortingState>([{ id: 'created_at', desc: true }])
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('placement-roles', [{ id: 'created_at', desc: true }])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
 
   useEffect(() => {
@@ -232,8 +231,8 @@ const RolesTable = forwardRef<RolesTableHandle, { companies: CompanyWithRoles[] 
     columns,
     filterFns: { multiSelectFilter },
     state: { sorting, columnFilters, columnSizing },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnSizingChange: setColumnSizing,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
@@ -247,7 +246,7 @@ const RolesTable = forwardRef<RolesTableHandle, { companies: CompanyWithRoles[] 
   const hasActiveFilter = columnFilters.length > 0
 
   function clearAllFilters() {
-    setColumnFilters([])
+    onColumnFiltersChange([])
   }
 
   // Expose CSV export + filtered count to the parent toolbar.

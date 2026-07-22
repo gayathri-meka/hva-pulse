@@ -1,6 +1,12 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => '/placements/applications',
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 vi.mock('@/app/(protected)/placements/actions', () => ({
   updateApplicationStatus: vi.fn().mockResolvedValue(undefined),
 }))

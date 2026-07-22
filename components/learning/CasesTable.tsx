@@ -12,8 +12,6 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
-  type ColumnFiltersState,
   type FilterFn,
   type Column,
   type VisibilityState,
@@ -22,6 +20,8 @@ import { startCase, type TriggerInput } from '@/app/(protected)/learning/actions
 import MultiSelectChips from '@/components/ui/MultiSelectChips'
 import ObservationsModal, { type Observation } from '@/components/learning/ObservationsModal'
 import MetricTriggerPicker, { type MetricTriggerValue, type MetricOption as _MetricOption } from '@/components/learning/MetricTriggerPicker'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
+import { usePersistentSet } from '@/hooks/usePersistentSet'
 
 // Metric option as displayed in the triggers picker.
 export type MetricOption = _MetricOption
@@ -644,8 +644,8 @@ export default function CasesTable({ rows, learners, subCohortOptions, currentUs
   const columns = useMemo(() => buildColumns(setObsRow), [])
   // Default sort matches the Dashboard's case column ordering — Needs review
   // first, then Open, Pending, Monitoring (see STATUS_RANK below).
-  const [sorting,          setSorting]          = useState<SortingState>([{ id: 'status', desc: false }])
-  const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('learning-cases', [{ id: 'status', desc: false }])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     lf_name:    false,
     batch_name: false,
@@ -654,7 +654,7 @@ export default function CasesTable({ rows, learners, subCohortOptions, currentUs
   })
   const [showModal,        setShowModal]        = useState(false)
   const [showColMenu,      setShowColMenu]      = useState(false)
-  const [activeSubCohorts, setActiveSubCohorts] = useState<Set<string>>(new Set())
+  const [activeSubCohorts, setActiveSubCohorts] = usePersistentSet('learning-cases:sub-cohorts')
   const [learnerFilter,    setLearnerFilter]    = useState<string[]>([])
   const colMenuRef = useRef<HTMLDivElement>(null)
 
@@ -685,8 +685,8 @@ export default function CasesTable({ rows, learners, subCohortOptions, currentUs
     data:    filteredRows,
     columns,
     state:   { sorting, columnFilters, columnVisibility },
-    onSortingChange:       setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnVisibilityChange: (updater) => {
       setColumnVisibility((old: VisibilityState) => {
         const next = typeof updater === 'function' ? updater(old) : updater

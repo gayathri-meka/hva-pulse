@@ -6,6 +6,8 @@ import MultiSelect from '@/components/filters/MultiSelect'
 import DatePicker, { formatDate } from '@/components/filters/DatePicker'
 import ColumnFilter, { Th, ThLabel } from '@/components/filters/ColumnFilter'
 import { getAttendees, type AttendeeDetail } from './actions'
+import { usePersistentState } from '@/hooks/usePersistentState'
+import { usePersistentSet } from '@/hooks/usePersistentSet'
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -94,10 +96,8 @@ export default function AttendanceClient({
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
 
   // ── Filters ───────────────────────────────────────────────────────────────
-  const [date, setDate] = useState<string>(todayIso())
-  const [selectedBatches, setSelectedBatches] = useState<Set<string>>(
-    () => new Set(data.batches),
-  )
+  const [date, setDate] = usePersistentState('learning-attendance:date', todayIso())
+  const [selectedBatches, setSelectedBatches] = usePersistentSet('learning-attendance:selected-batches', data.batches)
 
   // Filtered learners (matching selected batches)
   const filteredLearners = useMemo(
@@ -121,16 +121,23 @@ export default function AttendanceClient({
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [data.sessions, selectedBatches])
 
-  const [selectedCalls, setSelectedCalls] = useState<Set<string>>(new Set())
-  // When call options change (because batches changed), re-default to "All"
+  const [selectedCalls, setSelectedCalls, selectedCallsReady] = usePersistentSet(
+    'learning-attendance:selected-calls',
+    callOptions.map((option) => option.code),
+  )
+  // When batches change, discard selections that are no longer available while
+  // preserving the user's remaining call selection.
   const lastOptKeyRef = useRef<string>('')
   useEffect(() => {
     const key = callOptions.map((o) => o.code).sort().join(',')
-    if (key !== lastOptKeyRef.current) {
+    if (selectedCallsReady && key !== lastOptKeyRef.current) {
       lastOptKeyRef.current = key
-      setSelectedCalls(new Set(callOptions.map((o) => o.code)))
+      const available = new Set(callOptions.map((o) => o.code))
+      setSelectedCalls((current) => {
+        return new Set([...current].filter((code) => available.has(code)))
+      })
     }
-  }, [callOptions])
+  }, [callOptions, selectedCallsReady])
 
   // ── Sessions matching all filters ─────────────────────────────────────────
   // For card section: when date === '' we show all dates; otherwise restrict
@@ -198,7 +205,10 @@ export default function AttendanceClient({
   }, [sessionsForCards, filteredLearners, data.learners, data.presence])
 
   // ── Learner stats (over sessionsForTable) ─────────────────────────────────
-  const [sortKey, setSortKey] = useState<SortKey>('attendance-asc')
+  const [sortKey, setSortKey] = usePersistentState<SortKey>(
+    'learning-attendance:sort', 'attendance-asc', { validate: (value): value is SortKey =>
+      value === 'attendance-asc' || value === 'attendance-desc' || value === 'name' },
+  )
 
   const stats = useMemo(() => {
     return filteredLearners.map((learner) => {
@@ -246,10 +256,10 @@ export default function AttendanceClient({
   }, [filteredLearners, sessionsForTable, presentSet])
 
   // ── Per-column filters ────────────────────────────────────────────────────
-  const [nameQuery, setNameQuery] = useState('')
-  const [batchFilter, setBatchFilter] = useState<Set<string>>(new Set())  // empty = no filter
-  const [pctFilter,   setPctFilter]   = useState<Set<string>>(new Set())
-  const [missFilter,  setMissFilter]  = useState<Set<string>>(new Set())
+  const [nameQuery, setNameQuery] = usePersistentState('learning-attendance:name-query', '')
+  const [batchFilter, setBatchFilter] = usePersistentSet('learning-attendance:batch-filter')
+  const [pctFilter, setPctFilter] = usePersistentSet('learning-attendance:pct-filter')
+  const [missFilter, setMissFilter] = usePersistentSet('learning-attendance:miss-filter')
 
   const filteredSortedStats = useMemo(() => {
     let arr = stats

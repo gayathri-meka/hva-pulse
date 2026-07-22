@@ -12,13 +12,12 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
   type ColumnSizingState,
-  type ColumnFiltersState,
   type Column,
   type FilterFn,
   type ColumnDef,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 type ColumnVisibilityState = Record<string, boolean>
 
@@ -253,11 +252,10 @@ type EditForm = {
 }
 
 export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
-  const [sorting, setSorting]               = useState<SortingState>([])
+  const { sorting, columnFilters, search: globalFilter, setSearch: setGlobalFilter, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('alumni', [])
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(DEFAULT_VISIBILITY)
-  const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
-  const [globalFilter, setGlobalFilter]     = useState('')
   const [showColMenu, setShowColMenu]       = useState(false)
   const colMenuRef                          = useRef<HTMLDivElement>(null)
   const [editingRow, setEditingRow]         = useState<AlumniTableRow | null>(null)
@@ -336,8 +334,8 @@ export default function AlumniTable({ alumni }: { alumni: AlumniTableRow[] }) {
     data: alumni,
     columns: allColumns,
     state: { sorting, columnSizing, columnVisibility, columnFilters, globalFilter },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn: 'includesString',
     onColumnVisibilityChange: (updater) => {
