@@ -8,6 +8,7 @@ import ColumnFilter, { Th, ThLabel } from '@/components/filters/ColumnFilter'
 import { getAttendees, type AttendeeDetail } from './actions'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { usePersistentSet } from '@/hooks/usePersistentSet'
+import { reconcileSelection, setsEqual } from '@/lib/persistedSelection'
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -97,7 +98,17 @@ export default function AttendanceClient({
 
   // ── Filters ───────────────────────────────────────────────────────────────
   const [date, setDate] = usePersistentState('learning-attendance:date', todayIso())
-  const [selectedBatches, setSelectedBatches] = usePersistentSet('learning-attendance:selected-batches', data.batches)
+  const [selectedBatches, setSelectedBatches, selectedBatchesReady] = usePersistentSet(
+    'learning-attendance:selected-batches', data.batches,
+  )
+
+  useEffect(() => {
+    if (!selectedBatchesReady) return
+    setSelectedBatches((current) => {
+      const next = reconcileSelection(current, data.batches, true)
+      return setsEqual(current, next) ? current : next
+    })
+  }, [data.batches, selectedBatchesReady])
 
   // Filtered learners (matching selected batches)
   const filteredLearners = useMemo(
@@ -134,7 +145,8 @@ export default function AttendanceClient({
       lastOptKeyRef.current = key
       const available = new Set(callOptions.map((o) => o.code))
       setSelectedCalls((current) => {
-        return new Set([...current].filter((code) => available.has(code)))
+        const next = reconcileSelection(current, available, true)
+        return setsEqual(current, next) ? current : next
       })
     }
   }, [callOptions, selectedCallsReady])
@@ -343,13 +355,17 @@ export default function AttendanceClient({
           label="Batches"
           options={data.batches.map((b) => ({ value: b, label: b }))}
           selected={selectedBatches}
-          onChange={setSelectedBatches}
+          onChange={(next) => setSelectedBatches(
+            next.size ? next : new Set(data.batches),
+          )}
         />
         <MultiSelect
           label="Calls"
           options={callOptions.map((o) => ({ value: o.code, label: o.name }))}
           selected={selectedCalls}
-          onChange={setSelectedCalls}
+          onChange={(next) => setSelectedCalls(
+            next.size ? next : new Set(callOptions.map((option) => option.code)),
+          )}
         />
         <DatePicker value={date} onChange={setDate} validDates={validDates} showAllDates />
 

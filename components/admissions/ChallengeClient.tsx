@@ -225,13 +225,26 @@ export default function ChallengeClient({
       rows: syncRows,
     })
 
-  const [openMember, setOpenMember] = usePersistentState<string | null>(
+  const [openMember, setOpenMember, openMemberReady] = usePersistentState<string | null>(
     'admissions-challenge:open-member', null, { validate: (value): value is string | null => value == null || typeof value === 'string' },
   )
-  const [openDay, setOpenDay] = usePersistentState<string | null>(
+  const [openDay, setOpenDay, openDayReady] = usePersistentState<string | null>(
     'admissions-challenge:open-day', null, { validate: (value): value is string | null => value == null || typeof value === 'string' },
   )
   const [thread, setThread] = useState<ThreadView | null>(null)
+
+  useEffect(() => {
+    if (!openMemberReady || !openDayReady) return
+    const member = openMember ? members.find((item) => item.email === openMember) : null
+    if (openMember && !member) {
+      setOpenMember(null)
+      setOpenDay(null)
+      return
+    }
+    if (openDay && (!member || !member.days.some((day) => `${member.email}:${day.ordering}` === openDay))) {
+      setOpenDay(null)
+    }
+  }, [members, openDay, openDayReady, openMember, openMemberReady, setOpenDay, setOpenMember])
 
   // Day → tasks catalog (union across members), powering the By-question tree.
   const taskCatalog = useMemo<TaskCatalogDay[]>(() => {

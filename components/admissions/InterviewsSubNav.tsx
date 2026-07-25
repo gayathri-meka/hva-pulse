@@ -10,6 +10,7 @@ const TABS = [
   { key: 'list',      fallback: '/admissions/interviews/list',      label: 'Interviews', exact: false },
   { key: 'notes',     fallback: '/admissions/interviews/notes',     label: 'Notes', exact: false },
   { key: 'questions', fallback: '/admissions/interviews/questions', label: 'Questions & rubrics', exact: false },
+  { key: 'review',    fallback: '/admissions/interviews/review',    label: 'Review', exact: false },
 ] as const
 
 

@@ -41,6 +41,16 @@ describe('navRouteMemory', () => {
     expect(findRememberedNavGroup(nested, '/admissions/interviews/notes/123')?.key).toBe('notes')
   })
 
+  it('keeps the interview review route separate from overview', () => {
+    const interviewTabs = [
+      { key: 'overview', fallback: '/admissions/interviews' },
+      { key: 'review', fallback: '/admissions/interviews/review' },
+    ]
+
+    expect(findRememberedNavGroup(interviewTabs, '/admissions/interviews/review')?.key)
+      .toBe('review')
+  })
+
   it('supports a parent tab made from multiple route prefixes', () => {
     const outreach = {
       key: 'outreach',

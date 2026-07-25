@@ -22,6 +22,7 @@ import ObservationsModal, { type Observation } from '@/components/learning/Obser
 import MetricTriggerPicker, { type MetricTriggerValue, type MetricOption as _MetricOption } from '@/components/learning/MetricTriggerPicker'
 import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 import { usePersistentSet } from '@/hooks/usePersistentSet'
+import { reconcileSelection, setsEqual } from '@/lib/persistedSelection'
 
 // Metric option as displayed in the triggers picker.
 export type MetricOption = _MetricOption
@@ -654,9 +655,17 @@ export default function CasesTable({ rows, learners, subCohortOptions, currentUs
   })
   const [showModal,        setShowModal]        = useState(false)
   const [showColMenu,      setShowColMenu]      = useState(false)
-  const [activeSubCohorts, setActiveSubCohorts] = usePersistentSet('learning-cases:sub-cohorts')
+  const [activeSubCohorts, setActiveSubCohorts, subCohortsReady] = usePersistentSet('learning-cases:sub-cohorts')
   const [learnerFilter,    setLearnerFilter]    = useState<string[]>([])
   const colMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!subCohortsReady) return
+    setActiveSubCohorts((current) => {
+      const next = reconcileSelection(current, subCohortOptions)
+      return setsEqual(current, next) ? current : next
+    })
+  }, [subCohortOptions, subCohortsReady])
 
   // Hydrate column visibility from localStorage
   useEffect(() => {

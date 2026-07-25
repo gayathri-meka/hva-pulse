@@ -36,7 +36,7 @@ type View = 'upcoming' | 'completed' | 'all'
 export default function InterviewsListTable({ interviews }: { interviews: Row[] }) {
   const [view, setView] = usePersistentState<View>(
     'admissions-interviews-list:view', 'upcoming', { validate: (value): value is View =>
-      value === 'upcoming' || value === 'past' || value === 'all' },
+      value === 'upcoming' || value === 'completed' || value === 'all' },
   )
   const [error, setError] = useState<string | null>(null)
 
