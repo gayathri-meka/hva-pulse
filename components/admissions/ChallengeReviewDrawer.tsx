@@ -255,7 +255,9 @@ export default function ChallengeReviewDrawer({
 
           {/* Criteria checklist — grouped: Need, Work & Availability, Engagement. */}
           {GROUPS.map(({ key: group, label }) => {
-            const items = row.criteria.filter((c) => c.group === group)
+            // Per-capita income remains part of the review engine/table, but is
+            // intentionally omitted from the learner detail sidebar.
+            const items = row.criteria.filter((c) => c.group === group && c.key !== 'per_capita_income')
             if (!items.length) return null
             return (
               <div key={group} className="mt-4">

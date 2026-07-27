@@ -91,14 +91,47 @@ export const SES_RUBRIC: SesQuestion[] = [
 
 export type SesWeights = Record<string, number>
 
+export type SesQuestionConfig = {
+  key: string
+  label: string
+  /** Admin-authored display/answer label for each fixed numeric score. */
+  optionLabels?: Record<string, string>
+}
+
+/** Apply admin-authored labels/order and append new 0–4 SES questions. */
+export function configuredSesRubric(config?: SesQuestionConfig[]): SesQuestion[] {
+  if (!config?.length) return SES_RUBRIC
+  const defaults = new Map(SES_RUBRIC.map((q) => [q.key, q]))
+  return config.map(({ key, label, optionLabels }) => {
+    const existing = defaults.get(key)
+    const question: SesQuestion = existing ? { ...existing, label } : {
+      key,
+      rawField: `${key}_raw`,
+      label,
+      defaultWeight: 1,
+      options: [0, 1, 2, 3, 4].map((score) => ({
+        letter: String.fromCharCode(97 + score), label: String(score), score,
+      })),
+    }
+    if (!optionLabels) return question
+    return {
+      ...question,
+      options: question.options.map((option) => ({
+        ...option,
+        label: optionLabels[String(option.score)]?.trim() || option.label,
+      })),
+    }
+  })
+}
+
 export function effectiveWeight(q: SesQuestion, weights?: SesWeights): number {
   const w = weights?.[q.key]
   return typeof w === 'number' && Number.isFinite(w) ? w : q.defaultWeight
 }
 
 /** Max possible weighted score (all questions at their top option), given weights. */
-export function sesMaxScore(weights?: SesWeights): number {
-  return SES_RUBRIC.reduce((s, q) => s + Math.max(...q.options.map((o) => o.score)) * effectiveWeight(q, weights), 0)
+export function sesMaxScore(weights?: SesWeights, questions?: SesQuestionConfig[]): number {
+  return configuredSesRubric(questions).reduce((s, q) => s + Math.max(...q.options.map((o) => o.score)) * effectiveWeight(q, weights), 0)
 }
 
 const norm = (v: string | null | undefined) => (v ?? '').toString().trim().toLowerCase().replace(/[.。]+$/, '')
@@ -152,11 +185,12 @@ export type SesResult = {
 }
 
 /** Weighted SES score from a map of rawField → raw answer. */
-export function computeSes(raw: Record<string, string | null | undefined>, weights?: SesWeights): SesResult {
+export function computeSes(raw: Record<string, string | null | undefined>, weights?: SesWeights, questions?: SesQuestionConfig[]): SesResult {
   const breakdown: SesResult['breakdown'] = []
   let score = 0
   let answered = 0
-  for (const q of SES_RUBRIC) {
+  const rubric = configuredSesRubric(questions)
+  for (const q of rubric) {
     const ans = resolveAnswer(q, raw[q.rawField])
     if (ans == null) continue
     const weight = effectiveWeight(q, weights)
@@ -165,5 +199,5 @@ export function computeSes(raw: Record<string, string | null | undefined>, weigh
     answered++
     breakdown.push({ key: q.key, label: q.label, answer: ans.label, optionScore: ans.score, weight, contribution })
   }
-  return { score: Math.round(score * 10) / 10, maxScore: sesMaxScore(weights), answered, total: SES_RUBRIC.length, breakdown }
+  return { score: Math.round(score * 10) / 10, maxScore: sesMaxScore(weights, questions), answered, total: rubric.length, breakdown }
 }

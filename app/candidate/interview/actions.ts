@@ -11,8 +11,15 @@ import { createInterviewEvent, deleteInterviewEvent } from '@/lib/googleCalendar
 // authed Google email; all data access is via the service-role client filtered to
 // that email (interview tables are staff-only under RLS).
 
+const SLOT_MS = 60 * 60_000 // each interview slot is 1 hour
+
 function admin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
+
+// Two 1-hour windows starting at these epoch ms overlap.
+function windowsOverlap(aStart: number, bStart: number): boolean {
+  return aStart < bStart + SLOT_MS && bStart < aStart + SLOT_MS
 }
 
 async function authedCandidateEmail(): Promise<string | null> {
@@ -88,6 +95,17 @@ export async function getBookingState(): Promise<BookingState> {
       const r1 = interviews.find((i) => i.round === 1 && i.status !== 'cancelled')
       if (r1) openSlots = openSlots.filter((s) => s.interviewerEmail !== r1.interviewerEmail)
     }
+    // Never offer a slot that overlaps one of its interviewer's already-booked
+    // interviews (a :30 slot can overlap a :00 booking — that would double-book).
+    const { data: activeIvs } = await admin()
+      .from('interviews')
+      .select('interviewer_email, scheduled_at')
+      .in('status', ['booked', 'confirmed'])
+    const busy = (activeIvs ?? []).map((i) => ({ email: normEmail(i.interviewer_email), start: new Date(i.scheduled_at).getTime() }))
+    openSlots = openSlots.filter((s) => {
+      const start = new Date(s.startsAt).getTime()
+      return !busy.some((b) => b.email === normEmail(s.interviewerEmail) && windowsOverlap(start, b.start))
+    })
   }
   return { eligible: true, interviews, nextRound, openSlots, stage1, final, awaitingReview }
 }
@@ -123,6 +141,19 @@ export async function bookSlot(slotId: string): Promise<{ ok: true } | { ok: fal
   if (claimErr) return { ok: false, error: claimErr.message }
   if (!claimed) return { ok: false, error: 'That slot was just taken. Please pick another.' }
   const slot = toSlot(claimed)
+
+  // Overlap guard: a :30 slot can overlap a :00 booking for the same interviewer.
+  // If this slot clashes with one of their active interviews, release it and stop.
+  const { data: interviewerIvs } = await admin()
+    .from('interviews')
+    .select('scheduled_at')
+    .eq('interviewer_email', slot.interviewerEmail)
+    .in('status', ['booked', 'confirmed'])
+  const slotStart = new Date(slot.startsAt).getTime()
+  if ((interviewerIvs ?? []).some((i) => windowsOverlap(slotStart, new Date(i.scheduled_at).getTime()))) {
+    await admin().from('interview_slots').update({ status: 'open' }).eq('id', slot.id)
+    return { ok: false, error: 'That time was just taken. Please pick another.' }
+  }
 
   // Create the confirmed interview. If this fails (e.g. duplicate round), release the slot.
   const { data: created, error: ivErr } = await admin().from('interviews').insert({
