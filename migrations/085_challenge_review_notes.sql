@@ -1,4 +1,4 @@
--- 084: Editable internal comments for every challenge candidate, including rows that
+-- 085: Editable internal comments for every challenge candidate, including rows that
 -- do not yet have a verified decision.
 CREATE TABLE IF NOT EXISTS public.challenge_review_notes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
