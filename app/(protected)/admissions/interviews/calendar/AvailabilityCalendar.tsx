@@ -8,7 +8,9 @@ import { roundLabel, formatDateTimeIST, type InterviewSlot, type Interview } fro
 
 const HOUR = 60 * 60_000
 const DAY = 24 * 60 * 60_000
-const ROWS = 24 // one-hour cells across 24h; each cell = one 1-hour slot
+const STEP_MS = 30 * 60_000 // grid granularity — slots can start on the hour OR half-hour
+const SLOT_MS = 60 * 60_000 // each slot is 1 hour long (covers two 30-min cells)
+const ROWS = 48 // 30-min cells across 24h
 
 type Iv = Interview & { candidateName: string | null }
 
@@ -25,6 +27,14 @@ function startOfWeekMondayIST(base: Date): Date {
   return new Date(mondayMidnightIstWall - IST_OFFSET_MS) // IST wall clock → real UTC instant
 }
 const isoOf = (s: string) => new Date(s).toISOString()
+const isoPlus = (iso: string, ms: number) => new Date(new Date(iso).getTime() + ms).toISOString()
+// The painted start whose 1-hour slot covers this 30-min cell (its start cell or
+// the continuation cell), or null. Used to render a slot across its full hour.
+function coveringStart(painted: Set<string>, iso: string): string | null {
+  if (painted.has(iso)) return iso
+  const prev = isoPlus(iso, -STEP_MS)
+  return painted.has(prev) ? prev : null
+}
 const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: IST })
 const firstName = (s: string | null | undefined, email: string) => (s ? s.split(' ')[0] : email.split('@')[0])
 
@@ -54,8 +64,15 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots])
 
+  // A 1-hour booking covers two 30-min cells: the start cell (shows the name) and
+  // the continuation cell — both are "occupied" and can't be painted over.
   const bookedByIso = new Map<string, Iv>()
-  for (const i of interviews) bookedByIso.set(isoOf(i.scheduledAt), i)
+  const occupied = new Set<string>()
+  for (const i of interviews) {
+    const t = new Date(i.scheduledAt).getTime()
+    bookedByIso.set(new Date(t).toISOString(), i)
+    for (let o = 0; o < SLOT_MS; o += STEP_MS) occupied.add(new Date(t + o).toISOString())
+  }
 
   const now = Date.now()
   const weekStart = new Date(startOfWeekMondayIST(new Date()).getTime() + weekOffset * 7 * DAY)
@@ -65,13 +82,26 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
   const dragMode = useRef<'add' | 'erase'>('add')
 
   function cellStart(dayIdx: number, row: number) {
-    return new Date(weekStart.getTime() + dayIdx * DAY + row * HOUR)
+    return new Date(weekStart.getTime() + dayIdx * DAY + row * STEP_MS)
   }
-  function apply(iso: string, mode: 'add' | 'erase') {
+  function addSlot(iso: string) {
     const next = new Set(paintedRef.current)
-    if (mode === 'add') next.add(iso)
-    else next.delete(iso)
+    next.add(iso)
     setPainted(next)
+  }
+  function removeSlot(startIso: string) {
+    const next = new Set(paintedRef.current)
+    next.delete(startIso)
+    setPainted(next)
+  }
+  // A new 1-hour slot fits at `iso` iff it doesn't overlap an existing painted
+  // slot (start within ±30 min) or a booking, and isn't in the past.
+  function canAdd(iso: string): boolean {
+    const t = new Date(iso).getTime()
+    if (t <= now) return false
+    for (const off of [-STEP_MS, 0, STEP_MS]) if (paintedRef.current.has(new Date(t + off).toISOString())) return false
+    if (occupied.has(iso) || occupied.has(isoPlus(iso, STEP_MS))) return false
+    return true
   }
   const ws = weekStart.getTime()
   const we = ws + 7 * DAY
@@ -110,20 +140,27 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
   }, [])
 
   function onDown(dayIdx: number, row: number) {
-    const start = cellStart(dayIdx, row)
-    const iso = start.toISOString()
-    if (bookedByIso.has(iso) || start.getTime() <= now) return
-    const mode: 'add' | 'erase' = painted.has(iso) ? 'erase' : 'add'
-    dragMode.current = mode
-    dragging.current = true
-    apply(iso, mode)
+    const iso = cellStart(dayIdx, row).toISOString()
+    const cover = coveringStart(paintedRef.current, iso) // clicking anywhere in a slot erases it
+    if (cover) {
+      dragMode.current = 'erase'
+      dragging.current = true
+      removeSlot(cover)
+    } else if (canAdd(iso)) {
+      dragMode.current = 'add'
+      dragging.current = true
+      addSlot(iso)
+    }
   }
   function onEnter(dayIdx: number, row: number) {
     if (!dragging.current) return
-    const start = cellStart(dayIdx, row)
-    const iso = start.toISOString()
-    if (bookedByIso.has(iso) || start.getTime() <= now) return
-    apply(iso, dragMode.current)
+    const iso = cellStart(dayIdx, row).toISOString()
+    if (dragMode.current === 'add') {
+      if (canAdd(iso)) addSlot(iso)
+    } else {
+      const cover = coveringStart(paintedRef.current, iso)
+      if (cover) removeSlot(cover)
+    }
   }
 
   // Copy this week's painting into next week (local only — publish next week to release).
@@ -196,6 +233,7 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
               cellStart={cellStart}
               painted={painted}
               bookedByIso={bookedByIso}
+              occupied={occupied}
               now={now}
               onDown={onDown}
               onEnter={onEnter}
@@ -255,31 +293,37 @@ export default function AvailabilityCalendar({ slots, interviews, showBookings =
 }
 
 function RowCells({
-  row, days, cellStart, painted, bookedByIso, now, onDown, onEnter,
+  row, days, cellStart, painted, bookedByIso, occupied, now, onDown, onEnter,
 }: {
   row: number
   days: Date[]
   cellStart: (d: number, r: number) => Date
   painted: Set<string>
   bookedByIso: Map<string, Iv>
+  occupied: Set<string>
   now: number
   onDown: (d: number, r: number) => void
   onEnter: (d: number, r: number) => void
 }) {
-  const hourLabel = `${row % 12 || 12} ${row < 12 ? 'AM' : 'PM'}`
+  const isHour = row % 2 === 0
+  const h = Math.floor(row / 2)
+  const label = isHour ? `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}` : `${h % 12 || 12}:30`
+  const topBorder = isHour ? 'border-t border-zinc-200' : 'border-t border-zinc-100'
   return (
     <>
-      <div className="h-8 border-r border-t border-zinc-100 pr-1 text-right text-[10px] text-zinc-400">
-        {hourLabel}
+      <div className={`h-7 ${topBorder} border-r pr-1 text-right text-[10px] leading-7 ${isHour ? 'text-zinc-500' : 'text-zinc-300'}`}>
+        {label}
       </div>
       {days.map((_, dayIdx) => {
         const start = cellStart(dayIdx, row)
         const iso = start.toISOString()
-        const booked = bookedByIso.get(iso)
+        const booked = bookedByIso.get(iso) // start cell of a booking (shows the name)
+        const isOccupied = occupied.has(iso) // covered by a booking (start or continuation)
         const isPast = start.getTime() <= now
-        const isAvail = painted.has(iso)
+        const isAvail = coveringStart(painted, iso) != null // covered by a painted 1-hour slot
         let cls = 'bg-white hover:bg-zinc-50'
         if (booked) cls = 'bg-sky-500'
+        else if (isOccupied) cls = 'bg-sky-400' // continuation half of a 1-hour booking
         else if (isAvail) cls = 'bg-[#5BAE5B] hover:bg-[#4e9c4e]'
         else if (isPast) cls = 'bg-zinc-50'
         return (
@@ -288,10 +332,10 @@ function RowCells({
             onMouseDown={() => onDown(dayIdx, row)}
             onMouseEnter={() => onEnter(dayIdx, row)}
             title={booked ? `${firstName(booked.candidateName, booked.candidateEmail)} · ${roundLabel(booked.round)}` : ''}
-            className={`h-8 cursor-pointer border-l border-t border-zinc-100 ${cls} ${booked || isPast ? 'cursor-default' : ''}`}
+            className={`h-7 cursor-pointer border-l ${topBorder} ${cls} ${isOccupied || isPast ? 'cursor-default' : ''}`}
           >
             {booked && (
-              <span className="pointer-events-none block truncate px-1 text-[9px] font-semibold leading-8 text-white">
+              <span className="pointer-events-none block truncate px-1 text-[9px] font-semibold leading-7 text-white">
                 {firstName(booked.candidateName, booked.candidateEmail)}
               </span>
             )}

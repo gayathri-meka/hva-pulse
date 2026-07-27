@@ -150,7 +150,7 @@ describe('getBookingState (round-scoped slot pool)', () => {
       if (t === 'challenge_decisions')
         return { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: { final_decision: 'selected', published_at: '2026-01-01' } })) })) })) }
       if (t === 'interviews')
-        return { select: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: [] })) })) } // no interviews → nextRound = 1
+        return { select: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: [] })), in: vi.fn(() => Promise.resolve({ data: [] })) })) } // no interviews → nextRound = 1; busy-overlap query returns none
       if (t === 'interview_decisions')
         return { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: null })) })) })) } // no decision
       // interview_slots
