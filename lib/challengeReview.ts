@@ -1,4 +1,4 @@
-import { computeSes, sesMaxScore, type SesWeights, type SesBreakdownRow } from './ses'
+import { computeSes, sesMaxScore, type SesWeights, type SesBreakdownRow, type SesQuestionConfig } from './ses'
 
 // Challenge review rule engine — the challenge→interview selection gate.
 //
@@ -41,6 +41,7 @@ export type ReviewThresholds = {
   // SES: per-question weight overrides ({} = defaults) + the pass cutoff. Cutoff
   // undefined = not configured → the SES criterion stays 'na'.
   sesWeights?: SesWeights
+  sesQuestions?: SesQuestionConfig[]
   sesCutoff?: number
   // Criterion keys switched OFF — a disabled rule is shown but does NOT gate.
   disabledRules?: string[]
@@ -347,7 +348,7 @@ export function evaluateCandidate(
   const gapDays = Math.max(0, signals.spanDays - signals.activeDays)
 
   // SES: weighted socio-economic need score (higher = more needy). Pass when ≥ cutoff.
-  const ses = signals.sesAnswers ? computeSes(signals.sesAnswers, thresholds.sesWeights) : null
+  const ses = signals.sesAnswers ? computeSes(signals.sesAnswers, thresholds.sesWeights, thresholds.sesQuestions) : null
   const sesStatus: CriterionStatus =
     !ses || ses.answered === 0 || thresholds.sesCutoff === undefined
       ? 'na'
@@ -370,11 +371,11 @@ export function evaluateCandidate(
       group: 'need',
       placeholder: false, // wired — na = no SES answers or no cutoff set
       status: sesStatus,
-      value: ses && ses.answered ? `${ses.score} / ${sesMaxScore(thresholds.sesWeights)}` : 'n/a',
+      value: ses && ses.answered ? `${ses.score} / ${sesMaxScore(thresholds.sesWeights, thresholds.sesQuestions)}` : 'n/a',
       threshold:
         thresholds.sesCutoff === undefined
           ? 'SES cutoff not set yet'
-          : `Weighted SES need score ≥ ${thresholds.sesCutoff} (of ${sesMaxScore(thresholds.sesWeights)})`,
+          : `Weighted SES need score ≥ ${thresholds.sesCutoff} (of ${sesMaxScore(thresholds.sesWeights, thresholds.sesQuestions)})`,
       internalOnly: true,
       failFeedback: 'Our socio-economic assessment did not establish sufficient financial need.',
       sesBreakdown: ses?.breakdown,

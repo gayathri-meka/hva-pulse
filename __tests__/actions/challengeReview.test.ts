@@ -19,6 +19,7 @@ import {
 import type { CriterionResult } from '@/lib/challengeReview'
 
 const staffUser = { id: 'staff-1', role: 'staff' as const, name: 'Staff', email: 'staff@test.com' }
+const adminUser = { id: 'admin-1', role: 'admin' as const, name: 'Admin', email: 'admin@test.com' }
 
 // from().upsert(rows, opts) → resolves { error }.
 function mockUpsertClient(result: { error: { message: string } | null }) {
@@ -180,8 +181,14 @@ describe('updateChallengeReviewConfig', () => {
     ).rejects.toThrow('NEXT_REDIRECT')
   })
 
-  test('rejects negative / non-integer bounds', async () => {
+  test('rejects a staff user because rule editing is admin-only', async () => {
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    expect(await updateChallengeReviewConfig({ cohortId: 214, courseId: 587, thresholds: good }))
+      .toEqual({ ok: false, error: expect.stringContaining('Only admins') })
+  })
+
+  test('rejects negative / non-integer bounds', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
       courseId: 587,
@@ -191,7 +198,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('rejects cramming over 100', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
       courseId: 587,
@@ -201,7 +208,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('upserts the config row keyed by (cohort, course); per-capita null when unset', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     const res = await updateChallengeReviewConfig({ cohortId: 214, courseId: 587, thresholds: good })
     expect(res).toEqual({ ok: true })
@@ -215,13 +222,13 @@ describe('updateChallengeReviewConfig', () => {
       max_cramming_pct: 30,
       max_work_income_annual: 600_000,
       max_per_capita_income_annual: null,
-      updated_by: 'staff-1',
+      updated_by: 'admin-1',
     })
     expect(opts).toEqual({ onConflict: 'cohort_id,course_id' })
   })
 
   test('writes the per-capita threshold when provided', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
@@ -233,7 +240,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('rejects a negative per-capita threshold', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
       courseId: 587,
@@ -243,7 +250,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('writes the excluded colleges, trimmed + deduped', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     await updateChallengeReviewConfig({
       cohortId: 214,
@@ -254,7 +261,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('writes SES weights + cutoff, and rejects a negative cutoff', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     await updateChallengeReviewConfig({
       cohortId: 214,
@@ -269,6 +276,29 @@ describe('updateChallengeReviewConfig', () => {
       thresholds: { ...good, sesCutoff: -1 },
     })
     expect(bad).toEqual({ ok: false, error: expect.stringContaining('SES cutoff') })
+  })
+
+  test('persists edited SES question and score-option text', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
+    const { upsert } = mockUpsertClient({ error: null })
+    const res = await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: {
+        ...good,
+        sesQuestions: [{
+          key: 'social_category',
+          label: '  Community category  ',
+          optionLabels: { '3': '  Scheduled Caste  ' },
+        }],
+      },
+    })
+    expect(res).toEqual({ ok: true })
+    expect(upsert.mock.calls[0][0].ses_questions).toEqual([{
+      key: 'social_category',
+      label: 'Community category',
+      optionLabels: { '3': 'Scheduled Caste' },
+    }])
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { optionScore, resolveAnswer, computeSes, sesMaxScore, effectiveWeight, SES_RUBRIC } from '@/lib/ses'
+import { optionScore, resolveAnswer, computeSes, configuredSesRubric, sesMaxScore, effectiveWeight, SES_RUBRIC } from '@/lib/ses'
 
 const q = (key: string) => SES_RUBRIC.find((x) => x.key === key)!
 
@@ -81,6 +81,29 @@ describe('computeSes', () => {
     // Deterministic given default weights; must be positive and match the helper.
     expect(computeSes({}).maxScore).toBe(sesMaxScore())
     expect(sesMaxScore()).toBeGreaterThan(0)
+  })
+
+  it('applies an editable label without changing the answer mapping', () => {
+    const questions = SES_RUBRIC.map((q) => ({ key: q.key, label: q.key === 'gender' ? 'Your gender' : q.label }))
+    const r = computeSes({ gender_raw: 'a' }, undefined, questions)
+    expect(r.breakdown[0].label).toBe('Your gender')
+    expect(r.score).toBe(15)
+  })
+
+  it('applies editable 0–4 option text without changing its numeric score', () => {
+    const questions = SES_RUBRIC.map((q) => ({
+      key: q.key,
+      label: q.label,
+      ...(q.key === 'social_category' ? { optionLabels: { '3': 'Scheduled Caste' } } : {}),
+    }))
+    const r = computeSes({ social_category_raw: 'a' }, undefined, questions)
+    expect(r.breakdown[0]).toMatchObject({ answer: 'Scheduled Caste', optionScore: 3, contribution: 15 })
+  })
+
+  it('appends a configurable 0–4 question', () => {
+    const questions = [...SES_RUBRIC.map(({ key, label }) => ({ key, label })), { key: 'ses_custom_test', label: 'Custom question' }]
+    expect(configuredSesRubric(questions).at(-1)?.rawField).toBe('ses_custom_test_raw')
+    expect(computeSes({ ses_custom_test_raw: 'e' }, { ses_custom_test: 2 }, questions).score).toBe(8)
   })
 })
 
