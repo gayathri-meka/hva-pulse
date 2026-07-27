@@ -308,6 +308,7 @@ export default async function AdmissionsChallengePage() {
         maxPerCapitaIncomeAnnual: cfg.max_per_capita_income_annual ?? undefined,
         excludedColleges: cfg.excluded_colleges ?? [],
         sesWeights: (cfg.ses_weights ?? {}) as Record<string, number>,
+        sesQuestions: (cfg.ses_questions ?? undefined) as ReviewThresholds['sesQuestions'],
         sesCutoff: cfg.ses_cutoff ?? undefined,
         disabledRules: cfg.disabled_rules ?? [],
         challengeEndDate: cfg.challenge_end_date ?? undefined,

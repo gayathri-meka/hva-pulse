@@ -16,7 +16,7 @@ import {
   type SystemDecision,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
-import { SES_RUBRIC, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
+import { configuredSesRubric, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
 import { GATING_RULES } from '@/lib/challengeReview'
 import {
   bulkConfirmChallengeDecisions,
@@ -469,7 +469,7 @@ export default function ChallengeReviewTable({
                 Reset to pending ({selectedRows.filter((r) => r.finalDecision).length})
               </button>
             )}
-            {canReview && (
+            {isAdmin && (
               <button
                 onClick={() => setEditRules(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
@@ -632,7 +632,21 @@ function EditRulesModal({
     })
   }
 
-  const sesMax = sesMaxScore(t.sesWeights)
+  const sesQuestions = configuredSesRubric(t.sesQuestions)
+  const sesMax = sesMaxScore(t.sesWeights, t.sesQuestions)
+
+  function addSesQuestion() {
+    const key = `ses_custom_${crypto.randomUUID().replaceAll('-', '')}`
+    setT({
+      ...t,
+      sesQuestions: [...(t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))), {
+        key,
+        label: 'New SES question',
+        optionLabels: { '0': '0', '1': '1', '2': '2', '3': '3', '4': '4' },
+      }],
+      sesWeights: { ...(t.sesWeights ?? {}), [key]: 1 },
+    })
+  }
 
   return (
     <Modal title="Edit review rules" onClose={onClose} wide>
@@ -788,7 +802,7 @@ function EditRulesModal({
       </label>
       <p className="mb-1.5 text-[11px] text-zinc-400">
         Columns 0–4 are the fixed score each option earns. &ldquo;PNS&rdquo; = prefer not to say (scored as {PNS_SCORE}).
-        Only the <span className="font-medium text-zinc-600">Weight</span> column is editable.
+        Question text, option text under scores 0–4, and weight are editable. The numeric scores remain fixed.
       </p>
       <div className="overflow-x-auto rounded-lg border border-zinc-200">
         <table className="w-full border-collapse text-xs">
@@ -803,16 +817,48 @@ function EditRulesModal({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {SES_RUBRIC.map((q) => {
+            {sesQuestions.map((q) => {
               const pnsAvg = q.pnsLetter ? PNS_SCORE : null
               return (
                 <tr key={q.key} className="align-middle">
-                  <td className="px-2 py-1.5 text-zinc-700">{q.label}</td>
+                  <td className="px-2 py-1.5 text-zinc-700">
+                    <input
+                      type="text"
+                      aria-label={`Question text for ${q.label}`}
+                      value={q.label}
+                      onChange={(e) => setT({
+                        ...t,
+                        sesQuestions: (t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))).map((item) => ({
+                          ...item,
+                          label: item.key === q.key ? e.target.value : item.label,
+                        })),
+                      })}
+                      className="min-w-48 w-full rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+                    />
+                  </td>
                   {[0, 1, 2, 3, 4].map((s) => {
                     const opt = q.options.find((o) => o.score === s)
                     return (
                       <td key={s} className="px-2 py-1.5 text-center text-[11px] leading-tight text-zinc-500">
-                        {opt ? opt.label : <span className="text-zinc-300">—</span>}
+                        {opt ? (
+                          <input
+                            type="text"
+                            aria-label={`${q.label}, score ${s} option text`}
+                            value={opt.label}
+                            onChange={(e) => {
+                              const current: NonNullable<ReviewThresholds['sesQuestions']> =
+                                t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))
+                              setT({
+                                ...t,
+                                sesQuestions: current.map((item) => item.key === q.key ? {
+                                  ...item,
+                                  optionLabels: { ...(item.optionLabels ?? {}), [String(s)]: e.target.value },
+                                } : item),
+                              })
+                            }}
+                            className="w-24 rounded-lg border border-zinc-300 px-1.5 py-1 text-center text-[11px] text-zinc-700 focus:border-[#5BAE5B] focus:outline-none"
+                          />
+                        ) : <span className="text-zinc-300">—</span>}
                       </td>
                     )
                   })}
@@ -835,6 +881,14 @@ function EditRulesModal({
           </tbody>
         </table>
       </div>
+      <button
+        type="button"
+        onClick={addSesQuestion}
+        className="mt-2 inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+        aria-label="Add SES question"
+      >
+        <span aria-hidden="true" className="text-base leading-none">＋</span> Add question
+      </button>
       </>
       )}
 

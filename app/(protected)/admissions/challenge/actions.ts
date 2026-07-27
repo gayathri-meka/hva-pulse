@@ -469,6 +469,7 @@ export async function updateChallengeReviewConfig(input: {
   thresholds: ReviewThresholds
 }): Promise<DecisionResult> {
   const user = await requireStaff()
+  if (user.role !== 'admin') return { ok: false, error: 'Only admins can edit challenge review rules.' }
   const t = input.thresholds
   const bounds = [t.minQuestionsAttemptedPct, t.minActiveDays, t.minSpanDays, t.maxCrammingPct, t.maxGapDays, t.maxWorkIncomeAnnual]
   if (bounds.some((n) => !Number.isInteger(n) || n < 0))
@@ -487,6 +488,17 @@ export async function updateChallengeReviewConfig(input: {
   const sesWeights = t.sesWeights ?? {}
   if (Object.values(sesWeights).some((w) => typeof w !== 'number' || !Number.isFinite(w) || w < 0))
     return { ok: false, error: 'SES weights must be numbers (0 or greater).' }
+  const sesQuestions = t.sesQuestions?.map((q) => ({
+    key: q.key.trim(),
+    label: q.label.trim(),
+    ...(q.optionLabels ? {
+      optionLabels: Object.fromEntries(Object.entries(q.optionLabels).map(([score, label]) => [score, label.trim()])),
+    } : {}),
+  }))
+  if (sesQuestions?.some((q) => !q.key || !q.label) || new Set(sesQuestions?.map((q) => q.key)).size !== (sesQuestions?.length ?? 0))
+    return { ok: false, error: 'Every SES question needs unique question text and an internal key.' }
+  if (sesQuestions?.some((q) => q.optionLabels && Object.entries(q.optionLabels).some(([score, label]) => !['0', '1', '2', '3', '4'].includes(score) || !label)))
+    return { ok: false, error: 'SES option text for scores 0–4 cannot be blank.' }
 
   // Excluded colleges: trim, drop blanks, dedupe (case-insensitive).
   const seenCollege = new Set<string>()
@@ -516,6 +528,7 @@ export async function updateChallengeReviewConfig(input: {
         max_per_capita_income_annual: perCapita ?? null,
         excluded_colleges: excludedColleges,
         ses_weights: sesWeights,
+        ses_questions: sesQuestions ?? null,
         ses_cutoff: sesCutoff ?? null,
         updated_by: user.id,
         updated_at: new Date().toISOString(),
