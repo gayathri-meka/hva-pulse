@@ -107,12 +107,13 @@ export default async function AdmissionsChallengePage() {
     return all
   }
 
-  const [fetchedRows, { data: prospectRows }, { data: configRows }, { data: decisionRows }] =
+  const [fetchedRows, { data: prospectRows }, { data: configRows }, { data: decisionRows }, { data: noteRows }] =
     await Promise.all([
       fetchAllRawRows(src.id),
       supabase.from('prospects').select('email, name, phone'),
       supabase.from('challenge_review_config').select('*'),
       supabase.from('challenge_decisions').select('*'),
+      supabase.from('challenge_review_notes').select('email, note, cohort_id, course_id'),
     ])
 
   // Defensive dedupe: syncDataSource does a non-atomic delete-then-insert, so two
@@ -132,7 +133,6 @@ export default async function AdmissionsChallengePage() {
   const prospectPhone = new Map(
     (prospectRows ?? []).map((p) => [p.email.trim().toLowerCase(), (p.phone as string | null) ?? null]),
   )
-
   // Group every (member, task) row by member email.
   const byEmail = new Map<string, Dim[]>()
   for (const r of rawRows ?? []) {
@@ -233,9 +233,16 @@ export default async function AdmissionsChallengePage() {
       // shows sub-questions attempted per day. Each task's attempts are attributed to
       // its last-activity date (same approximation as activityByDate).
       const questionsByDate: Record<string, number> = {}
+      const readingByDate: Record<string, number> = {}
       for (const d of dims) {
-        if ((d.task_type ?? '') !== 'quiz') continue
         const ms = activityMs(d.last_activity_at)
+        if ((d.task_type ?? '') !== 'quiz') {
+          if (ms != null) {
+            const day = istDate(ms)
+            readingByDate[day] = (readingByDate[day] ?? 0) + 1
+          }
+          continue
+        }
         const attempted = num(d.attempted_questions)
         if (ms == null || attempted === 0) continue
         const day = istDate(ms)
@@ -258,6 +265,7 @@ export default async function AdmissionsChallengePage() {
         passedQuestions,
         totalQuestions,
         questionsByDate,
+        readingByDate,
         keyQuestionScorePct,
         keyQuestionAvgScore,
         started,
@@ -296,6 +304,11 @@ export default async function AdmissionsChallengePage() {
   // This challenge's (cohort, course) — constant across the synced rows.
   const cohortId = num((rawRows[0]?.dimensions as Dim)?.cohort_id)
   const courseId = num((rawRows[0]?.dimensions as Dim)?.course_id)
+  const noteByEmail = new Map(
+    (noteRows ?? [])
+      .filter((n) => num(n.cohort_id) === cohortId && num(n.course_id) === courseId)
+      .map((n) => [String(n.email).trim().toLowerCase(), String(n.note ?? '')]),
+  )
   const cfg = (configRows ?? []).find((c) => c.cohort_id === cohortId && c.course_id === courseId)
   const thresholds: ReviewThresholds = cfg
     ? {
@@ -375,12 +388,15 @@ export default async function AdmissionsChallengePage() {
       decidedByName: d?.decided_by_name ?? null,
       decidedAt: d?.decided_at ?? null,
       published: d?.published_at != null,
+      releasedAt: d?.published_at ?? null,
+      comment: noteByEmail.get(m.email) ?? '',
       // Flag when the system's live call now differs from what the human verified.
       systemChanged: d != null && d.system_decision_at_verify != null && d.system_decision_at_verify !== evaln.systemDecision,
       completedItems: m.completedItems,
       totalItems: m.totalItems,
       activityByDate: m.activityByDate,
       questionsByDate: m.questionsByDate,
+      readingByDate: m.readingByDate,
     }
   })
 
