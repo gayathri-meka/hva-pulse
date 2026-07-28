@@ -15,10 +15,12 @@ import {
   releaseChallengeDecisions,
   clearChallengeDecisions,
   updateChallengeReviewConfig,
+  updateChallengeReviewNote,
 } from '@/app/(protected)/admissions/challenge/actions'
 import type { CriterionResult } from '@/lib/challengeReview'
 
 const staffUser = { id: 'staff-1', role: 'staff' as const, name: 'Staff', email: 'staff@test.com' }
+const adminUser = { id: 'admin-1', role: 'admin' as const, name: 'Admin', email: 'admin@test.com' }
 
 // from().upsert(rows, opts) → resolves { error }.
 function mockUpsertClient(result: { error: { message: string } | null }) {
@@ -180,8 +182,14 @@ describe('updateChallengeReviewConfig', () => {
     ).rejects.toThrow('NEXT_REDIRECT')
   })
 
-  test('rejects negative / non-integer bounds', async () => {
+  test('rejects a staff user because rule editing is admin-only', async () => {
     vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    expect(await updateChallengeReviewConfig({ cohortId: 214, courseId: 587, thresholds: good }))
+      .toEqual({ ok: false, error: expect.stringContaining('Only admins') })
+  })
+
+  test('rejects negative / non-integer bounds', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
       courseId: 587,
@@ -191,7 +199,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('rejects cramming over 100', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
       courseId: 587,
@@ -201,7 +209,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('upserts the config row keyed by (cohort, course); per-capita null when unset', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     const res = await updateChallengeReviewConfig({ cohortId: 214, courseId: 587, thresholds: good })
     expect(res).toEqual({ ok: true })
@@ -215,13 +223,13 @@ describe('updateChallengeReviewConfig', () => {
       max_cramming_pct: 30,
       max_work_income_annual: 600_000,
       max_per_capita_income_annual: null,
-      updated_by: 'staff-1',
+      updated_by: 'admin-1',
     })
     expect(opts).toEqual({ onConflict: 'cohort_id,course_id' })
   })
 
   test('writes the per-capita threshold when provided', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
@@ -233,7 +241,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('rejects a negative per-capita threshold', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const res = await updateChallengeReviewConfig({
       cohortId: 214,
       courseId: 587,
@@ -243,7 +251,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('writes the excluded colleges, trimmed + deduped', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     await updateChallengeReviewConfig({
       cohortId: 214,
@@ -254,7 +262,7 @@ describe('updateChallengeReviewConfig', () => {
   })
 
   test('writes SES weights + cutoff, and rejects a negative cutoff', async () => {
-    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
     const { upsert } = mockUpsertClient({ error: null })
     await updateChallengeReviewConfig({
       cohortId: 214,
@@ -269,6 +277,29 @@ describe('updateChallengeReviewConfig', () => {
       thresholds: { ...good, sesCutoff: -1 },
     })
     expect(bad).toEqual({ ok: false, error: expect.stringContaining('SES cutoff') })
+  })
+
+  test('persists edited SES question and score-option text', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
+    const { upsert } = mockUpsertClient({ error: null })
+    const res = await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: {
+        ...good,
+        sesQuestions: [{
+          key: 'social_category',
+          label: '  Community category  ',
+          optionLabels: { '3': '  Scheduled Caste  ' },
+        }],
+      },
+    })
+    expect(res).toEqual({ ok: true })
+    expect(upsert.mock.calls[0][0].ses_questions).toEqual([{
+      key: 'social_category',
+      label: 'Community category',
+      optionLabels: { '3': 'Scheduled Caste' },
+    }])
   })
 })
 
@@ -338,5 +369,67 @@ describe('clearChallengeDecisions', () => {
     const res = await clearChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['A@X.com', 'b@x.com'] })
     expect(res).toEqual({ ok: true, count: 2 })
     expect(q.delete).toHaveBeenCalled()
+  })
+})
+
+// from('challenge_review_notes') → either .upsert(row, opts) or
+// .delete().eq().eq().eq(), each resolving { error }.
+function mockNotesClient(opts: { upsertResult?: { error: { message: string } | null }; deleteResult?: { error: { message: string } | null } } = {}) {
+  const upsert = vi.fn().mockResolvedValue(opts.upsertResult ?? { error: null })
+  const eq3 = vi.fn().mockResolvedValue(opts.deleteResult ?? { error: null })
+  const eq2 = vi.fn(() => ({ eq: eq3 }))
+  const eq1 = vi.fn(() => ({ eq: eq2 }))
+  const del = vi.fn(() => ({ eq: eq1 }))
+  const client = { from: vi.fn(() => ({ upsert, delete: del })) }
+  vi.mocked(createClient).mockReturnValue(client as never)
+  return { upsert, del }
+}
+
+describe('updateChallengeReviewNote', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  test('redirects a non-staff caller', async () => {
+    vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
+    await expect(updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: 'hi' })).rejects.toThrow('NEXT_REDIRECT')
+  })
+
+  test('requires a candidate email', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: '   ', note: 'hi' })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('email') })
+  })
+
+  test('rejects a note longer than 2000 chars', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: 'x'.repeat(2001) })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('2,000') })
+  })
+
+  test('upserts a trimmed note with the editor id + conflict key', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert, del } = mockNotesClient()
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'A@X.com', note: '  keep this  ' })
+    expect(res).toEqual({ ok: true })
+    expect(del).not.toHaveBeenCalled()
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'a@x.com', cohort_id: 214, course_id: 587, note: 'keep this', updated_by: 'staff-1' }),
+      expect.objectContaining({ onConflict: 'email,cohort_id,course_id' }),
+    )
+  })
+
+  test('deletes the note when cleared to empty', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert, del } = mockNotesClient()
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: '   ' })
+    expect(res).toEqual({ ok: true })
+    expect(del).toHaveBeenCalled()
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  test('surfaces a db error', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    mockNotesClient({ upsertResult: { error: { message: 'boom' } } })
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: 'hi' })
+    expect(res).toEqual({ ok: false, error: 'boom' })
   })
 })

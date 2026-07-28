@@ -16,13 +16,14 @@ import {
   type SystemDecision,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
-import { SES_RUBRIC, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
+import { configuredSesRubric, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
 import { GATING_RULES } from '@/lib/challengeReview'
 import {
   bulkConfirmChallengeDecisions,
   releaseChallengeDecisions,
   clearChallengeDecisions,
   updateChallengeReviewConfig,
+  updateChallengeReviewNote,
 } from '@/app/(protected)/admissions/challenge/actions'
 
 export type ChallengeReviewRow = {
@@ -43,11 +44,14 @@ export type ChallengeReviewRow = {
   decidedAt: string | null
   systemChanged: boolean
   published: boolean // decision released to the candidate portal
+  releasedAt: string | null
+  comment: string
   // Activity + progress (folded in from the retired Pace tab).
   completedItems: number
   totalItems: number
   activityByDate: Record<string, number> // IST date → items done that day
   questionsByDate: Record<string, number> // IST date → attempted quiz questions that day
+  readingByDate: Record<string, number> // IST date → reading materials active that day
 }
 
 // Which criteria get their own column, and the short header for each. Eligibility
@@ -143,6 +147,24 @@ function ActivitySparkline({ activityByDate }: { activityByDate: Record<string, 
 
 const col = createColumnHelper<ChallengeReviewRow>()
 
+function EditableComment({ row, cohortId, courseId, disabled }: { row: ChallengeReviewRow; cohortId: number; courseId: number; disabled: boolean }) {
+  const [value, setValue] = useState(row.comment)
+  const [saved, setSaved] = useState(row.comment)
+  const [saving, startSaving] = useTransition()
+
+  function save() {
+    const next = value.trim()
+    if (next === saved) return
+    startSaving(async () => {
+      const result = await updateChallengeReviewNote({ cohortId, courseId, email: row.email, note: next })
+      if (result.ok) { setValue(next); setSaved(next) }
+      else { setValue(saved); alert(result.error) }
+    })
+  }
+
+  return <input value={value} disabled={disabled || saving} maxLength={2000} onChange={(e) => setValue(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setValue(saved); e.currentTarget.blur() } }} placeholder={disabled ? '—' : 'Add comment…'} className="w-full min-w-40 rounded border border-transparent bg-transparent px-2 py-1 text-xs text-zinc-700 outline-none hover:border-zinc-200 focus:border-[#5BAE5B] focus:bg-white disabled:text-zinc-400" />
+}
+
 export default function ChallengeReviewTable({
   rows,
   thresholds,
@@ -210,11 +232,19 @@ export default function ChallengeReviewTable({
         enableColumnFilter: false,
         cell: (info) => <span className="tabular-nums text-zinc-600">{info.getValue() || '—'}</span>,
       }),
+      col.accessor((r) => statusWord(criterion(r, 'attempted_questions')?.status), {
+        id: 'crit_attempted_questions', header: 'Attempted', size: 120,
+        cell: (info) => <CriterionChip c={criterion(info.row.original, 'attempted_questions')} />,
+      }),
       col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : r.systemDecision === 'review' ? 'Review' : r.systemDecision === 'in_progress' ? 'In progress' : 'Reject'), {
         id: 'system',
         header: 'System',
         size: 100,
         cell: (info) => <DecisionBadge decision={info.row.original.systemDecision} />,
+      }),
+      col.display({
+        id: 'comment', header: 'Comment', size: 210,
+        cell: (info) => <EditableComment row={info.row.original} cohortId={cohortId} courseId={courseId} disabled={!canReview} />,
       }),
       col.accessor(
         (r) => (r.finalDecision === 'selected' ? 'Selected' : r.finalDecision === 'rejected' ? 'Rejected' : 'Pending'),
@@ -268,6 +298,10 @@ export default function ChallengeReviewTable({
         enableColumnFilter: false,
         cell: (info) => <span className="text-xs text-zinc-500">{info.getValue() || '—'}</span>,
       }),
+      col.accessor((r) => r.releasedAt ?? '', {
+        id: 'released_date', header: 'Released Date', size: 120, enableColumnFilter: false,
+        cell: (info) => <span className="text-xs tabular-nums text-zinc-500">{info.getValue() ? new Date(info.getValue()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>,
+      }),
       col.display({
         id: 'review',
         header: '',
@@ -284,7 +318,7 @@ export default function ChallengeReviewTable({
           </div>
         ),
       }),
-      ...CRITERIA_COLS.map((cc) =>
+      ...CRITERIA_COLS.filter((cc) => cc.key !== 'attempted_questions').map((cc) =>
         col.accessor((r) => statusWord(criterion(r, cc.key)?.status), {
           id: `crit_${cc.key}`,
           header: cc.label,
@@ -322,10 +356,10 @@ export default function ChallengeReviewTable({
         size: 150,
         cell: (info) => <ActivitySparkline activityByDate={info.row.original.activityByDate} />,
       }),
-      // Per-date heat columns — sub-questions attempted that day (reading excluded).
+      // Per-date heat columns — quiz questions plus reading-material activity.
       // `compact` gives them tight padding + a readable "16 Jun" header.
       ...calendarDates.map((date) =>
-        col.accessor((r) => r.questionsByDate[date] ?? 0, {
+        col.accessor((r) => (r.questionsByDate[date] ?? 0) + (r.readingByDate[date] ?? 0), {
           id: `d_${date}`,
           header: dateLabel(date),
           size: 56,
@@ -339,7 +373,7 @@ export default function ChallengeReviewTable({
         }),
       ),
     ],
-    [calendarDates],
+    [calendarDates, canReview, cohortId, courseId],
   )
 
   function runBulk() {
@@ -469,7 +503,7 @@ export default function ChallengeReviewTable({
                 Reset to pending ({selectedRows.filter((r) => r.finalDecision).length})
               </button>
             )}
-            {canReview && (
+            {isAdmin && (
               <button
                 onClick={() => setEditRules(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
@@ -632,7 +666,21 @@ function EditRulesModal({
     })
   }
 
-  const sesMax = sesMaxScore(t.sesWeights)
+  const sesQuestions = configuredSesRubric(t.sesQuestions)
+  const sesMax = sesMaxScore(t.sesWeights, t.sesQuestions)
+
+  function addSesQuestion() {
+    const key = `ses_custom_${crypto.randomUUID().replaceAll('-', '')}`
+    setT({
+      ...t,
+      sesQuestions: [...(t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))), {
+        key,
+        label: 'New SES question',
+        optionLabels: { '0': '0', '1': '1', '2': '2', '3': '3', '4': '4' },
+      }],
+      sesWeights: { ...(t.sesWeights ?? {}), [key]: 1 },
+    })
+  }
 
   return (
     <Modal title="Edit review rules" onClose={onClose} wide>
@@ -788,7 +836,7 @@ function EditRulesModal({
       </label>
       <p className="mb-1.5 text-[11px] text-zinc-400">
         Columns 0–4 are the fixed score each option earns. &ldquo;PNS&rdquo; = prefer not to say (scored as {PNS_SCORE}).
-        Only the <span className="font-medium text-zinc-600">Weight</span> column is editable.
+        Question text, option text under scores 0–4, and weight are editable. The numeric scores remain fixed.
       </p>
       <div className="overflow-x-auto rounded-lg border border-zinc-200">
         <table className="w-full border-collapse text-xs">
@@ -803,16 +851,48 @@ function EditRulesModal({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {SES_RUBRIC.map((q) => {
+            {sesQuestions.map((q) => {
               const pnsAvg = q.pnsLetter ? PNS_SCORE : null
               return (
                 <tr key={q.key} className="align-middle">
-                  <td className="px-2 py-1.5 text-zinc-700">{q.label}</td>
+                  <td className="px-2 py-1.5 text-zinc-700">
+                    <input
+                      type="text"
+                      aria-label={`Question text for ${q.label}`}
+                      value={q.label}
+                      onChange={(e) => setT({
+                        ...t,
+                        sesQuestions: (t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))).map((item) => ({
+                          ...item,
+                          label: item.key === q.key ? e.target.value : item.label,
+                        })),
+                      })}
+                      className="min-w-48 w-full rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
+                    />
+                  </td>
                   {[0, 1, 2, 3, 4].map((s) => {
                     const opt = q.options.find((o) => o.score === s)
                     return (
                       <td key={s} className="px-2 py-1.5 text-center text-[11px] leading-tight text-zinc-500">
-                        {opt ? opt.label : <span className="text-zinc-300">—</span>}
+                        {opt ? (
+                          <input
+                            type="text"
+                            aria-label={`${q.label}, score ${s} option text`}
+                            value={opt.label}
+                            onChange={(e) => {
+                              const current: NonNullable<ReviewThresholds['sesQuestions']> =
+                                t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))
+                              setT({
+                                ...t,
+                                sesQuestions: current.map((item) => item.key === q.key ? {
+                                  ...item,
+                                  optionLabels: { ...(item.optionLabels ?? {}), [String(s)]: e.target.value },
+                                } : item),
+                              })
+                            }}
+                            className="w-24 rounded-lg border border-zinc-300 px-1.5 py-1 text-center text-[11px] text-zinc-700 focus:border-[#5BAE5B] focus:outline-none"
+                          />
+                        ) : <span className="text-zinc-300">—</span>}
                       </td>
                     )
                   })}
@@ -835,6 +915,14 @@ function EditRulesModal({
           </tbody>
         </table>
       </div>
+      <button
+        type="button"
+        onClick={addSesQuestion}
+        className="mt-2 inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+        aria-label="Add SES question"
+      >
+        <span aria-hidden="true" className="text-base leading-none">＋</span> Add question
+      </button>
       </>
       )}
 
