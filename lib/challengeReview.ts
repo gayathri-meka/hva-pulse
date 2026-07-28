@@ -347,20 +347,24 @@ export function evaluateCandidate(
   // Consistency: idle days between first and last activity.
   const gapDays = Math.max(0, signals.spanDays - signals.activeDays)
 
-  // SES: weighted socio-economic need score (higher = more needy). Pass when ≥ cutoff.
-  const ses = signals.sesAnswers ? computeSes(signals.sesAnswers, thresholds.sesWeights, thresholds.sesQuestions) : null
+  // Per-capita family income = annual family income ÷ total family members.
+  const perCapitaIncome =
+    signals.familyAnnualIncomeInr !== undefined && signals.familySize
+      ? Math.round(signals.familyAnnualIncomeInr / signals.familySize)
+      : undefined
+
+  // SES: weighted socio-economic need score (higher = more needy). Admin-added
+  // derived rules receive their value here; built-in answer mappings are unchanged.
+  const sesRaw = signals.sesAnswers
+    ? { ...signals.sesAnswers, ...(perCapitaIncome === undefined ? {} : { per_capita_income_raw: String(perCapitaIncome) }) }
+    : undefined
+  const ses = sesRaw ? computeSes(sesRaw, thresholds.sesWeights, thresholds.sesQuestions) : null
   const sesStatus: CriterionStatus =
     !ses || ses.answered === 0 || thresholds.sesCutoff === undefined
       ? 'na'
       : ses.score >= thresholds.sesCutoff
         ? 'pass'
         : 'fail'
-
-  // Per-capita family income = annual family income ÷ total family members.
-  const perCapitaIncome =
-    signals.familyAnnualIncomeInr !== undefined && signals.familySize
-      ? Math.round(signals.familyAnnualIncomeInr / signals.familySize)
-      : undefined
 
   const criteria: CriterionResult[] = [
     // ── Eligibility (straight-elimination / basic-fit gates) ──────────────────

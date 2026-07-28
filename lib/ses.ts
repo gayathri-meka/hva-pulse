@@ -29,7 +29,8 @@ export type SesQuestion = {
   defaultWeight: number
   options: SesOption[]
   pnsLetter?: string // scored as the average of the other options
-  variant?: 'familySize' | 'multiSelect'
+  variant?: 'familySize' | 'multiSelect' | 'numericRange'
+  activeForScoring?: boolean
 }
 
 export const SES_RUBRIC: SesQuestion[] = [
@@ -91,24 +92,79 @@ export const SES_RUBRIC: SesQuestion[] = [
 
 export type SesWeights = Record<string, number>
 
+export type SesAnswerSource =
+  | 'per_capita_income'
+  | 'gender' | 'marital' | 'social_category' | 'parent_education'
+  | 'family_situation' | 'health' | 'house_ownership' | 'house_condition'
+  | 'home_location' | 'loan_formal' | 'loan_informal' | 'assets'
+
+export const SES_SOURCE_CATALOG: { key: SesAnswerSource; label: string }[] = [
+  { key: 'per_capita_income', label: 'Per-capita income (family income ÷ family size)' },
+  ...SES_RUBRIC.map((q) => ({ key: q.key as SesAnswerSource, label: q.label })),
+]
+
+const PER_CAPITA_DEFAULT_OPTIONS: Record<string, string> = {
+  '0': 'Above ₹2,00,000', '1': '₹1,50,001–₹2,00,000', '2': '₹1,00,001–₹1,50,000',
+  '3': '₹50,001–₹1,00,000', '4': 'Up to ₹50,000',
+}
+
+export function defaultOptionLabelsForSource(source: SesAnswerSource): Record<string, string> {
+  if (source === 'per_capita_income') return { ...PER_CAPITA_DEFAULT_OPTIONS }
+  const q = SES_RUBRIC.find((item) => item.key === source)
+  return Object.fromEntries([0, 1, 2, 3, 4].map((score) => [
+    String(score), q?.options.find((o) => o.score === score)?.label ?? `Option ${score}`,
+  ]))
+}
+
+export function updateSesQuestionLabel(q: SesQuestionConfig, label: string): SesQuestionConfig {
+  if (!q.key.startsWith('ses_custom_') || label.trim()) return { ...q, label }
+  return {
+    ...q,
+    label,
+    answerSource: undefined,
+    optionLabels: { '0': '0', '1': '1', '2': '2', '3': '3', '4': '4' },
+  }
+}
+
 export type SesQuestionConfig = {
   key: string
   label: string
   /** Admin-authored display/answer label for each fixed numeric score. */
   optionLabels?: Record<string, string>
+  /** Candidate-data source for admin-added rules. Existing built-in rules use their fixed mapping. */
+  answerSource?: SesAnswerSource
+}
+
+/** Preserve custom per-capita rules saved before answerSource was introduced. */
+export function sesAnswerSource(q: SesQuestionConfig): SesQuestionConfig['answerSource'] {
+  if (q.answerSource) return q.answerSource
+  const label = q.label.toLowerCase().replace(/[^a-z]+/g, ' ').trim()
+  return label.includes('per capita income') ? 'per_capita_income' : undefined
 }
 
 /** Apply admin-authored labels/order and append new 0–4 SES questions. */
 export function configuredSesRubric(config?: SesQuestionConfig[]): SesQuestion[] {
   if (!config?.length) return SES_RUBRIC
   const defaults = new Map(SES_RUBRIC.map((q) => [q.key, q]))
-  return config.map(({ key, label, optionLabels }) => {
+  return config.map(({ key, label, optionLabels, answerSource: savedAnswerSource }) => {
     const existing = defaults.get(key)
-    const question: SesQuestion = existing ? { ...existing, label } : {
+    const answerSource = sesAnswerSource({ key, label, optionLabels, answerSource: savedAnswerSource })
+    const sourceQuestion = answerSource && answerSource !== 'per_capita_income'
+      ? defaults.get(answerSource)
+      : undefined
+    const question: SesQuestion = existing ? { ...existing, label } : sourceQuestion ? {
+      ...sourceQuestion,
       key,
-      rawField: `${key}_raw`,
       label,
       defaultWeight: 1,
+      activeForScoring: true,
+    } : {
+      key,
+      rawField: answerSource === 'per_capita_income' ? 'per_capita_income_raw' : `${key}_raw`,
+      label,
+      defaultWeight: 1,
+      variant: answerSource === 'per_capita_income' ? 'numericRange' : undefined,
+      activeForScoring: answerSource != null,
       options: [0, 1, 2, 3, 4].map((score) => ({
         letter: String.fromCharCode(97 + score), label: String(score), score,
       })),
@@ -131,16 +187,44 @@ export function effectiveWeight(q: SesQuestion, weights?: SesWeights): number {
 
 /** Max possible weighted score (all questions at their top option), given weights. */
 export function sesMaxScore(weights?: SesWeights, questions?: SesQuestionConfig[]): number {
-  return configuredSesRubric(questions).reduce((s, q) => s + Math.max(...q.options.map((o) => o.score)) * effectiveWeight(q, weights), 0)
+  return configuredSesRubric(questions).filter((q) => q.activeForScoring !== false).reduce((s, q) => s + Math.max(...q.options.map((o) => o.score)) * effectiveWeight(q, weights), 0)
 }
 
 const norm = (v: string | null | undefined) => (v ?? '').toString().trim().toLowerCase().replace(/[.。]+$/, '')
+
+function moneyValues(label: string): number[] {
+  return [...label.toLowerCase().replaceAll(',', '').matchAll(/(\d+(?:\.\d+)?)\s*(lakh|lakhs|lac|l|k)?/g)]
+    .map((m) => Number(m[1]) * (m[2]?.startsWith('l') ? 100_000 : m[2] === 'k' ? 1_000 : 1))
+    .filter(Number.isFinite)
+}
+
+export function numericRangeMatches(label: string, value: number): boolean {
+  const values = moneyValues(label)
+  if (!values.length) return false
+  const text = label.toLowerCase()
+  if (values.length >= 2) return value >= Math.min(values[0], values[1]) && value <= Math.max(values[0], values[1])
+  if (/above|over|more than|>/.test(text)) return value > values[0]
+  if (/below|under|less than|up to|upto|<=|≤|</.test(text)) return value <= values[0]
+  return value === values[0]
+}
+
+export function isNumericRangeLabel(label: string): boolean {
+  const values = moneyValues(label)
+  return values.length >= 2 || (values.length === 1 && /above|over|more than|below|under|less than|up to|upto|[<>≤]/i.test(label))
+}
 
 // The chosen option's base (unweighted) score + a human-readable label for a raw
 // answer to one question, or null if unanswered / unrecognised.
 export function resolveAnswer(q: SesQuestion, raw: string | null | undefined): { score: number; label: string } | null {
   const s = norm(raw)
   if (!s) return null
+
+  if (q.variant === 'numericRange') {
+    const value = Number(s.replace(/[^\d.]/g, ''))
+    if (!Number.isFinite(value)) return null
+    const opt = q.options.find((o) => numericRangeMatches(o.label, value))
+    return opt ? { score: opt.score, label: `₹${value.toLocaleString('en-IN')}/yr (${opt.label})` } : null
+  }
 
   if (q.variant === 'familySize') {
     const n = Number(s.match(/\d+/)?.[0])
@@ -191,6 +275,7 @@ export function computeSes(raw: Record<string, string | null | undefined>, weigh
   let answered = 0
   const rubric = configuredSesRubric(questions)
   for (const q of rubric) {
+    if (q.activeForScoring === false) continue
     const ans = resolveAnswer(q, raw[q.rawField])
     if (ans == null) continue
     const weight = effectiveWeight(q, weights)

@@ -6,6 +6,7 @@ import { requireStaff } from '@/lib/auth'
 import { runBigQuery } from '@/lib/bigquery'
 import { candidateRejectionReasons } from '@/lib/challengeReview'
 import type { CriterionResult, SystemDecision, ReviewThresholds, CandidateSignals } from '@/lib/challengeReview'
+import { isNumericRangeLabel, SES_SOURCE_CATALOG, sesAnswerSource } from '@/lib/ses'
 import {
   toChatMessage,
   blocksToText,
@@ -488,17 +489,27 @@ export async function updateChallengeReviewConfig(input: {
   const sesWeights = t.sesWeights ?? {}
   if (Object.values(sesWeights).some((w) => typeof w !== 'number' || !Number.isFinite(w) || w < 0))
     return { ok: false, error: 'SES weights must be numbers (0 or greater).' }
-  const sesQuestions = t.sesQuestions?.map((q) => ({
-    key: q.key.trim(),
-    label: q.label.trim(),
-    ...(q.optionLabels ? {
-      optionLabels: Object.fromEntries(Object.entries(q.optionLabels).map(([score, label]) => [score, label.trim()])),
-    } : {}),
-  }))
+  const sesQuestions = t.sesQuestions?.map((q) => {
+    const answerSource = sesAnswerSource(q)
+    return {
+      key: q.key.trim(),
+      label: q.label.trim(),
+      ...(answerSource ? { answerSource } : {}),
+      ...(q.optionLabels ? {
+        optionLabels: Object.fromEntries(Object.entries(q.optionLabels).map(([score, label]) => [score, label.trim()])),
+      } : {}),
+    }
+  })
   if (sesQuestions?.some((q) => !q.key || !q.label) || new Set(sesQuestions?.map((q) => q.key)).size !== (sesQuestions?.length ?? 0))
     return { ok: false, error: 'Every SES question needs unique question text and an internal key.' }
   if (sesQuestions?.some((q) => q.optionLabels && Object.entries(q.optionLabels).some(([score, label]) => !['0', '1', '2', '3', '4'].includes(score) || !label)))
     return { ok: false, error: 'SES option text for scores 0–4 cannot be blank.' }
+  const validSesSources = new Set(SES_SOURCE_CATALOG.map((source) => source.key))
+  if (sesQuestions?.some((q) => q.answerSource && !validSesSources.has(q.answerSource)))
+    return { ok: false, error: 'Unsupported SES answer source.' }
+  if (sesQuestions?.some((q) => q.answerSource === 'per_capita_income' && (
+    !q.optionLabels || ['0', '1', '2', '3', '4'].some((score) => !isNumericRangeLabel(q.optionLabels?.[score] ?? ''))
+  ))) return { ok: false, error: 'Per-capita income needs a valid range for every score from 0 to 4.' }
 
   // Excluded colleges: trim, drop blanks, dedupe (case-insensitive).
   const seenCollege = new Set<string>()

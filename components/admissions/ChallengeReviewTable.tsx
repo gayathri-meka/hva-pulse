@@ -16,7 +16,7 @@ import {
   type SystemDecision,
   type ReviewThresholds,
 } from '@/lib/challengeReview'
-import { configuredSesRubric, sesMaxScore, effectiveWeight, PNS_SCORE } from '@/lib/ses'
+import { configuredSesRubric, defaultOptionLabelsForSource, SES_SOURCE_CATALOG, sesMaxScore, effectiveWeight, PNS_SCORE, updateSesQuestionLabel, type SesAnswerSource } from '@/lib/ses'
 import { GATING_RULES } from '@/lib/challengeReview'
 import {
   bulkConfirmChallengeDecisions,
@@ -826,15 +826,48 @@ function EditRulesModal({
                       type="text"
                       aria-label={`Question text for ${q.label}`}
                       value={q.label}
-                      onChange={(e) => setT({
-                        ...t,
-                        sesQuestions: (t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))).map((item) => ({
-                          ...item,
-                          label: item.key === q.key ? e.target.value : item.label,
-                        })),
-                      })}
+                      onChange={(e) => {
+                        const label = e.target.value
+                        setT({
+                          ...t,
+                          sesQuestions: (t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))).map((item) => {
+                            if (item.key !== q.key) return item
+                            // Clearing a custom rule disconnects its source so a
+                            // mistaken selection can be made again.
+                            return updateSesQuestionLabel(item, label)
+                          }),
+                        })
+                      }}
                       className="min-w-48 w-full rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-800 focus:border-[#5BAE5B] focus:outline-none"
                     />
+                    {q.key.startsWith('ses_custom_') && q.activeForScoring === false && (
+                      <select
+                        aria-label={`Answer source for ${q.label}`}
+                        defaultValue=""
+                        onChange={(e) => {
+                          const source = e.target.value as SesAnswerSource
+                          if (!source) return
+                          const current: NonNullable<ReviewThresholds['sesQuestions']> =
+                            t.sesQuestions ?? sesQuestions.map(({ key, label }) => ({ key, label }))
+                          const sourceLabel = SES_SOURCE_CATALOG.find((item) => item.key === source)?.label ?? 'New SES question'
+                          setT({
+                            ...t,
+                            sesQuestions: current.map((item) => item.key === q.key ? {
+                              ...item,
+                              label: item.label.trim() ? item.label : sourceLabel.replace(/ \(.+\)$/, ''),
+                              answerSource: source,
+                              optionLabels: defaultOptionLabelsForSource(source),
+                            } : item),
+                          })
+                        }}
+                        className="mt-1 w-full rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 focus:border-[#5BAE5B] focus:outline-none"
+                      >
+                        <option value="">Choose candidate data source…</option>
+                        {SES_SOURCE_CATALOG.map((source) => (
+                          <option key={source.key} value={source.key}>{source.label}</option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   {[0, 1, 2, 3, 4].map((s) => {
                     const opt = q.options.find((o) => o.score === s)
