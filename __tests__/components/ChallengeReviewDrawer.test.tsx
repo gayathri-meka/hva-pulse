@@ -54,6 +54,9 @@ const row: ChallengeReviewRow = {
   totalItems: 10,
   activityByDate: {},
   questionsByDate: {},
+  readingByDate: {},
+  releasedAt: null,
+  comment: '',
 }
 
 describe('ChallengeReviewDrawer', () => {

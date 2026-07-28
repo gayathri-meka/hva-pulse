@@ -15,6 +15,7 @@ import {
   releaseChallengeDecisions,
   clearChallengeDecisions,
   updateChallengeReviewConfig,
+  updateChallengeReviewNote,
 } from '@/app/(protected)/admissions/challenge/actions'
 import type { CriterionResult } from '@/lib/challengeReview'
 
@@ -376,5 +377,67 @@ describe('clearChallengeDecisions', () => {
     const res = await clearChallengeDecisions({ cohortId: 214, courseId: 587, emails: ['A@X.com', 'b@x.com'] })
     expect(res).toEqual({ ok: true, count: 2 })
     expect(q.delete).toHaveBeenCalled()
+  })
+})
+
+// from('challenge_review_notes') → either .upsert(row, opts) or
+// .delete().eq().eq().eq(), each resolving { error }.
+function mockNotesClient(opts: { upsertResult?: { error: { message: string } | null }; deleteResult?: { error: { message: string } | null } } = {}) {
+  const upsert = vi.fn().mockResolvedValue(opts.upsertResult ?? { error: null })
+  const eq3 = vi.fn().mockResolvedValue(opts.deleteResult ?? { error: null })
+  const eq2 = vi.fn(() => ({ eq: eq3 }))
+  const eq1 = vi.fn(() => ({ eq: eq2 }))
+  const del = vi.fn(() => ({ eq: eq1 }))
+  const client = { from: vi.fn(() => ({ upsert, delete: del })) }
+  vi.mocked(createClient).mockReturnValue(client as never)
+  return { upsert, del }
+}
+
+describe('updateChallengeReviewNote', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  test('redirects a non-staff caller', async () => {
+    vi.mocked(requireStaff).mockRejectedValue(new Error('NEXT_REDIRECT:/dashboard'))
+    await expect(updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: 'hi' })).rejects.toThrow('NEXT_REDIRECT')
+  })
+
+  test('requires a candidate email', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: '   ', note: 'hi' })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('email') })
+  })
+
+  test('rejects a note longer than 2000 chars', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: 'x'.repeat(2001) })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('2,000') })
+  })
+
+  test('upserts a trimmed note with the editor id + conflict key', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert, del } = mockNotesClient()
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'A@X.com', note: '  keep this  ' })
+    expect(res).toEqual({ ok: true })
+    expect(del).not.toHaveBeenCalled()
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'a@x.com', cohort_id: 214, course_id: 587, note: 'keep this', updated_by: 'staff-1' }),
+      expect.objectContaining({ onConflict: 'email,cohort_id,course_id' }),
+    )
+  })
+
+  test('deletes the note when cleared to empty', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    const { upsert, del } = mockNotesClient()
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: '   ' })
+    expect(res).toEqual({ ok: true })
+    expect(del).toHaveBeenCalled()
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  test('surfaces a db error', async () => {
+    vi.mocked(requireStaff).mockResolvedValue(staffUser)
+    mockNotesClient({ upsertResult: { error: { message: 'boom' } } })
+    const res = await updateChallengeReviewNote({ cohortId: 214, courseId: 587, email: 'a@x.com', note: 'hi' })
+    expect(res).toEqual({ ok: false, error: 'boom' })
   })
 })

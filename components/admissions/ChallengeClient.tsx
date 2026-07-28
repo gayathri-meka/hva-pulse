@@ -71,6 +71,7 @@ export type Member = {
   lastActive: string | null
   activityByDate: Record<string, number>  // IST date (YYYY-MM-DD) -> tasks done that day
   questionsByDate: Record<string, number> // IST date -> attempted quiz questions that day
+  readingByDate: Record<string, number> // IST date -> reading materials viewed/completed that day
 }
 export type ChallengeTotals = {
   days: number

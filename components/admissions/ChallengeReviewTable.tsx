@@ -23,6 +23,7 @@ import {
   releaseChallengeDecisions,
   clearChallengeDecisions,
   updateChallengeReviewConfig,
+  updateChallengeReviewNote,
 } from '@/app/(protected)/admissions/challenge/actions'
 
 export type ChallengeReviewRow = {
@@ -43,11 +44,14 @@ export type ChallengeReviewRow = {
   decidedAt: string | null
   systemChanged: boolean
   published: boolean // decision released to the candidate portal
+  releasedAt: string | null
+  comment: string
   // Activity + progress (folded in from the retired Pace tab).
   completedItems: number
   totalItems: number
   activityByDate: Record<string, number> // IST date → items done that day
   questionsByDate: Record<string, number> // IST date → attempted quiz questions that day
+  readingByDate: Record<string, number> // IST date → reading materials active that day
 }
 
 // Which criteria get their own column, and the short header for each. Eligibility
@@ -143,6 +147,24 @@ function ActivitySparkline({ activityByDate }: { activityByDate: Record<string, 
 
 const col = createColumnHelper<ChallengeReviewRow>()
 
+function EditableComment({ row, cohortId, courseId, disabled }: { row: ChallengeReviewRow; cohortId: number; courseId: number; disabled: boolean }) {
+  const [value, setValue] = useState(row.comment)
+  const [saved, setSaved] = useState(row.comment)
+  const [saving, startSaving] = useTransition()
+
+  function save() {
+    const next = value.trim()
+    if (next === saved) return
+    startSaving(async () => {
+      const result = await updateChallengeReviewNote({ cohortId, courseId, email: row.email, note: next })
+      if (result.ok) { setValue(next); setSaved(next) }
+      else { setValue(saved); alert(result.error) }
+    })
+  }
+
+  return <input value={value} disabled={disabled || saving} maxLength={2000} onChange={(e) => setValue(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setValue(saved); e.currentTarget.blur() } }} placeholder={disabled ? '—' : 'Add comment…'} className="w-full min-w-40 rounded border border-transparent bg-transparent px-2 py-1 text-xs text-zinc-700 outline-none hover:border-zinc-200 focus:border-[#5BAE5B] focus:bg-white disabled:text-zinc-400" />
+}
+
 export default function ChallengeReviewTable({
   rows,
   thresholds,
@@ -210,11 +232,19 @@ export default function ChallengeReviewTable({
         enableColumnFilter: false,
         cell: (info) => <span className="tabular-nums text-zinc-600">{info.getValue() || '—'}</span>,
       }),
+      col.accessor((r) => statusWord(criterion(r, 'attempted_questions')?.status), {
+        id: 'crit_attempted_questions', header: 'Attempted', size: 120,
+        cell: (info) => <CriterionChip c={criterion(info.row.original, 'attempted_questions')} />,
+      }),
       col.accessor((r) => (r.systemDecision === 'selected' ? 'Select' : r.systemDecision === 'review' ? 'Review' : r.systemDecision === 'in_progress' ? 'In progress' : 'Reject'), {
         id: 'system',
         header: 'System',
         size: 100,
         cell: (info) => <DecisionBadge decision={info.row.original.systemDecision} />,
+      }),
+      col.display({
+        id: 'comment', header: 'Comment', size: 210,
+        cell: (info) => <EditableComment row={info.row.original} cohortId={cohortId} courseId={courseId} disabled={!canReview} />,
       }),
       col.accessor(
         (r) => (r.finalDecision === 'selected' ? 'Selected' : r.finalDecision === 'rejected' ? 'Rejected' : 'Pending'),
@@ -268,6 +298,10 @@ export default function ChallengeReviewTable({
         enableColumnFilter: false,
         cell: (info) => <span className="text-xs text-zinc-500">{info.getValue() || '—'}</span>,
       }),
+      col.accessor((r) => r.releasedAt ?? '', {
+        id: 'released_date', header: 'Released Date', size: 120, enableColumnFilter: false,
+        cell: (info) => <span className="text-xs tabular-nums text-zinc-500">{info.getValue() ? new Date(info.getValue()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>,
+      }),
       col.display({
         id: 'review',
         header: '',
@@ -284,7 +318,7 @@ export default function ChallengeReviewTable({
           </div>
         ),
       }),
-      ...CRITERIA_COLS.map((cc) =>
+      ...CRITERIA_COLS.filter((cc) => cc.key !== 'attempted_questions').map((cc) =>
         col.accessor((r) => statusWord(criterion(r, cc.key)?.status), {
           id: `crit_${cc.key}`,
           header: cc.label,
@@ -322,10 +356,10 @@ export default function ChallengeReviewTable({
         size: 150,
         cell: (info) => <ActivitySparkline activityByDate={info.row.original.activityByDate} />,
       }),
-      // Per-date heat columns — sub-questions attempted that day (reading excluded).
+      // Per-date heat columns — quiz questions plus reading-material activity.
       // `compact` gives them tight padding + a readable "16 Jun" header.
       ...calendarDates.map((date) =>
-        col.accessor((r) => r.questionsByDate[date] ?? 0, {
+        col.accessor((r) => (r.questionsByDate[date] ?? 0) + (r.readingByDate[date] ?? 0), {
           id: `d_${date}`,
           header: dateLabel(date),
           size: 56,
@@ -339,7 +373,7 @@ export default function ChallengeReviewTable({
         }),
       ),
     ],
-    [calendarDates],
+    [calendarDates, canReview, cohortId, courseId],
   )
 
   function runBulk() {
