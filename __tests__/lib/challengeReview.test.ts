@@ -302,6 +302,23 @@ describe('evaluateCandidate', () => {
     expect(evaluateCandidate({ ...passing, sesAnswers: answers }, { ...DEFAULT_THRESHOLDS, sesCutoff: 20 }).systemDecision).toBe('rejected')
   })
 
+  it('adds a configured per-capita rule to the SES score and breakdown', () => {
+    const sesQuestions = [{
+      key: 'ses_custom_income', label: 'Per-capita income', answerSource: 'per_capita_income' as const,
+      optionLabels: { '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1.5L', '3': '₹50k–₹1L', '4': 'Up to ₹50k' },
+    }]
+    const result = evaluateCandidate(
+      { ...passing, sesAnswers: {}, familyAnnualIncomeInr: 300_000, familySize: 4 },
+      { ...DEFAULT_THRESHOLDS, sesQuestions, sesWeights: { ses_custom_income: 2 }, sesCutoff: 6 },
+    )
+    const ses = get(result, 'ses')
+    expect(ses.status).toBe('pass')
+    expect(ses.value).toBe('6 / 8')
+    expect(ses.sesBreakdown).toEqual([
+      expect.objectContaining({ key: 'ses_custom_income', optionScore: 3, weight: 2, contribution: 6 }),
+    ])
+  })
+
   it('honours custom thresholds', () => {
     const lenient = { minQuestionsAttemptedPct: 2, minActiveDays: 1, minSpanDays: 2, maxCrammingPct: 90, maxGapDays: 4, maxWorkIncomeAnnual: 600_000 }
     const weak: CandidateSignals = { attemptedQuestions: 6, totalQuestions: 200, attemptedItems: 6, totalItems: 200, activeDays: 2, spanDays: 2, crammingPct: 80, currentlyStudying: false, working: false }

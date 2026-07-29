@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { optionScore, resolveAnswer, computeSes, configuredSesRubric, sesMaxScore, effectiveWeight, SES_RUBRIC } from '@/lib/ses'
+import { optionScore, resolveAnswer, computeSes, configuredSesRubric, isNumericRangeLabel, numericRangeMatches, perCapitaRangesFormPartition, sesMaxScore, effectiveWeight, SES_RUBRIC, updateSesQuestionLabel } from '@/lib/ses'
 
 const q = (key: string) => SES_RUBRIC.find((x) => x.key === key)!
 
@@ -101,9 +101,72 @@ describe('computeSes', () => {
   })
 
   it('appends a configurable 0–4 question', () => {
-    const questions = [...SES_RUBRIC.map(({ key, label }) => ({ key, label })), { key: 'ses_custom_test', label: 'Custom question' }]
-    expect(configuredSesRubric(questions).at(-1)?.rawField).toBe('ses_custom_test_raw')
-    expect(computeSes({ ses_custom_test_raw: 'e' }, { ses_custom_test: 2 }, questions).score).toBe(8)
+    const questions = [...SES_RUBRIC.map(({ key, label }) => ({ key, label })), { key: 'ses_custom_test', label: 'Custom question', answerSource: 'per_capita_income' as const }]
+    expect(configuredSesRubric(questions).at(-1)?.rawField).toBe('per_capita_income_raw')
+  })
+
+  it('scores a per-capita custom rule and includes it in the breakdown and total', () => {
+    const questions = [...SES_RUBRIC.map(({ key, label }) => ({ key, label })), {
+      key: 'ses_custom_income', label: 'Per-capita income', answerSource: 'per_capita_income' as const,
+      optionLabels: { '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1.5L', '3': '₹50k–₹1L', '4': 'Up to ₹50k' },
+    }]
+    const result = computeSes({ per_capita_income_raw: '75000' }, { ses_custom_income: 2 }, questions)
+    expect(result.score).toBe(6)
+    expect(result.breakdown.at(-1)).toMatchObject({ key: 'ses_custom_income', optionScore: 3, weight: 2, contribution: 6 })
+  })
+
+  it('recognises a per-capita rule saved before answerSource existed', () => {
+    const questions = [{
+      key: 'ses_custom_legacy', label: 'Per Capita Income (Annual)',
+      optionLabels: { '0': '>180000', '1': '120001-180000', '2': '75001-120000', '3': '45001-75000', '4': '<45000' },
+    }]
+    const result = computeSes({ per_capita_income_raw: '60000' }, { ses_custom_legacy: 5 }, questions)
+    expect(result.score).toBe(15)
+    expect(result.breakdown[0]).toMatchObject({ key: 'ses_custom_legacy', optionScore: 3, contribution: 15 })
+  })
+
+  it('connects an added rule to a categorical source from the catalogue', () => {
+    const questions = [{
+      key: 'ses_custom_home', label: 'Housing situation', answerSource: 'house_ownership' as const,
+      optionLabels: { '1': 'Own home', '2': 'Renting', '3': 'Provided housing', '4': 'Living with relatives' },
+    }]
+    const result = computeSes({ house_ownership_raw: 'b' }, { ses_custom_home: 3 }, questions)
+    expect(result.score).toBe(6)
+    expect(result.breakdown[0]).toMatchObject({ answer: 'Renting', optionScore: 2, weight: 3, contribution: 6 })
+  })
+
+  it('disconnects a custom source when its question text is cleared', () => {
+    expect(updateSesQuestionLabel({
+      key: 'ses_custom_wrong', label: 'Wrong source', answerSource: 'assets',
+      optionLabels: { '1': 'Insurance' },
+    }, '')).toEqual({
+      key: 'ses_custom_wrong', label: '', answerSource: undefined,
+      optionLabels: { '0': '0', '1': '1', '2': '2', '3': '3', '4': '4' },
+    })
+  })
+
+  it('does not change the score or maximum for an unconnected custom rule', () => {
+    const questions = [...SES_RUBRIC.map(({ key, label }) => ({ key, label })), { key: 'ses_custom_incomplete', label: 'Incomplete' }]
+    expect(computeSes({}, undefined, questions).maxScore).toBe(sesMaxScore())
+  })
+
+  it('matches Indian currency range labels', () => {
+    expect(numericRangeMatches('Up to ₹50k', 50_000)).toBe(true)
+    expect(numericRangeMatches('₹50,001–₹1L', 75_000)).toBe(true)
+    expect(numericRangeMatches('Above ₹2L', 250_000)).toBe(true)
+    expect(isNumericRangeLabel('₹50,001–₹1L')).toBe(true)
+    expect(isNumericRangeLabel('some income')).toBe(false)
+  })
+
+  it('accepts only a complete, ordered partition of non-negative per-capita income', () => {
+    expect(perCapitaRangesFormPartition({
+      '0': 'Above ₹2L', '1': '₹1,50,001–₹2L', '2': '₹1,00,001–₹1.5L',
+      '3': '₹50,001–₹1L', '4': 'Up to ₹50k',
+    })).toBe(true)
+    expect(perCapitaRangesFormPartition({
+      '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1.5L',
+      '3': '₹50k–₹1L', '4': 'Up to ₹50k',
+    })).toBe(false)
   })
 })
 
