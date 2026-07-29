@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { syncDataSource } from '@/app/(protected)/learning/actions'
 
@@ -21,6 +21,9 @@ export default function SourceSyncButton({ sources }: { sources: SyncSource[] })
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
 
   if (sources.length === 0) return null
 
@@ -45,7 +48,9 @@ export default function SourceSyncButton({ sources }: { sources: SyncSource[] })
   const anyError = sources.find((s) => s.sync_error)?.sync_error ?? null
 
   const dot = anyError ? 'bg-[#E24B4A]' : oldestSync ? 'bg-[#5BAE5B]' : 'bg-amber-400'
-  const status = anyError ?? (oldestSync ? `Synced ${formatRelative(oldestSync)}` : 'Never synced')
+  const status = anyError ?? (oldestSync
+    ? mounted ? `Synced ${formatRelative(oldestSync)}` : 'Synced'
+    : 'Never synced')
 
   return (
     <div className="flex items-center gap-2.5 text-xs text-zinc-400">

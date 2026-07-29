@@ -13,14 +13,13 @@ import {
   flexRender,
   createColumnHelper,
   type Column,
-  type ColumnFiltersState,
   type ColumnSizingState,
   type FilterFn,
-  type SortingState,
 } from '@tanstack/react-table'
 import type { Member, CohortDay } from './ChallengeClient'
 import SyncToSheetButton from '@/components/SyncToSheetButton'
 import type { SyncToSheetResult } from '@/lib/sheetSync'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 const SIZING_KEY = 'hva-col-challenge'
 function loadSizing(): ColumnSizingState {
@@ -73,10 +72,9 @@ export default function ChallengeMatrixTable({
   syncAction: (sheetUrl: string, tab: string) => Promise<SyncToSheetResult>
   serviceAccountEmail: string
 }) {
-  const [sorting, setSorting]             = useState<SortingState>([])
+  const { sorting, columnFilters, search, setSearch, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('admissions-challenge-matrix', [])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>({})
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [search, setSearch]               = useState('')
 
   // Load saved column widths after mount (not during render) so the SSR markup
   // and the client's first render match — reading localStorage in a useState
@@ -235,8 +233,8 @@ export default function ChallengeMatrixTable({
     data: filtered,
     columns,
     state: { sorting, columnSizing, columnFilters, columnPinning: { left: ['name', 'email'] } },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater

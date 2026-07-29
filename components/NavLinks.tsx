@@ -1,7 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import {
+  rememberModuleRoute,
+  type ModuleRouteKey,
+} from '@/lib/moduleRouteMemory'
 
 function DashboardIcon() {
   return (
@@ -143,9 +148,16 @@ const STAFF_LINKS: NavItem[] = [
 ]
 
 export default function NavLinks({ role }: { role: 'admin' | 'staff' | 'guest' }) {
-  const pathname = usePathname()
+  const pathname     = usePathname()
+  const searchParams = useSearchParams()
+  const query        = searchParams.toString()
+  const [rememberedRoutes, setRememberedRoutes] = useState<Partial<Record<ModuleRouteKey, string>>>({})
   const rawLinks = (role === 'admin' || role === 'guest') ? ADMIN_LINKS : STAFF_LINKS
   const links    = role === 'guest' ? rawLinks.filter((l) => !l.hideForGuest) : rawLinks
+
+  useEffect(() => {
+    setRememberedRoutes(rememberModuleRoute(window.sessionStorage, role, pathname, query))
+  }, [pathname, query, role])
 
   return (
     <nav className="flex flex-col gap-0.5 px-3">
@@ -156,7 +168,7 @@ export default function NavLinks({ role }: { role: 'admin' | 'staff' | 'guest' }
         return (
           <div key={href}>
             <Link
-              href={children ? children[0].href : href}
+              href={rememberedRoutes[href as ModuleRouteKey] ?? (children ? children[0].href : href)}
               className={`relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 active
                   ? 'bg-zinc-800 text-white'

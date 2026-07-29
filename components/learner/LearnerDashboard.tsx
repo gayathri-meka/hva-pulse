@@ -8,6 +8,7 @@ import PlacedCelebration from '@/components/learner/PlacedCelebration'
 import type { MyStatus } from '@/types'
 import type { ReasonEntry } from '@/lib/snapshot'
 import type { ApplyBlock } from '@/lib/learner/apply-eligibility'
+import { usePersistentState } from '@/hooks/usePersistentState'
 
 type RoleItem = {
   id: string
@@ -128,8 +129,14 @@ type Props = {
 export default function LearnerDashboard({ firstName, snapshot, ignoredOpenCount, roles, notShortlistedReasons, rejectedReasons, hasResume, readOnly = false, blockReason = null }: Props) {
   const isBlocked = blockReason !== null
   const isPlaced  = blockReason?.type === 'placed'
-  const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
-  const [appliedSort, setAppliedSort] = useState<AppliedSort>('most_active')
+  const [activeFilter, setActiveFilter] = usePersistentState<FilterKey>(
+    'learner-dashboard:filter', 'all', { validate: (value): value is FilterKey =>
+      typeof value === 'string' && value in FILTER_LABELS },
+  )
+  const [appliedSort, setAppliedSort] = usePersistentState<AppliedSort>(
+    'learner-dashboard:sort', 'most_active', { validate: (value): value is AppliedSort =>
+      value === 'most_active' || value === 'date_applied' },
+  )
 
   function handleViewIgnored() {
     setActiveFilter('ignored')

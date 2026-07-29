@@ -11,14 +11,13 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
   type ColumnSizingState,
-  type ColumnFiltersState,
   type Column,
   type FilterFn,
 } from '@tanstack/react-table'
 import type { JobOpportunityWithPersona, JobPersona } from '@/types'
 import OpportunityDrawer from './OpportunityDrawer'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 // ── Status display ────────────────────────────────────────────────────────────
 const STATUS_BADGE: Record<string, string> = {
@@ -131,10 +130,9 @@ export default function OpportunitiesClient({ opportunities }: Props) {
   const searchParams = useSearchParams()
   const selectedId   = searchParams.get('id') ?? undefined
 
-  const [search, setSearch]               = useState('')
-  const [sorting, setSorting]             = useState<SortingState>([{ id: 'date_posted', desc: true }])
+  const { sorting, columnFilters, search, setSearch, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('outreach-opportunities', [{ id: 'date_posted', desc: true }])
   const [columnSizing, setColumnSizing]   = useState<ColumnSizingState>(loadSizing)
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   const selectedOpportunity = selectedId
     ? opportunities.find((o) => o.id === selectedId) ?? null
@@ -218,8 +216,8 @@ export default function OpportunitiesClient({ opportunities }: Props) {
     data: filtered,
     columns,
     state: { sorting, columnSizing, columnFilters },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater

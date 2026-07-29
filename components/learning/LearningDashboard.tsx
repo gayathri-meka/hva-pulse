@@ -13,8 +13,6 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
-  type ColumnFiltersState,
   type FilterFn,
   type Column,
   type VisibilityState,
@@ -22,6 +20,8 @@ import {
   type ColumnOrderState,
   type Header,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
+import { usePersistentState } from '@/hooks/usePersistentState'
 import {
   DndContext,
   closestCenter,
@@ -416,10 +416,8 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
     return new Set(param ? param.split(',') : [])
   }, [searchParams])
 
-  const [sorting,          setSorting]          = useState<SortingState>([])
-  const [columnFilters,    setColumnFilters]    = useState<ColumnFiltersState>([
-    { id: 'status', value: ['Ongoing'] },
-  ])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('learning-dashboard', [], [{ id: 'status', value: ['Ongoing'] }])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     lf_name:    false,
     batch_name: false,
@@ -427,7 +425,10 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
   })
   const [columnSizing,     setColumnSizing]     = useState<ColumnSizingState>({})
   const [columnOrder,      setColumnOrder]      = useState<ColumnOrderState>([])
-  const [nameSearch,       setNameSearch]       = useState<string[]>([])
+  const [nameSearch, setNameSearch] = usePersistentState<string[]>(
+    'learning-dashboard:name-search', [], { validate: (value): value is string[] =>
+      Array.isArray(value) && value.every((id) => typeof id === 'string') },
+  )
   const [showColMenu,      setShowColMenu]      = useState(false)
   const [popover,          setPopover]          = useState<PopoverState | null>(null)
   const colMenuRef                              = useRef<HTMLDivElement>(null)
@@ -516,8 +517,8 @@ export default function LearningDashboard({ learners, metrics, subCohortOptions,
     data:    learners,
     columns: allColumns,
     state:   { sorting, columnFilters, columnVisibility, columnSizing, columnOrder: reconciledOrder },
-    onSortingChange:       setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnVisibilityChange: (updater) => {
       setColumnVisibility((old: VisibilityState) => {
         const next = typeof updater === 'function' ? updater(old) : updater
