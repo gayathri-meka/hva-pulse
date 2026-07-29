@@ -213,6 +213,38 @@ export function isNumericRangeLabel(label: string): boolean {
   return values.length >= 2 || (values.length === 1 && /above|over|more than|below|under|less than|up to|upto|[<>≤]/i.test(label))
 }
 
+type IntegerRange = { min: number; max: number }
+
+/** The whole-rupee interval matched by a numeric range label. */
+function numericIntegerRange(label: string): IntegerRange | null {
+  const values = moneyValues(label)
+  if (!values.length) return null
+  if (values.length >= 2) return {
+    min: Math.ceil(Math.min(values[0], values[1])),
+    max: Math.floor(Math.max(values[0], values[1])),
+  }
+
+  const text = label.toLowerCase()
+  if (/above|over|more than|>/.test(text)) return { min: Math.floor(values[0]) + 1, max: Infinity }
+  // Keep this consistent with numericRangeMatches: all lower-bound wording is inclusive.
+  if (/below|under|less than|up to|upto|<=|≤|</.test(text)) return { min: 0, max: Math.floor(values[0]) }
+  return null
+}
+
+/**
+ * Validate score 0..4 as descending income bands that cover every non-negative
+ * whole-rupee value exactly once. Per-capita income is rounded before scoring.
+ */
+export function perCapitaRangesFormPartition(optionLabels: Record<string, string>): boolean {
+  const ranges = [0, 1, 2, 3, 4].map((score) => numericIntegerRange(optionLabels[String(score)] ?? ''))
+  if (ranges.some((range) => range == null || range.min > range.max)) return false
+
+  const validRanges = ranges as IntegerRange[]
+  const [highest, ...rest] = validRanges
+  if (highest.max !== Infinity || validRanges.at(-1)?.min !== 0) return false
+  return rest.every((range, index) => validRanges[index]!.min === range.max + 1)
+}
+
 // The chosen option's base (unweighted) score + a human-readable label for a raw
 // answer to one question, or null if unanswered / unrecognised.
 export function resolveAnswer(q: SesQuestion, raw: string | null | undefined): { score: number; label: string } | null {

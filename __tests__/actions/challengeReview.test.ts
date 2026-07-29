@@ -292,8 +292,8 @@ describe('updateChallengeReviewConfig', () => {
           label: '  Per-capita income  ',
           answerSource: 'per_capita_income',
           optionLabels: {
-            '0': '  Above ₹2L  ', '1': '  ₹1.5L–₹2L  ', '2': '  ₹1L–₹1.5L  ',
-            '3': '  ₹50k–₹1L  ', '4': '  Up to ₹50k  ',
+            '0': '  Above ₹2L  ', '1': '  ₹1.5L–₹2L  ', '2': '  ₹1L–₹1,49,999  ',
+            '3': '  ₹50,001–₹99,999  ', '4': '  Up to ₹50k  ',
           },
         }],
       },
@@ -304,10 +304,29 @@ describe('updateChallengeReviewConfig', () => {
       label: 'Per-capita income',
       answerSource: 'per_capita_income',
       optionLabels: {
-        '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1.5L',
-        '3': '₹50k–₹1L', '4': 'Up to ₹50k',
+        '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1,49,999',
+        '3': '₹50,001–₹99,999', '4': 'Up to ₹50k',
       },
     }])
+  })
+
+  test.each([
+    ['gaps', { '0': 'Above ₹2L', '1': '₹1.5L–₹1.9L', '2': '₹1L–₹1,49,999', '3': '₹50,001–₹99,999', '4': 'Up to ₹50k' }],
+    ['overlaps', { '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1.5L', '3': '₹50k–₹1L', '4': 'Up to ₹50k' }],
+    ['five identical open-ended bands', { '0': 'Above ₹2L', '1': 'Above ₹2L', '2': 'Above ₹2L', '3': 'Above ₹2L', '4': 'Above ₹2L' }],
+    ['reordered bands', { '0': 'Up to ₹50k', '1': '₹50,001–₹99,999', '2': '₹1L–₹1,49,999', '3': '₹1.5L–₹2L', '4': 'Above ₹2L' }],
+    ['no zero-income coverage', { '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1,49,999', '3': '₹50,001–₹99,999', '4': '₹1–₹50k' }],
+  ])('rejects per-capita ranges with %s', async (_case, optionLabels) => {
+    vi.mocked(requireStaff).mockResolvedValue(adminUser)
+    const res = await updateChallengeReviewConfig({
+      cohortId: 214,
+      courseId: 587,
+      thresholds: {
+        ...good,
+        sesQuestions: [{ key: 'ses_custom_income', label: 'Per-capita income', answerSource: 'per_capita_income', optionLabels }],
+      },
+    })
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('no gaps or overlaps') })
   })
 })
 

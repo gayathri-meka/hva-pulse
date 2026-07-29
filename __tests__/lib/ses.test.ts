@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { optionScore, resolveAnswer, computeSes, configuredSesRubric, isNumericRangeLabel, numericRangeMatches, sesMaxScore, effectiveWeight, SES_RUBRIC, updateSesQuestionLabel } from '@/lib/ses'
+import { optionScore, resolveAnswer, computeSes, configuredSesRubric, isNumericRangeLabel, numericRangeMatches, perCapitaRangesFormPartition, sesMaxScore, effectiveWeight, SES_RUBRIC, updateSesQuestionLabel } from '@/lib/ses'
 
 const q = (key: string) => SES_RUBRIC.find((x) => x.key === key)!
 
@@ -156,6 +156,17 @@ describe('computeSes', () => {
     expect(numericRangeMatches('Above ₹2L', 250_000)).toBe(true)
     expect(isNumericRangeLabel('₹50,001–₹1L')).toBe(true)
     expect(isNumericRangeLabel('some income')).toBe(false)
+  })
+
+  it('accepts only a complete, ordered partition of non-negative per-capita income', () => {
+    expect(perCapitaRangesFormPartition({
+      '0': 'Above ₹2L', '1': '₹1,50,001–₹2L', '2': '₹1,00,001–₹1.5L',
+      '3': '₹50,001–₹1L', '4': 'Up to ₹50k',
+    })).toBe(true)
+    expect(perCapitaRangesFormPartition({
+      '0': 'Above ₹2L', '1': '₹1.5L–₹2L', '2': '₹1L–₹1.5L',
+      '3': '₹50k–₹1L', '4': 'Up to ₹50k',
+    })).toBe(false)
   })
 })
 

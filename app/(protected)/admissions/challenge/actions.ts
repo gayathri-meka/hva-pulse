@@ -6,7 +6,7 @@ import { requireStaff } from '@/lib/auth'
 import { runBigQuery } from '@/lib/bigquery'
 import { candidateRejectionReasons } from '@/lib/challengeReview'
 import type { CriterionResult, SystemDecision, ReviewThresholds, CandidateSignals } from '@/lib/challengeReview'
-import { isNumericRangeLabel, SES_SOURCE_CATALOG, sesAnswerSource } from '@/lib/ses'
+import { isNumericRangeLabel, perCapitaRangesFormPartition, SES_SOURCE_CATALOG, sesAnswerSource } from '@/lib/ses'
 import {
   toChatMessage,
   blocksToText,
@@ -540,6 +540,9 @@ export async function updateChallengeReviewConfig(input: {
   if (sesQuestions?.some((q) => q.answerSource === 'per_capita_income' && (
     !q.optionLabels || ['0', '1', '2', '3', '4'].some((score) => !isNumericRangeLabel(q.optionLabels?.[score] ?? ''))
   ))) return { ok: false, error: 'Per-capita income needs a valid range for every score from 0 to 4.' }
+  if (sesQuestions?.some((q) => q.answerSource === 'per_capita_income' && (
+    !q.optionLabels || !perCapitaRangesFormPartition(q.optionLabels)
+  ))) return { ok: false, error: 'Per-capita income ranges must be ordered, with no gaps or overlaps, and cover every income from ₹0 upward.' }
 
   // Excluded colleges: trim, drop blanks, dedupe (case-insensitive).
   const seenCollege = new Set<string>()
