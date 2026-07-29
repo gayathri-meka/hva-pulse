@@ -8,9 +8,9 @@ import {
   getSortedRowModel,
   flexRender,
   createColumnHelper,
-  type SortingState,
   type ColumnSizingState,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 const SIZING_KEY = 'hva-col-users'
 function loadSizing(): ColumnSizingState {
@@ -41,7 +41,7 @@ const col = createColumnHelper<User>()
 const inputCls = 'w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900'
 
 export default function UsersTable({ users, currentUserId }: { users: User[]; currentUserId: string }) {
-  const [sorting, setSorting]           = useState<SortingState>([])
+  const { sorting, onSortingChange } = usePersistentTableState('users', [])
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadSizing)
   const [editId, setEditId]             = useState<string | null>(null)
   const [editName, setEditName]         = useState('')
@@ -255,7 +255,7 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
     data: users,
     columns,
     state: { sorting, columnSizing },
-    onSortingChange: setSorting,
+    onSortingChange,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater

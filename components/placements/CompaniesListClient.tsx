@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
   DndContext,
   closestCenter,
@@ -23,6 +23,10 @@ import CompanyAccordion from './CompanyAccordion'
 import RolesTable, { type RolesTableHandle } from './RolesTable'
 import { reorderCompanies } from '@/app/(protected)/placements/actions'
 import type { CompanyWithRoles } from '@/types'
+import { enumParam } from '@/lib/urlState'
+import { useClientUrlUpdates } from '@/hooks/useClientUrlUpdates'
+import { usePersistentState } from '@/hooks/usePersistentState'
+import { usePersistentSet } from '@/hooks/usePersistentSet'
 
 type ViewMode = 'cards' | 'table'
 
@@ -99,24 +103,70 @@ export default function CompaniesListClient({
   companies: CompanyWithRoles[]
   initialView?: ViewMode
 }) {
-  const router       = useRouter()
   const searchParams = useSearchParams()
+  const scheduleUrl  = useClientUrlUpdates()
+  const hasViewParam = searchParams.has('view')
+  const hasRoleFilterParam = searchParams.has('roleFilter')
+  const hasSearchParam = searchParams.has('q')
 
-  const [view, setView] = useState<ViewMode>(initialView)
+  const urlView = enumParam(searchParams, 'view', ['cards', 'table'] as const, initialView)
+  const [view, setView, viewReady] = usePersistentState<ViewMode>(
+    'placements-companies:view',
+    urlView,
+    { restore: !hasViewParam, validate: (value): value is ViewMode =>
+      value === 'cards' || value === 'table' },
+  )
 
   function switchView(v: ViewMode) {
     setView(v)
     const params = new URLSearchParams(searchParams.toString())
     params.set('view', v)
     if (v === 'cards') params.delete('week')
-    router.push(`?${params.toString()}`)
+    scheduleUrl({ view: v, week: v === 'cards' ? null : params.get('week') })
   }
 
   // orderedIds drives display order; initial is the source of truth for data
   const [orderedIds, setOrderedIds] = useState<string[]>(() => initial.map((c) => c.id))
-  const [openIds, setOpenIds]       = useState<Set<string>>(() => new Set(initial.map((c) => c.id)))
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
-  const [search, setSearch]         = useState('')
+  const [openIds, setOpenIds] = usePersistentSet('placements-companies:open-ids', initial.map((c) => c.id))
+  const urlRoleFilter = enumParam(searchParams, 'roleFilter', ['all', 'open', 'ongoing'] as const, 'all')
+  const urlSearch = searchParams.get('q') ?? ''
+  const [roleFilter, setRoleFilterState, roleFilterReady] = usePersistentState<RoleFilter>(
+    'placements-companies:role-filter',
+    urlRoleFilter,
+    { restore: !hasRoleFilterParam, validate: (value): value is RoleFilter =>
+      value === 'all' || value === 'open' || value === 'ongoing' },
+  )
+  const [search, setSearchState, searchReady] = usePersistentState(
+    'placements-companies:search',
+    urlSearch,
+    { restore: !hasSearchParam, validate: (value): value is string => typeof value === 'string' },
+  )
+
+  useEffect(() => { if (hasViewParam) setView(urlView) }, [hasViewParam, setView, urlView])
+  useEffect(() => { if (hasRoleFilterParam) setRoleFilterState(urlRoleFilter) }, [hasRoleFilterParam, setRoleFilterState, urlRoleFilter])
+  useEffect(() => { if (hasSearchParam) setSearchState(urlSearch) }, [hasSearchParam, setSearchState, urlSearch])
+  useEffect(() => {
+    if (viewReady && !hasViewParam && view !== initialView) scheduleUrl({ view })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewReady, view, hasViewParam])
+  useEffect(() => {
+    if (roleFilterReady && !hasRoleFilterParam && roleFilter !== 'all') scheduleUrl({ roleFilter })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleFilterReady, roleFilter, hasRoleFilterParam])
+  useEffect(() => {
+    if (searchReady && !hasSearchParam && search) scheduleUrl({ q: search }, 'replace')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchReady, search, hasSearchParam])
+
+  function setRoleFilter(next: RoleFilter) {
+    setRoleFilterState(next)
+    scheduleUrl({ roleFilter: next === 'all' ? null : next })
+  }
+
+  function setSearch(next: string) {
+    setSearchState(next)
+    scheduleUrl({ q: next || null }, 'replace')
+  }
 
   // Track which IDs we've already seen so we only auto-expand genuinely new companies,
   // not the ones present on the initial render.

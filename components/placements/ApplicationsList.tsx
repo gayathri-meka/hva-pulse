@@ -8,13 +8,12 @@ import {
   getFilteredRowModel,
   flexRender,
   createColumnHelper,
-  type SortingState,
   type RowSelectionState,
   type ColumnSizingState,
-  type ColumnFiltersState,
   type FilterFn,
   type Column,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 const SIZING_KEY = 'hva-col-applications'
 function loadSizing(): ColumnSizingState {
@@ -178,10 +177,10 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
   // Show reason columns only when the matching status filter pill is active.
   const showNsReasonColumn       = statusFilter === 'not_shortlisted'
   const showRejectionReasonColumn = statusFilter === 'rejected'
-  const [sorting, setSorting]               = useState<SortingState>([])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('placement-applications', [])
   const [rowSelection, setRowSelection]     = useState<RowSelectionState>({})
   const [columnSizing, setColumnSizing]     = useState<ColumnSizingState>(loadSizing)
-  const [columnFilters, setColumnFilters]   = useState<ColumnFiltersState>([])
   const [statusMap, setStatusMap]       = useState<Record<string, string>>(() =>
     Object.fromEntries(applications.map((a) => [a.id, a.status]))
   )
@@ -482,9 +481,9 @@ export default function ApplicationsList({ applications, statusCounts, total, ns
     data: applications,
     columns,
     state: { sorting, rowSelection, columnSizing, columnFilters },
-    onSortingChange: setSorting,
+    onSortingChange,
     onRowSelectionChange: setRowSelection,
-    onColumnFiltersChange: setColumnFilters,
+    onColumnFiltersChange,
     onColumnSizingChange: (updater) => {
       setColumnSizing((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater

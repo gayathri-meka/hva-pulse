@@ -2,23 +2,26 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useRememberedNavRoutes } from '@/hooks/useRememberedNavRoutes'
 
 const TABS = [
-  { href: '/outreach/personas', label: 'Job Personas' },
-  { href: '/outreach/opportunities', label: 'Potential Opportunities' },
-]
+  { key: 'personas', fallback: '/outreach/personas', label: 'Job Personas' },
+  { key: 'opportunities', fallback: '/outreach/opportunities', label: 'Potential Opportunities' },
+] as const
 
 export default function OutreachNav() {
   const pathname = usePathname()
+  const rememberedHref = useRememberedNavRoutes('outreach', TABS)
 
   return (
     <div className="flex gap-1 border-b border-zinc-200">
-      {TABS.map(({ href, label }) => {
-        const active = pathname.startsWith(href)
+      {TABS.map((tab) => {
+        const { fallback, label } = tab
+        const active = pathname === fallback || pathname.startsWith(`${fallback}/`)
         return (
           <Link
-            key={href}
-            href={href}
+            key={tab.key}
+            href={rememberedHref(tab)}
             className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
               active ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
             }`}

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 // Universal navigation loader. Any internal anchor click is intercepted and a
@@ -26,9 +26,15 @@ export function useNavigationLoader(): Ctx {
   return ctx ?? { start: () => {}, active: false }
 }
 
-export default function GlobalNavigationLoader({ children }: { children: ReactNode }) {
-  const pathname     = usePathname()
+function NavigationCompletionListener({ onComplete }: { onComplete: () => void }) {
+  const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  useEffect(onComplete, [pathname, searchParams, onComplete])
+  return null
+}
+
+export default function GlobalNavigationLoader({ children }: { children: ReactNode }) {
   const [active, setActive] = useState(false)
 
   // Track timers so we can cancel on URL change. showTimer queues the loader;
@@ -36,26 +42,23 @@ export default function GlobalNavigationLoader({ children }: { children: ReactNo
   const showTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function clearTimers() {
+  const clearTimers = useCallback(() => {
     if (showTimer.current)   { clearTimeout(showTimer.current);   showTimer.current   = null }
     if (safetyTimer.current) { clearTimeout(safetyTimer.current); safetyTimer.current = null }
-  }
+  }, [])
 
-  function start() {
+  const start = useCallback(() => {
     clearTimers()
     showTimer.current = setTimeout(() => {
       setActive(true)
       safetyTimer.current = setTimeout(() => setActive(false), SAFETY_MAX_MS)
     }, SHOW_DELAY_MS)
-  }
+  }, [clearTimers])
 
-  // URL change = navigation complete. Cancel any pending timer and hide.
-  useEffect(() => {
+  const complete = useCallback(() => {
     clearTimers()
     setActive(false)
-    // pathname/searchParams in deps; once they update the effect fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, searchParams])
+  }, [clearTimers])
 
   // Global click handler — catches every internal anchor without needing to
   // touch individual components.
@@ -72,7 +75,7 @@ export default function GlobalNavigationLoader({ children }: { children: ReactNo
       // Skip target=_blank.
       if (anchor.getAttribute('target') === '_blank') return
       // Skip "same URL" clicks (re-clicking the active tab).
-      const current = pathname + (searchParams.toString() ? '?' + searchParams.toString() : '')
+      const current = window.location.pathname + window.location.search
       if (href === current) return
 
       start()
@@ -80,10 +83,13 @@ export default function GlobalNavigationLoader({ children }: { children: ReactNo
     document.addEventListener('click', onClick)
     return () => document.removeEventListener('click', onClick)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, searchParams])
+  }, [start])
+
+  const value = useMemo(() => ({ start, active }), [start, active])
 
   return (
-    <NavLoaderCtx.Provider value={{ start, active }}>
+    <NavLoaderCtx.Provider value={value}>
+      <NavigationCompletionListener onComplete={complete} />
       {children}
     </NavLoaderCtx.Provider>
   )

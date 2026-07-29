@@ -1,15 +1,16 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   flexRender,
   createColumnHelper,
-  type SortingState,
 } from '@tanstack/react-table'
 import CaseHistory, { type ClosedCase } from './CaseHistory'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
+import { usePersistentSet } from '@/hooks/usePersistentSet'
 
 // Compact table of closed cases. Each row collapses into a summary; clicking
 // the row toggles an expanded detail panel underneath that reuses the same
@@ -115,8 +116,9 @@ const columns = [
 
 export default function ClosedCasesTable({ rows }: Props) {
   // Default to most recently closed first.
-  const [sorting, setSorting]         = useState<SortingState>([{ id: 'closed_at', desc: true }])
-  const [expanded, setExpanded]       = useState<Set<string>>(new Set())
+  const { sorting, onSortingChange } =
+    usePersistentTableState('learning-closed-cases', [{ id: 'closed_at', desc: true }])
+  const [expanded, setExpanded] = usePersistentSet('learning-closed-cases:expanded')
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -130,7 +132,7 @@ export default function ClosedCasesTable({ rows }: Props) {
     data:    rows,
     columns,
     state:   { sorting },
-    onSortingChange:   setSorting,
+    onSortingChange,
     getCoreRowModel:   getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getRowId: (row) => row.id,

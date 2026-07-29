@@ -13,14 +13,13 @@ import {
   getFacetedUniqueValues,
   flexRender,
   createColumnHelper,
-  type SortingState,
   type ColumnSizingState,
-  type ColumnFiltersState,
   type ColumnOrderState,
   type Column,
   type FilterFn,
   type VisibilityState,
 } from '@tanstack/react-table'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 
 export type MatchingStatus =
   | 'applied' | 'shortlisted' | 'interviews_ongoing' | 'on_hold' | 'not_shortlisted' | 'rejected' | 'hired' | 'placed_elsewhere'
@@ -264,9 +263,9 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
 }) {
   const NS_REASONS = nsReasons ?? DEFAULT_NS_REASONS
   const REJECTION_REASONS = rejectionReasons ?? DEFAULT_REJECTION_REASONS
-  const [sorting, setSorting]                   = useState<SortingState>([{ id: 'prs_score', desc: true }])
+  const { sorting, columnFilters, onSortingChange, onColumnFiltersChange } =
+    usePersistentTableState('placement-matching', [{ id: 'prs_score', desc: true }])
   const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>(loadSizing)
-  const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [showColMenu, setShowColMenu]           = useState(false)
   const colMenuRef                              = useRef<HTMLDivElement>(null)
@@ -627,8 +626,8 @@ export default function MatchingTable({ rows, roleSelected = true, subCohortOpti
     data: rows,
     columns,
     state: { sorting, columnSizing, columnFilters, columnOrder, columnVisibility: { ...columnVisibility, status: roleSelected } },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnVisibilityChange: (updater) => {
       setColumnVisibility((old) => {
         const next = typeof updater === 'function' ? updater(old) : updater

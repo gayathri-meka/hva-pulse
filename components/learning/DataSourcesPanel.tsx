@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import {
   previewSheetSource,
   createDataSource,
@@ -95,6 +95,9 @@ function SourceCard({ source }: { source: DataSource }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
 
   function handleSync() {
     setError('')
@@ -120,7 +123,7 @@ function SourceCard({ source }: { source: DataSource }) {
   }
 
   const syncTime = source.last_synced_at
-    ? `Synced ${formatRelative(source.last_synced_at)}`
+    ? mounted ? `Synced ${formatRelative(source.last_synced_at)}` : 'Synced'
     : 'Never synced'
 
   const syncDotColor = source.sync_error

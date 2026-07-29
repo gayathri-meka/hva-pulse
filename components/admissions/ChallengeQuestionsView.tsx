@@ -11,6 +11,7 @@ import { scoreBadgeClass } from '@/lib/sensaiChat'
 import QuestionContext from '@/components/sensai/QuestionContext'
 import EvalTagger from '@/components/evals/EvalTagger'
 import { getGradingEvals } from '@/app/(protected)/admissions/challenge/evals'
+import { usePersistentState } from '@/hooks/usePersistentState'
 import { EVAL_CONTEXT_SCREENING, computeEvalStats, symptomLabel, type GradingEval } from '@/lib/evals'
 
 export type TaskCatalogDay = {
@@ -43,7 +44,11 @@ function Chevron({ open }: { open: boolean }) {
 const labelKey = (questionId: string, email: string, attemptAt: string) => `${questionId}||${email}||${attemptAt}`
 
 export default function ChallengeQuestionsView({ days }: { days: TaskCatalogDay[] }) {
-  const [openDay, setOpenDay] = useState<number | null>(days[0]?.ordering ?? null)
+  const [openDay, setOpenDay] = usePersistentState<number | null>(
+    'admissions-challenge-questions:open-day',
+    days[0]?.ordering ?? null,
+    { validate: (value): value is number | null => value == null || typeof value === 'number' },
+  )
   const [openTask, setOpenTask] = useState<string | null>(null)
   const [questions, setQuestions] = useState<Record<string, TaskQuestion[] | 'loading' | 'error'>>({})
   const [selected, setSelected] = useState<{ questionId: string; title: string; taskTitle: string } | null>(null)

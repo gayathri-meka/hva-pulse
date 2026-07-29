@@ -10,7 +10,6 @@ import {
   getFacetedUniqueValues,
   flexRender,
   type ColumnDef,
-  type ColumnFiltersState,
   type ColumnSizingState,
   type RowSelectionState,
   type SortingState,
@@ -18,6 +17,7 @@ import {
 } from '@tanstack/react-table'
 import { exportToCsv } from '@/lib/exportToCsv'
 import { multiSelectFilter, rowMatchesSearch } from '@/lib/tableFilters'
+import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 import ColumnFilterDropdown from './ColumnFilterDropdown'
 
 // ── Shared, standardised data table ─────────────────────────────────────────
@@ -99,12 +99,11 @@ export default function DataTable<T>({
   const VIS_KEY = `dt:${storageKey}:visibility`
 
   const isDesktop = useIsDesktop()
-  const [sorting, setSorting] = useState<SortingState>(initialSorting)
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const { sorting, columnFilters, search, onSortingChange, onColumnFiltersChange, setSearch } =
+    usePersistentTableState(storageKey, initialSorting)
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const [search, setSearch] = useState('')
   const [showColMenu, setShowColMenu] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
 
@@ -172,8 +171,8 @@ export default function DataTable<T>({
       },
     },
     onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onSortingChange,
+    onColumnFiltersChange,
     onColumnVisibilityChange: (u) => {
       setColumnVisibility((old) => {
         const next = typeof u === 'function' ? u(old) : u
@@ -235,7 +234,7 @@ export default function DataTable<T>({
           )}
           {renderSlot(toolbarLeft)}
           {columnFilters.length > 0 && (
-            <button onClick={() => setColumnFilters([])} className="text-xs font-medium text-blue-500 hover:text-blue-700">
+            <button onClick={() => onColumnFiltersChange([])} className="text-xs font-medium text-blue-500 hover:text-blue-700">
               Clear filters
             </button>
           )}
@@ -406,4 +405,3 @@ function CheckboxCell({
     />
   )
 }
-

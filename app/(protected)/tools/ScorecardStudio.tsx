@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { inspectScorecard, rewriteScorecard, generateScorecard, testScorecard } from './actions'
 import type { InspectResult, TestRun } from '@/lib/tools/scorecard'
+import { usePersistentState } from '@/hooks/usePersistentState'
 
 type TabId = 'generate' | 'inspect' | 'test'
 
@@ -76,7 +77,10 @@ function ScorecardPre({ text }: { text: string }) {
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function ScorecardStudio() {
-  const [tab, setTab] = useState<TabId>('generate')
+  const [tab, setTab] = usePersistentState<TabId>(
+    'scorecard-studio:tab', 'generate', { validate: (value): value is TabId =>
+      value === 'generate' || value === 'inspect' || value === 'test' },
+  )
   const active = TABS.find((t) => t.id === tab)!
 
   return (

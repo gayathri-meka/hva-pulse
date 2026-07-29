@@ -2,26 +2,29 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useRememberedNavRoutes } from '@/hooks/useRememberedNavRoutes'
 
 const TABS = [
-  { href: '/admissions/learner-applications', label: 'Website hits' },
-  { href: '/admissions/prospects',            label: 'Prospects' },
-  { href: '/admissions/challenge',            label: 'Challenge' },
-  { href: '/admissions/interviews',           label: 'Interviews' },
-  { href: '/admissions/analytics',            label: 'Analytics' },
-]
+  { key: 'website-hits', fallback: '/admissions/learner-applications', label: 'Website hits' },
+  { key: 'prospects',    fallback: '/admissions/prospects',            label: 'Prospects' },
+  { key: 'challenge',    fallback: '/admissions/challenge',            label: 'Challenge' },
+  { key: 'interviews',   fallback: '/admissions/interviews',           label: 'Interviews' },
+  { key: 'analytics',    fallback: '/admissions/analytics',            label: 'Analytics' },
+] as const
 
 export default function AdmissionsNav() {
   const pathname = usePathname()
+  const rememberedHref = useRememberedNavRoutes('admissions', TABS)
 
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-zinc-200">
-      {TABS.map(({ href, label }) => {
-        const active = pathname.startsWith(href)
+      {TABS.map((tab) => {
+        const { fallback, label } = tab
+        const active = pathname === fallback || pathname.startsWith(`${fallback}/`)
         return (
           <Link
-            key={href}
-            href={href}
+            key={tab.key}
+            href={rememberedHref(tab)}
             className={`relative whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors md:px-4 ${
               active ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
             }`}
