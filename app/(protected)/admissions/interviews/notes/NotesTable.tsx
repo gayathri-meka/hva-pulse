@@ -1,130 +1,32 @@
 'use client'
 
-import { useMemo } from 'react'
-import Link from 'next/link'
-import { createColumnHelper } from '@tanstack/react-table'
-import DataTable from '@/components/ui/DataTable'
-import NotesReviewButton from '@/components/interviews/NotesReviewButton'
-import { roundLabel } from '@/lib/interviews'
-import { scoreTone, formatScore } from '@/lib/interviewCockpit'
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { ScoreRow } from '../cockpit-actions'
 
-const REC_STYLE: Record<string, string> = {
-  advance: 'bg-emerald-50 text-emerald-700',
-  borderline: 'bg-amber-50 text-amber-700',
-  no: 'bg-red-50 text-red-700',
-}
-const REC_LABEL: Record<string, string> = { advance: 'Advance', borderline: 'Borderline', no: 'Do not advance' }
-// Weak → strong tone for a score chip (scales can be fractional).
-const TONE_CHIP: Record<string, string> = {
-  red: 'bg-red-100 text-red-700',
-  amber: 'bg-amber-100 text-amber-700',
-  orange: 'bg-orange-100 text-orange-700',
-  emerald: 'bg-emerald-100 text-emerald-700',
-}
-
-const col = createColumnHelper<ScoreRow>()
-
-export default function NotesTable({ rubrics, rows }: { rubrics: { key: string; label: string }[]; rows: ScoreRow[] }) {
-  const columns = useMemo(
-    () => [
-      col.accessor((r) => r.candidateName ?? r.candidateEmail, {
-        id: 'name',
-        header: 'Name',
-        cell: (info) => (
-          <Link href={`/admissions/interviews/notes/${info.row.original.interviewId}`} className="font-medium text-zinc-900 hover:text-[#5BAE5B] hover:underline">
-            {info.getValue()}
-          </Link>
-        ),
-      }),
-      col.accessor('candidateEmail', {
-        id: 'email',
-        header: 'Email',
-        enableColumnFilter: false,
-        cell: (info) => <span className="text-zinc-500">{info.getValue()}</span>,
-      }),
-      col.accessor((r) => roundLabel(r.round, true), {
-        id: 'round',
-        header: 'Round',
-        cell: (info) => <span className="text-zinc-600">{info.getValue()}</span>,
-      }),
-      col.accessor((r) => r.interviewerName ?? '', {
-        id: 'interviewer',
-        header: 'Interviewer',
-        cell: (info) => <span className="text-zinc-600">{info.getValue() || '—'}</span>,
-      }),
-      col.accessor((r) => (r.recommendation ? REC_LABEL[r.recommendation] : 'Pending'), {
-        id: 'assessment',
-        header: 'Assessment',
-        cell: (info) => {
-          const rec = info.row.original.recommendation
-          if (!rec) return <span className="text-xs text-zinc-400">Pending</span>
-          return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${REC_STYLE[rec]}`}>{REC_LABEL[rec]}</span>
-        },
-      }),
-      // One column per active rubric — shows the 1–4 score chip.
-      ...rubrics.map((rb) =>
-        col.accessor((r) => r.scores[rb.key] ?? null, {
-          id: `rubric_${rb.key}`,
-          header: rb.label,
-          size: 140,
-          meta: { wrapHeader: true },
-          enableColumnFilter: false,
-          cell: (info) => {
-            const s = info.getValue() as number | null
-            if (s == null) return <span className="text-zinc-300">—</span>
-            return <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded px-1 text-[12px] font-bold ${TONE_CHIP[scoreTone(s)]}`}>{formatScore(s)}</span>
-          },
-        }),
-      ),
-      col.display({
-        id: 'ai',
-        header: 'AI review',
-        size: 110,
-        enableHiding: false,
-        enableColumnFilter: false,
-        cell: (info) => {
-          const r = info.row.original
-          // Only offer the AI check once there's something to review.
-          if (!r.hasNotes) return null
-          return (
-            <NotesReviewButton
-              interviewId={r.interviewId}
-              candidateName={r.candidateName ?? r.candidateEmail}
-              round={r.round}
-            />
-          )
-        },
-      }),
-      col.display({
-        id: 'action',
-        header: 'Notes',
-        size: 120,
-        enableHiding: false,
-        enableColumnFilter: false,
-        cell: (info) => (
-          <Link href={`/admissions/interviews/notes/${info.row.original.interviewId}`} className="whitespace-nowrap text-xs font-semibold text-[#5BAE5B] hover:underline">
-            {info.row.original.hasNotes ? 'View notes' : 'Take notes'} →
-          </Link>
-        ),
-      }),
-    ],
-    [rubrics],
-  )
+export default function NotesSearch({ rows }: { rubrics: { key: string; label: string }[]; rows: ScoreRow[] }) {
+  const router = useRouter()
+  const [query, setQuery] = useState('')
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return rows.filter((r) => `${r.candidateName ?? ''} ${r.candidateEmail}`.toLowerCase().includes(q)).slice(0, 10)
+  }, [query, rows])
 
   return (
-    <div className="mt-4">
-      <DataTable
-        data={rows}
-        columns={columns}
-        storageKey="interview-scores"
-        getRowId={(r) => r.interviewId}
-        pinnedLeft={['name']}
-        searchKeys={['candidateName', 'candidateEmail', 'interviewerName']}
-        searchPlaceholder="Search candidate or interviewer…"
-        csvFilename="interview_scores"
-        emptyMessage="No interviews yet."
-      />
+    <div className="mt-6 max-w-xl">
+      <label htmlFor="learner-notes-search" className="mb-1.5 block text-sm font-medium text-zinc-700">Search learner by name</label>
+      <input id="learner-notes-search" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Start typing a learner name…" className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#5BAE5B] focus:ring-2 focus:ring-[#5BAE5B]/15" />
+      {query.trim() && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+          {matches.length ? matches.map((row) => (
+            <button key={row.interviewId} type="button" onClick={() => router.push(`/admissions/interviews/notes/${row.interviewId}`)} className="flex w-full items-center justify-between border-b border-zinc-100 px-3 py-2.5 text-left last:border-0 hover:bg-zinc-50">
+              <span><span className="block text-sm font-medium text-zinc-900">{row.candidateName ?? row.candidateEmail}</span><span className="block text-xs text-zinc-500">{row.candidateEmail}</span></span>
+              <span className="text-xs font-medium text-[#5BAE5B]">Open notes →</span>
+            </button>
+          )) : <p className="px-3 py-4 text-sm text-zinc-500">No learner found.</p>}
+        </div>
+      )}
     </div>
   )
 }

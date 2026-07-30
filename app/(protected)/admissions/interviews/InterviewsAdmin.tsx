@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { addInterviewer, removeInterviewer, setInterviewerRound, type InterviewerRow } from './actions'
-import { computeInterviewMetrics, roundLabel, formatDateTimeIST, type InterviewSlot, type Interview } from '@/lib/interviews'
+import { computeInterviewMetrics, roundLabel, type InterviewSlot, type Interview } from '@/lib/interviews'
 
 const ROUND_STYLE: Record<number, string> = {
   1: 'bg-violet-50 text-violet-700 ring-violet-200',
@@ -47,16 +46,6 @@ function PanelSelect({
 
 type IvRow = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 
-const STATUS_STYLE: Record<string, string> = {
-  confirmed: 'bg-sky-50 text-sky-700',
-  booked: 'bg-sky-50 text-sky-700',
-  completed: 'bg-emerald-50 text-emerald-700',
-  no_show: 'bg-red-50 text-red-700',
-  cancelled: 'bg-zinc-100 text-zinc-500',
-}
-
-const fmt = formatDateTimeIST
-
 function Metric({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
@@ -82,11 +71,9 @@ export default function InterviewsAdmin({
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [round, setRound] = useState<1 | 2>(1)
-  const [hideCancelled, setHideCancelled] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const m = computeInterviewMetrics(slots, interviews)
-  const shownInterviews = hideCancelled ? interviews.filter((i) => i.status !== 'cancelled') : interviews
 
   function add() {
     if (!email.trim()) return
@@ -173,50 +160,6 @@ export default function InterviewsAdmin({
                       <button onClick={() => remove(iv.email)} disabled={pending} className="text-xs text-zinc-400 hover:text-red-600 disabled:opacity-50">Remove</button>
                     </td>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      {/* All interviews */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Interviews</h2>
-          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-500">
-            <input type="checkbox" checked={hideCancelled} onChange={(e) => setHideCancelled(e.target.checked)} className="h-3.5 w-3.5 rounded border-zinc-300 accent-[#5BAE5B]" />
-            Hide cancelled
-          </label>
-        </div>
-        {shownInterviews.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-400">{interviews.length === 0 ? 'No interviews booked yet.' : 'No interviews to show.'}</p>
-        ) : (
-          <table className="mt-3 w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-100 text-left text-xs text-zinc-400">
-                <th className="py-1.5 font-medium">Candidate</th><th className="py-1.5 font-medium">Round</th>
-                <th className="py-1.5 font-medium">Interviewer</th><th className="py-1.5 font-medium">When</th>
-                <th className="py-1.5 font-medium">Status</th><th />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-50">
-              {shownInterviews.map((i) => (
-                <tr key={i.id}>
-                  <td className="py-1.5 text-zinc-800">{i.candidateName ?? i.candidateEmail}</td>
-                  <td className="py-1.5 text-zinc-600">{roundLabel(i.round, true)}</td>
-                  <td className="py-1.5 text-zinc-600">{i.interviewerName ?? i.interviewerEmail}</td>
-                  <td className="py-1.5 text-zinc-600">{fmt(i.scheduledAt)}</td>
-                  <td className="py-1.5"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[i.status] ?? 'bg-zinc-100 text-zinc-500'}`}>{i.status.replace('_', '-')}</span></td>
-                  <td className="py-1.5 text-right">
-                    {i.status === 'cancelled' && !i.hasNotes ? (
-                      <span className="text-xs text-zinc-300">—</span>
-                    ) : (
-                      <Link href={`/admissions/interviews/notes/${i.id}`} className="text-xs font-medium text-[#5BAE5B] hover:underline">
-                        {i.hasNotes ? 'View notes' : 'Take notes'} →
-                      </Link>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>

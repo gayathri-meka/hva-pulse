@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "cd mcp && npm install --include=dev && npm run build && cd .. && next build",
-    "start": "next start",
+    "dev": "NODE_USE_SYSTEM_CA=1 next dev",
+    "build": "cd mcp && npm install --include=dev && npm run build && cd .. && NODE_USE_SYSTEM_CA=1 next build",
+    "start": "NODE_USE_SYSTEM_CA=1 next start",
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",

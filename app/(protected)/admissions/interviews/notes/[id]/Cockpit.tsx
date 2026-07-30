@@ -52,7 +52,7 @@ export default function Cockpit({ data }: { data: CockpitData }) {
       {/* Header */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/admissions/interviews/notes" className="text-xs font-medium text-zinc-400 hover:text-zinc-600">← Interview notes</Link>
+          <Link href="/admissions/interviews/notes" className="text-xs font-medium text-zinc-400 hover:text-zinc-600">← Back</Link>
           <h1 className="mt-1 text-lg font-bold tracking-tight text-zinc-900">
             {interview.candidateName ?? interview.candidateEmail}
             <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 align-middle text-[11px] font-semibold text-zinc-500">{roundLabel(interview.round)}</span>

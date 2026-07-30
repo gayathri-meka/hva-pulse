@@ -56,6 +56,7 @@ export type DataTableProps<T> = {
   toolbarRight?: Slot<T>
   emptyMessage?: string
   rowClassName?: (row: T) => string
+  onRowClick?: (row: T) => void
 }
 
 function useIsDesktop(): boolean {
@@ -94,6 +95,7 @@ export default function DataTable<T>({
   toolbarRight,
   emptyMessage = 'No rows.',
   rowClassName,
+  onRowClick,
 }: DataTableProps<T>) {
   const SIZING_KEY = `dt:${storageKey}:sizing`
   const VIS_KEY = `dt:${storageKey}:visibility`
@@ -348,7 +350,11 @@ export default function DataTable<T>({
               </thead>
               <tbody>
                 {table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className={`group hover:bg-zinc-50 ${rowClassName?.(row.original) ?? ''}`}>
+                  <tr
+                    key={row.id}
+                    onClick={() => onRowClick?.(row.original)}
+                    className={`group hover:bg-zinc-50 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row.original) ?? ''}`}
+                  >
                     {row.getVisibleCells().map((cell) => {
                       const pinned = cell.column.getIsPinned() === 'left'
                       const isLastPinned = pinned && cell.column.getIsLastColumn('left')

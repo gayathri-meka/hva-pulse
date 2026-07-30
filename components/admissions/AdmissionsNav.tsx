@@ -8,7 +8,7 @@ const TABS = [
   { key: 'website-hits', fallback: '/admissions/learner-applications', label: 'Website hits' },
   { key: 'prospects',    fallback: '/admissions/prospects',            label: 'Prospects' },
   { key: 'challenge',    fallback: '/admissions/challenge',            label: 'Challenge' },
-  { key: 'interviews',   fallback: '/admissions/interviews',           label: 'Interviews' },
+  { key: 'interviews',   fallback: '/admissions/interviews',           label: 'Personal Interviews' },
   { key: 'analytics',    fallback: '/admissions/analytics',            label: 'Analytics' },
 ] as const
 

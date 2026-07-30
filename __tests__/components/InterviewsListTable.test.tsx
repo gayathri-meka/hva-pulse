@@ -11,6 +11,8 @@ vi.mock('@/app/(protected)/admissions/interviews/actions', () => ({
   cancelInterview: vi.fn(),
 }))
 
+vi.mock('@/components/interviews/NotesReviewButton', () => ({ default: () => null }))
+
 vi.mock('@/components/ui/DataTable', () => ({
   default: ({ toolbarLeft }: { toolbarLeft: React.ReactNode }) => <div>{toolbarLeft}</div>,
 }))
@@ -20,13 +22,13 @@ describe('InterviewsListTable view persistence', () => {
 
   test('restores the Completed view after remounting', async () => {
     const first = render(<InterviewsListTable interviews={[]} />)
-    fireEvent.click(screen.getByRole('button', { name: 'completed' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }))
     await waitFor(() => expect(sessionStorage.getItem('hva-pulse:state:admissions-interviews-list:view'))
       .toBe('"completed"'))
     first.unmount()
 
     render(<InterviewsListTable interviews={[]} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'completed' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Completed' }))
       .toHaveClass('bg-zinc-900'))
   })
 })
