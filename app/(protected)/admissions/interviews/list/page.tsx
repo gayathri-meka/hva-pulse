@@ -15,7 +15,7 @@ export default async function InterviewsListPage() {
   ])
   return (
     <div>
-      <h1 className="text-lg font-bold tracking-tight text-zinc-900">Interviews</h1>
+      <h1 className="text-lg font-bold tracking-tight text-zinc-900">Personal Interviews</h1>
       <p className="mt-1 text-sm text-zinc-500">All interview candidates, including learners who have not scheduled yet. Click a scheduled interview to open its detailed notes.</p>
       <InterviewsListTable interviews={interviews} rubrics={scores.rubrics} scoreRows={scores.rows} candidates={candidates} />
     </div>

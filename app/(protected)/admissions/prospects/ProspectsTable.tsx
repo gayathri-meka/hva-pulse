@@ -3,13 +3,26 @@
 import { useMemo } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import type { Prospect } from './page'
-import ChallengeStatusBadge from '@/components/admissions/ChallengeStatusBadge'
 import CommentsCell from '@/components/admissions/CommentsCell'
 import { normEmail, type ProspectComment } from '@/lib/prospectComments'
 import DataTable from '@/components/ui/DataTable'
 import EmailCampaignButton, { type EmailCampaignAction } from '@/components/email/EmailCampaignButton'
 
-const EMAIL_FIELDS = ['name', 'email', 'phone', 'college', 'education_status', 'referral_source', 'challenge_status']
+const EMAIL_FIELDS = ['name', 'email', 'phone', 'college', 'education_status', 'referral_source', 'challenge_status', 'motivation_interview_status', 'coding_interview_status', 'final_verdict']
+
+const PIPELINE_TONE: Record<string, string> = {
+  Selected: 'bg-emerald-50 text-emerald-700',
+  Rejected: 'bg-red-50 text-red-700',
+  'In Progress': 'bg-amber-50 text-amber-700',
+  'Decision Pending': 'bg-amber-50 text-amber-700',
+  Joined: 'bg-blue-50 text-blue-700',
+  'Not Joined': 'bg-zinc-100 text-zinc-500',
+  'Not Done': 'bg-zinc-100 text-zinc-500',
+}
+
+function PipelineBadge({ status }: { status: string }) {
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${PIPELINE_TONE[status] ?? 'bg-zinc-100 text-zinc-600'}`}>{status}</span>
+}
 
 function formatLabel(value: string | null): string {
   if (!value) return '—'
@@ -114,8 +127,26 @@ export default function ProspectsTable({
       }),
       col.accessor('challenge_status', {
         header: 'Challenge',
-        size: 140,
-        cell: (info) => <ChallengeStatusBadge status={info.getValue()} />,
+        size: 160,
+        cell: (info) => <PipelineBadge status={info.getValue()} />,
+      }),
+      col.accessor('motivation_interview_status', {
+        header: 'Motivation Interview',
+        size: 180,
+        meta: { wrapHeader: true },
+        cell: (info) => <PipelineBadge status={info.getValue()} />,
+      }),
+      col.accessor('coding_interview_status', {
+        header: 'Coding Interview',
+        size: 170,
+        meta: { wrapHeader: true },
+        cell: (info) => <PipelineBadge status={info.getValue()} />,
+      }),
+      col.accessor('final_verdict', {
+        header: 'Final Verdict',
+        size: 160,
+        meta: { wrapHeader: true },
+        cell: (info) => <PipelineBadge status={info.getValue()} />,
       }),
       col.accessor((row) => row.interest_form_submitted_at, {
         id: 'form_fill_date',
