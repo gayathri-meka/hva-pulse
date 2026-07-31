@@ -19,15 +19,21 @@ export default function CodingInterviewsTable({ rows: initialRows }: { rows: Cod
     setError(null)
     setRows((current) => current.map((row) => row.email === email ? { ...row, [field]: value } as CodingInterviewRow : row))
     startTransition(async () => {
-      const result = await updateCodingInterviewField({ email, field, value })
-      if (!result.ok) {
+      const rollback = (message: string) => {
         // Only undo this request if a newer edit has not already replaced it.
         setRows((current) => current.map((row) =>
           row.email === email && Object.is(row[field], value)
             ? { ...row, [field]: previousValue } as CodingInterviewRow
             : row,
         ))
-        setError(result.error)
+        setError(message)
+      }
+
+      try {
+        const result = await updateCodingInterviewField({ email, field, value })
+        if (!result.ok) rollback(result.error)
+      } catch (error) {
+        rollback(error instanceof Error ? error.message : 'Unable to save the update. Please try again.')
       }
     })
   }
