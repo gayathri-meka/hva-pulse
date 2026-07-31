@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
 import { updateCodingInterviewField } from './actions'
@@ -15,11 +15,20 @@ export default function CodingInterviewsTable({ rows: initialRows }: { rows: Cod
   const [pending, startTransition] = useTransition()
 
   function save(email: string, field: CodingInterviewField, value: string | number | null) {
+    const previousValue = rows.find((row) => row.email === email)?.[field]
     setError(null)
     setRows((current) => current.map((row) => row.email === email ? { ...row, [field]: value } as CodingInterviewRow : row))
     startTransition(async () => {
       const result = await updateCodingInterviewField({ email, field, value })
-      if (!result.ok) setError(result.error)
+      if (!result.ok) {
+        // Only undo this request if a newer edit has not already replaced it.
+        setRows((current) => current.map((row) =>
+          row.email === email && Object.is(row[field], value)
+            ? { ...row, [field]: previousValue } as CodingInterviewRow
+            : row,
+        ))
+        setError(result.error)
+      }
     })
   }
 
@@ -59,10 +68,12 @@ function ScoreCell({ value, disabled, onChange }: { value: number | null; disabl
 
 function InputCell({ value, type, disabled, onSave }: { value: string; type: 'date' | 'time'; disabled: boolean; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
   return <input type={type} value={draft} disabled={disabled} onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== value) onSave(draft) }} className={inputClass} />
 }
 
 function TextCell({ value, placeholder, disabled, onSave }: { value: string; placeholder: string; disabled: boolean; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
   return <textarea value={draft} disabled={disabled} rows={3} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== value) onSave(draft) }} className={`${inputClass} min-w-[220px] resize-y whitespace-normal`} />
 }

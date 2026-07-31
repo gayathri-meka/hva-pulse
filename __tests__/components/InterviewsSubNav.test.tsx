@@ -25,7 +25,7 @@ describe('InterviewsSubNav', () => {
     render(<InterviewsSubNav />)
 
     expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
-      'Overview',
+      'Panel',
       'My calendar',
       'Interviews',
       'Notes',
@@ -37,7 +37,7 @@ describe('InterviewsSubNav', () => {
     )
   })
 
-  test('remembers Review without replacing the Overview destination', async () => {
+  test('remembers Review without replacing the Panel destination', async () => {
     pathname = '/admissions/interviews/review'
     const view = render(<InterviewsSubNav />)
 
@@ -48,7 +48,7 @@ describe('InterviewsSubNav', () => {
     view.rerender(<InterviewsSubNav />)
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'Overview' }))
+      expect(screen.getByRole('link', { name: 'Panel' }))
         .toHaveAttribute('href', '/admissions/interviews')
       expect(screen.getByRole('link', { name: 'Review' }))
         .toHaveAttribute('href', '/admissions/interviews/review')

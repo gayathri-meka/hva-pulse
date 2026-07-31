@@ -126,7 +126,7 @@ export default function ProspectsTable({
           ),
       }),
       col.accessor('challenge_status', {
-        header: '14-days-Challenge',
+        header: '14 Days',
         size: 160,
         cell: (info) => <PipelineBadge status={info.getValue()} />,
       }),
