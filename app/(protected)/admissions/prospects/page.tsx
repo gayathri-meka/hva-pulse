@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { canonicalReferral, canonicalEducation } from '@/lib/marketingFields'
-import { fetchChallengeStatusByEmail } from '@/lib/challengeStatus'
-import type { ChallengeStatus } from '@/lib/challengeFunnel'
+import {
+  fetchChallengeRawRows,
+  challengeReviewConfigKey,
+  challengeReviewInProgressByEmail,
+} from '@/lib/challengeStatus'
+import { challengeStatusByEmail, type ChallengeStatus } from '@/lib/challengeFunnel'
 import {
   prospectChallengeStatus,
   motivationInterviewStatus,
@@ -10,7 +14,10 @@ import {
   type ProspectChallengeStatus,
   type InterviewPipelineStatus,
   type FinalVerdictStatus,
-  type InterviewDecisionLite,
+  type MotivationInterviewStatus,
+  type CodingInterviewStatus,
+  type PersonalInterviewVerdict,
+  type CodingInterviewVerdict,
 } from '@/lib/prospectPipeline'
 import { getAppUser } from '@/lib/auth'
 import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectComments'
@@ -32,8 +39,8 @@ export type Prospect = {
   referral_detail:             string | null
   interest_form_submitted_at:  string | null
   challenge_status:            ProspectChallengeStatus
-  motivation_interview_status: InterviewPipelineStatus
-  coding_interview_status:     InterviewPipelineStatus
+  motivation_interview_status: MotivationInterviewStatus
+  coding_interview_status:     CodingInterviewStatus
   final_verdict:               FinalVerdictStatus
   created_at:                  string
   last_seen_at:                string
@@ -49,20 +56,20 @@ export default async function ProspectsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const [{ data }, challengeStatus, { data: commentRows }, { data: challengeDecisions }, { data: interviewDecisions }, { data: interviews }, { data: codingReviews }, appUser] = await Promise.all([
+  const [{ data }, challengeRows, { data: commentRows }, { data: challengeDecisions }, { data: challengeConfigs }, { data: interviews }, { data: codingReviews }, appUser] = await Promise.all([
     supabase
       .from('prospects')
       .select(
         'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at',
       )
       .order('created_at', { ascending: false }),
-    fetchChallengeStatusByEmail(supabase),
+    fetchChallengeRawRows(supabase),
     supabase
       .from('prospect_comments')
       .select('id, email, body, author_id, author_name, created_at'),
     supabase.from('challenge_decisions').select('email, final_decision, published_at'),
-    supabase.from('interview_decisions').select('candidate_email, stage1, final'),
-    supabase.from('interviews').select('candidate_email, round, status').eq('status', 'completed'),
+    supabase.from('challenge_review_config').select('cohort_id, course_id, challenge_end_date'),
+    supabase.from('interviews').select('candidate_email, round, status, recommendation'),
     supabase.from('coding_interview_reviews').select('candidate_email, interview_status, verdict'),
     getAppUser(),
   ])
@@ -76,45 +83,54 @@ export default async function ProspectsPage() {
     finalDecision: r.final_decision as 'selected' | 'rejected',
     released: !!r.published_at,
   }]))
-  const interviewDecisionByEmail = new Map((interviewDecisions ?? []).map((r) => [norm(r.candidate_email), {
-    stage1: (r.stage1 as 'advance' | 'rejected' | null) ?? null,
-    final: (r.final as 'selected' | 'rejected' | null) ?? null,
-  } satisfies NonNullable<InterviewDecisionLite>]))
-  const completedRounds = new Map<string, Set<number>>()
+  const challengeStatus = challengeStatusByEmail(challengeRows)
+  const challengeEndDateByConfig = new Map(
+    (challengeConfigs ?? []).map((config) => [
+      challengeReviewConfigKey(String(config.cohort_id), String(config.course_id)),
+      (config.challenge_end_date as string | null) ?? null,
+    ]),
+  )
+  const challengeInProgress = challengeReviewInProgressByEmail(challengeRows, challengeEndDateByConfig)
+  const personalInterviewByEmail = new Map<string, { status: string; verdict: PersonalInterviewVerdict; rank: number }>()
   for (const interview of interviews ?? []) {
+    if (Number(interview.round) !== 1 || interview.status === 'cancelled') continue
     const email = norm(interview.candidate_email)
-    const rounds = completedRounds.get(email) ?? new Set<number>()
-    rounds.add(Number(interview.round))
-    completedRounds.set(email, rounds)
+    const verdict = (interview.recommendation as PersonalInterviewVerdict) ?? null
+    const rank = verdict === 'advance' || verdict === 'no' ? 3 : interview.status === 'completed' ? 2 : 1
+    if (rank > (personalInterviewByEmail.get(email)?.rank ?? 0))
+      personalInterviewByEmail.set(email, { status: interview.status, verdict, rank })
   }
   const codingReviewByEmail = new Map((codingReviews ?? []).map((r) => [norm(r.candidate_email), r]))
 
   const prospects = (data ?? []).map((p) => {
     const email = norm(p.email)
-    const decision = interviewDecisionByEmail.get(email) ?? null
-    const codingReview = codingReviewByEmail.get(email)
-    const codingVerdict = (codingReview?.verdict as 'selected' | 'rejected' | null) ?? null
-    const codingStatus = codingVerdict === 'selected'
-      ? 'Selected'
-      : codingVerdict === 'rejected'
-        ? 'Rejected'
-        : codingReview?.interview_status === 'completed'
-          ? 'Decision Pending'
-          : codingInterviewStatus(completedRounds.get(email)?.has(2) ?? false, decision)
-    const finalVerdict = codingVerdict === 'selected'
-      ? 'Selected'
-      : codingVerdict === 'rejected' || decision?.stage1 === 'rejected'
-        ? 'Rejected'
-        : finalVerdictStatus(decision)
     const systemChallenge = challengeStatus.get(email) ?? 'Not joined'
+    const challengePipelineStatus = prospectChallengeStatus(
+      systemChallenge as ChallengeStatus,
+      challengeDecisionByEmail.get(email) ?? null,
+      challengeInProgress.get(email) ?? false,
+    )
+    const personalInterview = personalInterviewByEmail.get(email)
+    const motivationStatus = motivationInterviewStatus(
+      challengePipelineStatus,
+      personalInterview?.status ?? null,
+      personalInterview?.verdict ?? null,
+    )
+    const codingReview = codingReviewByEmail.get(email)
+    const codingStatus = codingInterviewStatus(
+      (codingReview?.interview_status as string | null) ?? null,
+      (codingReview?.verdict as CodingInterviewVerdict) ?? null,
+      motivationStatus,
+      challengePipelineStatus,
+    )
     return {
       ...p,
       referral_source: canonicalReferral(p.referral_source),
       education_status: canonicalEducation(p.education_status),
-      challenge_status: prospectChallengeStatus(systemChallenge as ChallengeStatus, challengeDecisionByEmail.get(email) ?? null),
-      motivation_interview_status: motivationInterviewStatus(completedRounds.get(email)?.has(1) ?? false, decision),
+      challenge_status: challengePipelineStatus,
+      motivation_interview_status: motivationStatus,
       coding_interview_status: codingStatus,
-      final_verdict: finalVerdict,
+      final_verdict: finalVerdictStatus(challengePipelineStatus, motivationStatus, codingStatus),
     }
   }) as Prospect[]
 

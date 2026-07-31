@@ -126,21 +126,27 @@ export default function ProspectsTable({
           ),
       }),
       col.accessor('challenge_status', {
-        header: 'Challenge',
+        header: '14-days-Challenge',
         size: 160,
         cell: (info) => <PipelineBadge status={info.getValue()} />,
       }),
       col.accessor('motivation_interview_status', {
-        header: 'Motivation Interview',
+        header: 'Personal Interview',
         size: 180,
         meta: { wrapHeader: true },
-        cell: (info) => <PipelineBadge status={info.getValue()} />,
+        cell: (info) => {
+          const status = info.getValue()
+          return status ? <PipelineBadge status={status} /> : null
+        },
       }),
       col.accessor('coding_interview_status', {
         header: 'Coding Interview',
         size: 170,
         meta: { wrapHeader: true },
-        cell: (info) => <PipelineBadge status={info.getValue()} />,
+        cell: (info) => {
+          const status = info.getValue()
+          return status ? <PipelineBadge status={status} /> : null
+        },
       }),
       col.accessor('final_verdict', {
         header: 'Final Verdict',
