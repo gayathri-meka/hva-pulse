@@ -24,6 +24,7 @@ import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectCommen
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import { sendEmailCampaign } from '../actions'
 import ProspectsTable from './ProspectsTable'
+import { fetchAllSupabaseRows } from '@/lib/fetchAllSupabaseRows'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +46,7 @@ export type Prospect = {
   created_at:                  string
   last_seen_at:                string
 }
+type ProspectSource = Omit<Prospect, 'challenge_status' | 'motivation_interview_status' | 'coding_interview_status' | 'final_verdict'>
 
 export default async function ProspectsPage() {
   // prospects RLS restricts reads to admin/staff via auth_role(). The admissions
@@ -56,30 +58,26 @@ export default async function ProspectsPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const [{ data }, challengeRows, { data: commentRows }, { data: challengeDecisions }, { data: challengeConfigs }, { data: interviews }, { data: codingReviews }, appUser] = await Promise.all([
-    supabase
-      .from('prospects')
-      .select(
-        'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at',
-      )
-      .order('created_at', { ascending: false }),
+  const all = <T,>(table: string, columns: string, orderColumn = 'id') =>
+    fetchAllSupabaseRows<T>(supabase.from(table).select(columns).order(orderColumn) as never)
+
+  const [prospectRows, challengeRows, commentRows, challengeDecisions, { data: challengeConfigs }, interviews, codingReviews, appUser] = await Promise.all([
+    all<ProspectSource>('prospects', 'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at'),
     fetchChallengeRawRows(supabase),
-    supabase
-      .from('prospect_comments')
-      .select('id, email, body, author_id, author_name, created_at'),
-    supabase.from('challenge_decisions').select('email, final_decision, published_at'),
+    all<ProspectComment>('prospect_comments', 'id, email, body, author_id, author_name, created_at'),
+    all<{ email: string; final_decision: string; published_at: string | null }>('challenge_decisions', 'id, email, final_decision, published_at'),
     supabase.from('challenge_review_config').select('cohort_id, course_id, challenge_end_date'),
-    supabase.from('interviews').select('candidate_email, round, status, recommendation'),
-    supabase.from('coding_interview_reviews').select('candidate_email, interview_status, verdict'),
+    all<{ candidate_email: string; round: number; status: string; recommendation: string | null }>('interviews', 'id, candidate_email, round, status, recommendation'),
+    all<{ candidate_email: string; interview_status: string; verdict: string | null }>('coding_interview_reviews', 'candidate_email, interview_status, verdict', 'candidate_email'),
     getAppUser(),
   ])
 
-  const commentsByEmail = groupCommentsByEmail((commentRows ?? []) as ProspectComment[])
+  const commentsByEmail = groupCommentsByEmail(commentRows)
 
   // Canonicalize referral/education so prospects render identically to the
   // Website Hits table (no-op for already-canonical values; free-text survives).
   const norm = (email: string | null | undefined) => (email ?? '').trim().toLowerCase()
-  const challengeDecisionByEmail = new Map((challengeDecisions ?? []).map((r) => [norm(r.email), {
+  const challengeDecisionByEmail = new Map(challengeDecisions.map((r) => [norm(r.email), {
     finalDecision: r.final_decision as 'selected' | 'rejected',
     released: !!r.published_at,
   }]))
@@ -92,7 +90,7 @@ export default async function ProspectsPage() {
   )
   const challengeInProgress = challengeReviewInProgressByEmail(challengeRows, challengeEndDateByConfig)
   const personalInterviewByEmail = new Map<string, { status: string; verdict: PersonalInterviewVerdict; rank: number }>()
-  for (const interview of interviews ?? []) {
+  for (const interview of interviews) {
     if (Number(interview.round) !== 1 || interview.status === 'cancelled') continue
     const email = norm(interview.candidate_email)
     const verdict = (interview.recommendation as PersonalInterviewVerdict) ?? null
@@ -100,9 +98,9 @@ export default async function ProspectsPage() {
     if (rank > (personalInterviewByEmail.get(email)?.rank ?? 0))
       personalInterviewByEmail.set(email, { status: interview.status, verdict, rank })
   }
-  const codingReviewByEmail = new Map((codingReviews ?? []).map((r) => [norm(r.candidate_email), r]))
+  const codingReviewByEmail = new Map(codingReviews.map((r) => [norm(r.candidate_email), r]))
 
-  const prospects = (data ?? []).map((p) => {
+  const prospects = prospectRows.map((p) => {
     const email = norm(p.email)
     const systemChallenge = challengeStatus.get(email) ?? 'Not joined'
     const challengePipelineStatus = prospectChallengeStatus(

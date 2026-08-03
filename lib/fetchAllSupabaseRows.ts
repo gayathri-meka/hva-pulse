@@ -1,0 +1,17 @@
+const DEFAULT_PAGE_SIZE = 1000
+
+type PageResult<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>
+type OrderedQuery<T> = { range(from: number, to: number): PageResult<T> }
+
+/** Load a deterministic ordered Supabase query past PostgREST's per-request cap. */
+export async function fetchAllSupabaseRows<T>(query: OrderedQuery<T>, pageSize = DEFAULT_PAGE_SIZE): Promise<T[]> {
+  if (!Number.isInteger(pageSize) || pageSize < 1) throw new Error('pageSize must be a positive integer')
+  const rows: T[] = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1)
+    if (error) throw new Error(error.message)
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < pageSize) return rows
+  }
+}

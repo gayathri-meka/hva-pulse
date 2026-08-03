@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createColumnHelper } from '@tanstack/react-table'
 import DataTable from '@/components/ui/DataTable'
@@ -10,6 +10,7 @@ import { scoreTone, formatScore } from '@/lib/interviewCockpit'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import type { ScoreRow } from '../cockpit-actions'
 import type { InterviewReviewTableRow } from '../review-actions'
+import { cancelInterview, setInterviewOutcome } from '../actions'
 
 type BookedInterview = Interview & { candidateName: string | null; interviewerName: string | null; hasNotes: boolean }
 type Row = {
@@ -46,13 +47,16 @@ export default function InterviewsListTable({ interviews, rubrics = [], scoreRow
   candidates?: InterviewReviewTableRow[]
 }) {
   const router = useRouter()
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
   const [view, setView] = usePersistentState<View>('admissions-interviews-list:view', 'upcoming', {
     validate: (value): value is View => typeof value === 'string' && ['upcoming', 'completed', 'not_scheduled', 'all'].includes(value),
   })
 
   const allRows = useMemo(() => {
     const scoreById = new Map(scoreRows.map((r) => [r.interviewId, r]))
-    const scheduledEmails = new Set(interviews.filter((r) => r.status !== 'cancelled').map((r) => r.candidateEmail.toLowerCase()))
+    const representedEmails = new Set(interviews.map((r) => r.candidateEmail.toLowerCase()))
     const booked: Row[] = interviews.map((r) => {
       const score = scoreById.get(r.id)
       return { id: r.id, interviewId: r.id, candidateName: r.candidateName, candidateEmail: r.candidateEmail, round: r.round,
@@ -60,7 +64,7 @@ export default function InterviewsListTable({ interviews, rubrics = [], scoreRow
         scores: score?.scores ?? {}, hasNotes: score?.hasNotes ?? r.hasNotes }
     })
     const unscheduled: Row[] = candidates
-      .filter((r) => !scheduledEmails.has(r.email.toLowerCase()))
+      .filter((r) => !representedEmails.has(r.email.toLowerCase()))
       .map((r) => ({ id: `not-scheduled:${r.email}`, interviewId: null, candidateName: r.name, candidateEmail: r.email,
         round: null, interviewerName: null, scheduledAt: null, status: 'not_scheduled', recommendation: null, scores: {}, hasNotes: false }))
     return [...booked, ...unscheduled]
@@ -73,6 +77,22 @@ export default function InterviewsListTable({ interviews, rubrics = [], scoreRow
     return allRows.filter((r) => (r.status === 'booked' || r.status === 'confirmed') && !!r.scheduledAt && new Date(r.scheduledAt).getTime() > Date.now() - 60 * 60_000)
   }, [allRows, view])
 
+  function runAction(interviewId: string, action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setActionError(null)
+    setPendingId(interviewId)
+    startTransition(async () => {
+      try {
+        const result = await action()
+        if (!result.ok) setActionError(result.error)
+        else router.refresh()
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Unable to update the interview.')
+      } finally {
+        setPendingId(null)
+      }
+    })
+  }
+
   const columns = useMemo(() => [
     col.accessor((r) => r.candidateName ?? r.candidateEmail, { id: 'candidate', header: 'Candidate', cell: (i) => <span className="font-medium text-zinc-900">{i.getValue()}</span> }),
     col.accessor('candidateEmail', { id: 'email', header: 'Email', cell: (i) => <span className="text-zinc-500">{i.getValue()}</span> }),
@@ -82,11 +102,21 @@ export default function InterviewsListTable({ interviews, rubrics = [], scoreRow
     col.accessor((r) => r.recommendation ? REC_LABEL[r.recommendation] : 'Pending', { id: 'verdict', header: 'Verdict', cell: (i) => i.row.original.recommendation ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${REC_STYLE[i.row.original.recommendation]}`}>{i.getValue()}</span> : <span className="text-xs text-zinc-400">Pending</span> }),
     col.accessor((r) => r.hasNotes ? 'Available' : 'Not added', { id: 'notes', header: 'Notes', cell: (i) => <span className="text-xs text-zinc-500">{i.getValue()}</span> }),
     col.display({ id: 'ai', header: 'AI review', size: 110, enableHiding: false, enableColumnFilter: false, cell: (i) => i.row.original.interviewId && i.row.original.hasNotes && i.row.original.round ? <div onClick={(e) => e.stopPropagation()}><NotesReviewButton interviewId={i.row.original.interviewId} candidateName={i.row.original.candidateName ?? i.row.original.candidateEmail} round={i.row.original.round} /></div> : <span className="text-zinc-300">—</span> }),
+    col.display({ id: 'actions', header: 'Actions', size: 220, enableHiding: false, enableColumnFilter: false, cell: (i) => {
+      const row = i.row.original
+      if (!row.interviewId || !['booked', 'confirmed'].includes(row.status)) return <span className="text-zinc-300">—</span>
+      const disabled = pendingId === row.interviewId
+      return <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+        <button disabled={disabled} onClick={() => runAction(row.interviewId!, () => setInterviewOutcome(row.interviewId!, 'completed'))} className="rounded border border-emerald-200 px-2 py-1 text-xs text-emerald-700 disabled:opacity-50">Done</button>
+        <button disabled={disabled} onClick={() => runAction(row.interviewId!, () => setInterviewOutcome(row.interviewId!, 'no_show'))} className="rounded border border-red-200 px-2 py-1 text-xs text-red-700 disabled:opacity-50">No-show</button>
+        <button disabled={disabled} onClick={() => { if (window.confirm(`Cancel ${row.candidateName ?? row.candidateEmail}'s interview? The slot will reopen and attendees will be notified.`)) runAction(row.interviewId!, () => cancelInterview(row.interviewId!)) }} className="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-600 disabled:opacity-50">Cancel</button>
+      </div>
+    } }),
     ...rubrics.filter((rb) => rb.key !== 'reading_comprehension' && rb.label.toLowerCase() !== 'reading comprehension').map((rb) => col.accessor((r) => r.scores[rb.key] ?? null, { id: `rubric_${rb.key}`, header: rb.label === 'Comprehension' ? 'Listening Comprehension' : rb.label, size: 140, meta: { wrapHeader: true }, enableColumnFilter: false, cell: (i) => { const score = i.getValue() as number | null; return score == null ? <span className="text-zinc-300">—</span> : <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded px-1 text-[12px] font-bold ${TONE_CHIP[scoreTone(score)]}`}>{formatScore(score)}</span> } })),
-  ], [rubrics])
+  ], [rubrics, pendingId])
 
   const tabs: { value: View; label: string }[] = [{ value: 'upcoming', label: 'Upcoming' }, { value: 'completed', label: 'Completed' }, { value: 'not_scheduled', label: 'Not Scheduled' }, { value: 'all', label: 'All' }]
   const toggle = <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs font-medium">{tabs.map((tab) => <button key={tab.value} onClick={() => setView(tab.value)} className={`rounded-md px-2.5 py-1 transition-colors ${view === tab.value ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'}`}>{tab.label}</button>)}</div>
 
-  return <div className="mt-4"><DataTable data={rows} columns={columns} storageKey="personal-interviews" getRowId={(r) => r.id} pinnedLeft={['candidate', 'email']} initialSorting={[{ id: 'when', desc: false }]} searchKeys={['candidateName', 'candidateEmail', 'interviewerName']} searchPlaceholder="Search candidate, email or interviewer…" csvFilename="personal_interviews" toolbarLeft={toggle} emptyMessage={`No ${tabs.find((t) => t.value === view)?.label.toLowerCase()} interviews.`} onRowClick={(row) => { if (row.interviewId) router.push(`/admissions/interviews/notes/${row.interviewId}`) }} rowClassName={(row) => row.interviewId ? '' : 'cursor-default'} /></div>
+  return <div className="mt-4">{actionError && <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>}<DataTable data={rows} columns={columns} storageKey="personal-interviews" getRowId={(r) => r.id} pinnedLeft={['candidate', 'email']} initialSorting={[{ id: 'when', desc: false }]} searchKeys={['candidateName', 'candidateEmail', 'interviewerName']} searchPlaceholder="Search candidate, email or interviewer…" csvFilename="personal_interviews" toolbarLeft={toggle} emptyMessage={`No ${tabs.find((t) => t.value === view)?.label.toLowerCase()} interviews.`} onRowClick={(row) => { if (row.interviewId) router.push(`/admissions/interviews/notes/${row.interviewId}`) }} rowClassName={(row) => row.interviewId ? '' : 'cursor-default'} /></div>
 }
