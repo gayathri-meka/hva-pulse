@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { fetchAllSupabaseRows } from '@/lib/fetchAllSupabaseRows'
+import { fetchAllSupabaseRows, fetchAllSupabaseRowsIfTableExists } from '@/lib/fetchAllSupabaseRows'
 
 describe('fetchAllSupabaseRows', () => {
   test('loads successive inclusive ranges until the final short page', async () => {
@@ -15,5 +15,17 @@ describe('fetchAllSupabaseRows', () => {
 
   test('rejects an invalid page size', async () => {
     await expect(fetchAllSupabaseRows({ range: async () => ({ data: [], error: null }) }, 0)).rejects.toThrow('positive integer')
+  })
+})
+
+describe('fetchAllSupabaseRowsIfTableExists', () => {
+  test('returns an empty collection only when the named table is missing', async () => {
+    const missing = { range: async () => ({ data: null, error: { message: "Could not find the table 'public.coding_interview_reviews' in the schema cache" } }) }
+    await expect(fetchAllSupabaseRowsIfTableExists(missing, 'coding_interview_reviews')).resolves.toEqual([])
+  })
+
+  test('does not hide unrelated database errors', async () => {
+    const failed = { range: async () => ({ data: null, error: { message: 'connection failed' } }) }
+    await expect(fetchAllSupabaseRowsIfTableExists(failed, 'coding_interview_reviews')).rejects.toThrow('connection failed')
   })
 })

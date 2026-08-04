@@ -15,3 +15,19 @@ export async function fetchAllSupabaseRows<T>(query: OrderedQuery<T>, pageSize =
     if (page.length < pageSize) return rows
   }
 }
+
+/** Temporary compatibility for a feature table whose migration may not have
+ * reached every environment yet. Other database failures must remain visible. */
+export async function fetchAllSupabaseRowsIfTableExists<T>(
+  query: OrderedQuery<T>,
+  table: string,
+  pageSize = DEFAULT_PAGE_SIZE,
+): Promise<T[]> {
+  try {
+    return await fetchAllSupabaseRows(query, pageSize)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes(`'public.${table}'`) && message.includes('schema cache')) return []
+    throw error
+  }
+}

@@ -24,7 +24,7 @@ import { groupCommentsByEmail, type ProspectComment } from '@/lib/prospectCommen
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import { sendEmailCampaign } from '../actions'
 import ProspectsTable from './ProspectsTable'
-import { fetchAllSupabaseRows } from '@/lib/fetchAllSupabaseRows'
+import { fetchAllSupabaseRows, fetchAllSupabaseRowsIfTableExists } from '@/lib/fetchAllSupabaseRows'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,7 +68,10 @@ export default async function ProspectsPage() {
     all<{ email: string; final_decision: string; published_at: string | null }>('challenge_decisions', 'id, email, final_decision, published_at'),
     supabase.from('challenge_review_config').select('cohort_id, course_id, challenge_end_date'),
     all<{ candidate_email: string; round: number; status: string; recommendation: string | null }>('interviews', 'id, candidate_email, round, status, recommendation'),
-    all<{ candidate_email: string; interview_status: string; verdict: string | null }>('coding_interview_reviews', 'candidate_email, interview_status, verdict', 'candidate_email'),
+    fetchAllSupabaseRowsIfTableExists<{ candidate_email: string; interview_status: string; verdict: string | null }>(
+      supabase.from('coding_interview_reviews').select('candidate_email, interview_status, verdict').order('candidate_email') as never,
+      'coding_interview_reviews',
+    ),
     getAppUser(),
   ])
 
