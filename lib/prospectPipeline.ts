@@ -5,7 +5,7 @@ export type InterviewPipelineStatus = 'Not Done' | 'Decision Pending' | 'Selecte
 export type FinalVerdictStatus = 'Decision Pending' | 'Selected' | 'Rejected'
 export type MotivationInterviewStatus = InterviewPipelineStatus | null
 export type CodingInterviewStatus = InterviewPipelineStatus | null
-export type PersonalInterviewVerdict = 'advance' | 'borderline' | 'no' | null
+export type PersonalInterviewDecision = 'advance' | 'rejected' | null
 export type CodingInterviewVerdict = 'selected' | 'rejected' | null
 
 export type ChallengeDecisionLite = { finalDecision: 'selected' | 'rejected'; released: boolean } | null
@@ -25,12 +25,12 @@ export function prospectChallengeStatus(
 export function motivationInterviewStatus(
   challengeStatus: ProspectChallengeStatus,
   interviewStatus: string | null,
-  verdict: PersonalInterviewVerdict,
+  decision: PersonalInterviewDecision,
 ): MotivationInterviewStatus {
   if (challengeStatus === 'Rejected') return null
   if (challengeStatus === 'In Progress') return 'Not Done'
-  if (verdict === 'advance') return 'Selected'
-  if (verdict === 'no') return 'Rejected'
+  if (decision === 'advance') return 'Selected'
+  if (decision === 'rejected') return 'Rejected'
   if (interviewStatus === 'completed') return 'Decision Pending'
   return 'Not Done'
 }

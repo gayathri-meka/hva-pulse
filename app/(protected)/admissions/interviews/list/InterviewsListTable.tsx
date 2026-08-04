@@ -72,7 +72,13 @@ export default function InterviewsListTable({ interviews, rubrics = [], scoreRow
 
   const rows = useMemo(() => {
     if (view === 'all') return allRows
-    if (view === 'not_scheduled') return allRows.filter((r) => r.status === 'not_scheduled')
+    if (view === 'not_scheduled') {
+      const activeEmails = new Set(allRows
+        .filter((r) => r.status !== 'cancelled' && r.status !== 'not_scheduled')
+        .map((r) => r.candidateEmail.toLowerCase()))
+      return allRows.filter((r) => r.status === 'not_scheduled'
+        || (r.status === 'cancelled' && !activeEmails.has(r.candidateEmail.toLowerCase())))
+    }
     if (view === 'completed') return allRows.filter((r) => r.status === 'completed')
     return allRows.filter((r) => (r.status === 'booked' || r.status === 'confirmed') && !!r.scheduledAt && new Date(r.scheduledAt).getTime() > Date.now() - 60 * 60_000)
   }, [allRows, view])

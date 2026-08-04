@@ -48,16 +48,15 @@ describe('personal interview pipeline status', () => {
     ['Selected', null, null, 'Not Done'],
     ['Selected', 'booked', null, 'Not Done'],
     ['Selected', 'completed', null, 'Decision Pending'],
-    ['Selected', 'completed', 'borderline', 'Decision Pending'],
     ['Selected', 'completed', 'advance', 'Selected'],
-    ['Selected', 'completed', 'no', 'Rejected'],
+    ['Selected', 'completed', 'rejected', 'Rejected'],
   ])('maps challenge=%s, interview=%s, recommendation=%s to %s', (challenge, interview, recommendation, expected) => {
     expect(motivationInterviewStatus(challenge, interview, recommendation)).toBe(expected)
   })
 
   test('a final recommendation takes precedence over an incomplete interview row', () => {
     expect(motivationInterviewStatus('Selected', 'booked', 'advance')).toBe('Selected')
-    expect(motivationInterviewStatus('Selected', 'booked', 'no')).toBe('Rejected')
+    expect(motivationInterviewStatus('Selected', 'booked', 'rejected')).toBe('Rejected')
   })
 })
 

@@ -16,7 +16,7 @@ import {
   type FinalVerdictStatus,
   type MotivationInterviewStatus,
   type CodingInterviewStatus,
-  type PersonalInterviewVerdict,
+  type PersonalInterviewDecision,
   type CodingInterviewVerdict,
 } from '@/lib/prospectPipeline'
 import { getAppUser } from '@/lib/auth'
@@ -61,13 +61,14 @@ export default async function ProspectsPage() {
   const all = <T,>(table: string, columns: string, orderColumn = 'id') =>
     fetchAllSupabaseRows<T>(supabase.from(table).select(columns).order(orderColumn) as never)
 
-  const [prospectRows, challengeRows, commentRows, challengeDecisions, { data: challengeConfigs }, interviews, codingReviews, appUser] = await Promise.all([
+  const [prospectRows, challengeRows, commentRows, challengeDecisions, { data: challengeConfigs }, interviews, interviewDecisions, codingReviews, appUser] = await Promise.all([
     all<ProspectSource>('prospects', 'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at'),
     fetchChallengeRawRows(supabase),
     all<ProspectComment>('prospect_comments', 'id, email, body, author_id, author_name, created_at'),
     all<{ email: string; final_decision: string; published_at: string | null }>('challenge_decisions', 'id, email, final_decision, published_at'),
     supabase.from('challenge_review_config').select('cohort_id, course_id, challenge_end_date'),
     all<{ candidate_email: string; round: number; status: string; recommendation: string | null }>('interviews', 'id, candidate_email, round, status, recommendation'),
+    all<{ candidate_email: string; stage1: PersonalInterviewDecision }>('interview_decisions', 'candidate_email, stage1', 'candidate_email'),
     fetchAllSupabaseRowsIfTableExists<{ candidate_email: string; interview_status: string; verdict: string | null }>(
       supabase.from('coding_interview_reviews').select('candidate_email, interview_status, verdict').order('candidate_email') as never,
       'coding_interview_reviews',
@@ -92,15 +93,15 @@ export default async function ProspectsPage() {
     ]),
   )
   const challengeInProgress = challengeReviewInProgressByEmail(challengeRows, challengeEndDateByConfig)
-  const personalInterviewByEmail = new Map<string, { status: string; verdict: PersonalInterviewVerdict; rank: number }>()
+  const personalInterviewStatusByEmail = new Map<string, { status: string; rank: number }>()
   for (const interview of interviews) {
     if (Number(interview.round) !== 1 || interview.status === 'cancelled') continue
     const email = norm(interview.candidate_email)
-    const verdict = (interview.recommendation as PersonalInterviewVerdict) ?? null
-    const rank = verdict === 'advance' || verdict === 'no' ? 3 : interview.status === 'completed' ? 2 : 1
-    if (rank > (personalInterviewByEmail.get(email)?.rank ?? 0))
-      personalInterviewByEmail.set(email, { status: interview.status, verdict, rank })
+    const rank = interview.status === 'completed' ? 2 : 1
+    if (rank > (personalInterviewStatusByEmail.get(email)?.rank ?? 0))
+      personalInterviewStatusByEmail.set(email, { status: interview.status, rank })
   }
+  const personalInterviewDecisionByEmail = new Map(interviewDecisions.map((r) => [norm(r.candidate_email), r.stage1]))
   const codingReviewByEmail = new Map(codingReviews.map((r) => [norm(r.candidate_email), r]))
 
   const prospects = prospectRows.map((p) => {
@@ -111,11 +112,11 @@ export default async function ProspectsPage() {
       challengeDecisionByEmail.get(email) ?? null,
       challengeInProgress.get(email) ?? false,
     )
-    const personalInterview = personalInterviewByEmail.get(email)
+    const personalInterview = personalInterviewStatusByEmail.get(email)
     const motivationStatus = motivationInterviewStatus(
       challengePipelineStatus,
       personalInterview?.status ?? null,
-      personalInterview?.verdict ?? null,
+      personalInterviewDecisionByEmail.get(email) ?? null,
     )
     const codingReview = codingReviewByEmail.get(email)
     const codingStatus = codingInterviewStatus(
