@@ -6,9 +6,28 @@ export type FinalVerdictStatus = 'Decision Pending' | 'Selected' | 'Rejected'
 export type MotivationInterviewStatus = InterviewPipelineStatus | null
 export type CodingInterviewStatus = InterviewPipelineStatus | null
 export type PersonalInterviewDecision = 'advance' | 'rejected' | null
+export type PersonalInterviewRecommendation = 'advance' | 'borderline' | 'no' | null
 export type CodingInterviewVerdict = 'selected' | 'rejected' | null
 
 export type ChallengeDecisionLite = { finalDecision: 'selected' | 'rejected'; released: boolean } | null
+
+export function challengeDecisionKey(
+  email: string | null | undefined,
+  cohortId: string | number | null | undefined,
+  courseId: string | number | null | undefined,
+): string {
+  return `${(email ?? '').trim().toLowerCase()}|${Number(cohortId ?? 0)}|${Number(courseId ?? 0)}`
+}
+
+export function personalInterviewDecision(
+  releasedDecision: PersonalInterviewDecision,
+  recommendation: PersonalInterviewRecommendation,
+): PersonalInterviewDecision {
+  if (releasedDecision) return releasedDecision
+  if (recommendation === 'advance') return 'advance'
+  if (recommendation === 'no') return 'rejected'
+  return null
+}
 
 export function prospectChallengeStatus(
   system: SystemChallengeStatus,

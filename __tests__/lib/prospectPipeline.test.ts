@@ -1,14 +1,39 @@
 import { describe, expect, test } from 'vitest'
 import {
+  challengeDecisionKey,
   codingInterviewStatus,
   finalVerdictStatus,
   motivationInterviewStatus,
+  personalInterviewDecision,
   prospectChallengeStatus,
   type CodingInterviewStatus,
   type FinalVerdictStatus,
   type MotivationInterviewStatus,
   type ProspectChallengeStatus,
 } from '@/lib/prospectPipeline'
+
+describe('prospect pipeline joins', () => {
+  test('normalises email and keeps challenge cohorts/courses isolated', () => {
+    expect(challengeDecisionKey(' Learner@Example.COM ', 214, 587)).toBe('learner@example.com|214|587')
+    expect(challengeDecisionKey('learner@example.com', 215, 587)).not.toBe(
+      challengeDecisionKey('learner@example.com', 214, 587),
+    )
+    expect(challengeDecisionKey('learner@example.com', 214, 588)).not.toBe(
+      challengeDecisionKey('learner@example.com', 214, 587),
+    )
+  })
+
+  test.each([
+    [null, 'advance', 'advance'],
+    [null, 'no', 'rejected'],
+    [null, 'borderline', null],
+    [null, null, null],
+    ['rejected', 'advance', 'rejected'],
+    ['advance', 'no', 'advance'],
+  ] as const)('resolves released decision=%s and recommendation=%s to %s', (released, recommendation, expected) => {
+    expect(personalInterviewDecision(released, recommendation)).toBe(expected)
+  })
+})
 
 describe('14-day challenge pipeline status', () => {
   test.each<[

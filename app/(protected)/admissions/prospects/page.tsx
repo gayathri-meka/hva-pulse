@@ -8,6 +8,8 @@ import {
 import { challengeStatusByEmail, type ChallengeStatus } from '@/lib/challengeFunnel'
 import {
   prospectChallengeStatus,
+  challengeDecisionKey,
+  personalInterviewDecision,
   motivationInterviewStatus,
   codingInterviewStatus,
   finalVerdictStatus,
@@ -65,7 +67,10 @@ export default async function ProspectsPage() {
     all<ProspectSource>('prospects', 'id, email, name, avatar_url, phone, college, education_status, referral_source, referral_detail, interest_form_submitted_at, created_at, last_seen_at'),
     fetchChallengeRawRows(supabase),
     all<ProspectComment>('prospect_comments', 'id, email, body, author_id, author_name, created_at'),
-    all<{ email: string; final_decision: string; published_at: string | null }>('challenge_decisions', 'id, email, final_decision, published_at'),
+    all<{ email: string; cohort_id: number; course_id: number; final_decision: string; published_at: string | null }>(
+      'challenge_decisions',
+      'id, email, cohort_id, course_id, final_decision, published_at',
+    ),
     supabase.from('challenge_review_config').select('cohort_id, course_id, challenge_end_date'),
     all<{ candidate_email: string; round: number; status: string; recommendation: string | null }>('interviews', 'id, candidate_email, round, status, recommendation'),
     all<{ candidate_email: string; stage1: PersonalInterviewDecision }>('interview_decisions', 'candidate_email, stage1', 'candidate_email'),
@@ -81,10 +86,19 @@ export default async function ProspectsPage() {
   // Canonicalize referral/education so prospects render identically to the
   // Website Hits table (no-op for already-canonical values; free-text survives).
   const norm = (email: string | null | undefined) => (email ?? '').trim().toLowerCase()
-  const challengeDecisionByEmail = new Map(challengeDecisions.map((r) => [norm(r.email), {
+  const challengeDecisionByCandidate = new Map(challengeDecisions.map((r) => [challengeDecisionKey(r.email, r.cohort_id, r.course_id), {
     finalDecision: r.final_decision as 'selected' | 'rejected',
     released: !!r.published_at,
   }]))
+  const challengeConfigByEmail = new Map<string, { cohortId: string | null; courseId: string | null }>()
+  for (const row of challengeRows) {
+    const email = norm(row.learner_id)
+    if (!email || challengeConfigByEmail.has(email)) continue
+    challengeConfigByEmail.set(email, {
+      cohortId: row.dimensions?.cohort_id ?? null,
+      courseId: row.dimensions?.course_id ?? null,
+    })
+  }
   const challengeStatus = challengeStatusByEmail(challengeRows)
   const challengeEndDateByConfig = new Map(
     (challengeConfigs ?? []).map((config) => [
@@ -93,13 +107,17 @@ export default async function ProspectsPage() {
     ]),
   )
   const challengeInProgress = challengeReviewInProgressByEmail(challengeRows, challengeEndDateByConfig)
-  const personalInterviewStatusByEmail = new Map<string, { status: string; rank: number }>()
+  const personalInterviewByEmail = new Map<string, { status: string; recommendation: string | null; rank: number }>()
   for (const interview of interviews) {
     if (Number(interview.round) !== 1 || interview.status === 'cancelled') continue
     const email = norm(interview.candidate_email)
     const rank = interview.status === 'completed' ? 2 : 1
-    if (rank > (personalInterviewStatusByEmail.get(email)?.rank ?? 0))
-      personalInterviewStatusByEmail.set(email, { status: interview.status, rank })
+    if (rank > (personalInterviewByEmail.get(email)?.rank ?? 0))
+      personalInterviewByEmail.set(email, {
+        status: interview.status,
+        recommendation: interview.recommendation,
+        rank,
+      })
   }
   const personalInterviewDecisionByEmail = new Map(interviewDecisions.map((r) => [norm(r.candidate_email), r.stage1]))
   const codingReviewByEmail = new Map(codingReviews.map((r) => [norm(r.candidate_email), r]))
@@ -107,16 +125,29 @@ export default async function ProspectsPage() {
   const prospects = prospectRows.map((p) => {
     const email = norm(p.email)
     const systemChallenge = challengeStatus.get(email) ?? 'Not joined'
+    const challengeConfig = challengeConfigByEmail.get(email)
+    const challengeDecision = challengeConfig
+      ? challengeDecisionByCandidate.get(challengeDecisionKey(email, challengeConfig.cohortId, challengeConfig.courseId)) ?? null
+      : null
     const challengePipelineStatus = prospectChallengeStatus(
       systemChallenge as ChallengeStatus,
-      challengeDecisionByEmail.get(email) ?? null,
+      challengeDecision,
       challengeInProgress.get(email) ?? false,
     )
-    const personalInterview = personalInterviewStatusByEmail.get(email)
+    const personalInterview = personalInterviewByEmail.get(email)
+    // The Personal Interviews list calls the interviewer's recommendation the
+    // "Verdict", and Coding Interviews also advances candidates from it. Keep
+    // Prospects consistent, while preferring an explicitly released decision.
+    const personalDecision = personalInterviewDecision(
+      personalInterviewDecisionByEmail.get(email) ?? null,
+      personalInterview?.recommendation === 'advance' || personalInterview?.recommendation === 'borderline' || personalInterview?.recommendation === 'no'
+        ? personalInterview.recommendation
+        : null,
+    )
     const motivationStatus = motivationInterviewStatus(
       challengePipelineStatus,
       personalInterview?.status ?? null,
-      personalInterviewDecisionByEmail.get(email) ?? null,
+      personalDecision,
     )
     const codingReview = codingReviewByEmail.get(email)
     const codingStatus = codingInterviewStatus(
