@@ -19,6 +19,7 @@ import { exportToCsv } from '@/lib/exportToCsv'
 import { multiSelectFilter, rowMatchesSearch } from '@/lib/tableFilters'
 import { usePersistentTableState } from '@/hooks/usePersistentTableState'
 import ColumnFilterDropdown from './ColumnFilterDropdown'
+import Tooltip from './Tooltip'
 
 // ── Shared, standardised data table ─────────────────────────────────────────
 // Every Pulse table should use this so they all look and behave identically:
@@ -41,6 +42,9 @@ export type DataTableProps<T> = {
   getRowId?: (row: T, index: number) => string
   /** Columns pinned to the left ON DESKTOP ONLY (auto-unpinned on mobile). */
   pinnedLeft?: string[]
+  /** Columns pinned to the right ON DESKTOP ONLY (auto-unpinned on mobile). Good for a sticky
+   *  Actions column so it stays visible when the table scrolls horizontally. */
+  pinnedRight?: string[]
   initialSorting?: SortingState
   /** Columns hidden by default (keyed by column id). User can show them; choice persists. */
   initialColumnVisibility?: VisibilityState
@@ -87,6 +91,7 @@ export default function DataTable<T>({
   enableRowSelection = false,
   getRowId,
   pinnedLeft = [],
+  pinnedRight = [],
   initialSorting = [],
   initialColumnVisibility = {},
   searchKeys,
@@ -173,6 +178,7 @@ export default function DataTable<T>({
           ...(enableRowSelection && isDesktop ? ['__select'] : []),
           ...(isDesktop ? pinnedLeft : []),
         ],
+        right: isDesktop ? pinnedRight : [],
       },
     },
     onRowSelectionChange: setRowSelection,
@@ -302,13 +308,16 @@ export default function DataTable<T>({
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-            <table className="border-separate text-sm" style={{ tableLayout: 'fixed', width: table.getTotalSize(), borderSpacing: 0 }}>
+            <table className="border-separate text-sm" style={{ tableLayout: 'fixed', width: '100%', minWidth: table.getTotalSize(), borderSpacing: 0 }}>
               <thead>
                 <tr className="bg-zinc-50 text-left">
                   {table.getFlatHeaders().map((header) => {
-                    const pinned = header.column.getIsPinned() === 'left'
-                    const isLastPinned = pinned && header.column.getIsLastColumn('left')
-                    const left = pinned ? header.column.getStart('left') : undefined
+                    const pinnedSide = header.column.getIsPinned()
+                    const pinned = pinnedSide === 'left' || pinnedSide === 'right'
+                    const left = pinnedSide === 'left' ? header.column.getStart('left') : undefined
+                    const right = pinnedSide === 'right' ? header.column.getAfter('right') : undefined
+                    const isLastPinnedLeft = pinnedSide === 'left' && header.column.getIsLastColumn('left')
+                    const isFirstPinnedRight = pinnedSide === 'right' && header.column.getIsFirstColumn('right')
                     const isSelect = header.column.id === '__select'
                     const meta = header.column.columnDef.meta as { compact?: boolean; wrapHeader?: boolean } | undefined
                     const compact = meta?.compact
@@ -316,8 +325,8 @@ export default function DataTable<T>({
                     return (
                       <th
                         key={header.id}
-                        style={{ width: header.getSize(), left }}
-                        className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${isSelect ? 'px-3 text-center' : compact ? 'px-1 text-center' : wrapHeader ? 'px-2 text-center' : 'px-6'} ${pinned ? 'z-20' : 'z-10'} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                        style={{ width: header.getSize(), left, right }}
+                        className={`sticky top-0 select-none border-b border-zinc-200 bg-zinc-50 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 ${isSelect ? 'px-3 text-center' : compact ? 'px-1 text-center' : wrapHeader ? 'px-2 text-center' : 'px-6'} ${pinned ? 'z-20' : 'z-10'} ${isLastPinnedLeft ? 'border-r border-zinc-200' : ''} ${isFirstPinnedRight ? 'border-l border-zinc-200' : ''}`}
                       >
                         {isSelect ? (
                           flexRender(header.column.columnDef.header, header.getContext())
@@ -366,23 +375,29 @@ export default function DataTable<T>({
                     className={`group hover:bg-zinc-50 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row.original) ?? ''}`}
                   >
                     {row.getVisibleCells().map((cell) => {
-                      const pinned = cell.column.getIsPinned() === 'left'
-                      const isLastPinned = pinned && cell.column.getIsLastColumn('left')
-                      const left = pinned ? cell.column.getStart('left') : undefined
+                      const pinnedSide = cell.column.getIsPinned()
+                      const pinned = pinnedSide === 'left' || pinnedSide === 'right'
+                      const isLastPinnedLeft = pinnedSide === 'left' && cell.column.getIsLastColumn('left')
+                      const isFirstPinnedRight = pinnedSide === 'right' && cell.column.getIsFirstColumn('right')
+                      const left = pinnedSide === 'left' ? cell.column.getStart('left') : undefined
+                      const right = pinnedSide === 'right' ? cell.column.getAfter('right') : undefined
                       const isSelect = cell.column.id === '__select'
                       const cellMeta = cell.column.columnDef.meta as { compact?: boolean; wrapHeader?: boolean } | undefined
                       const compact = cellMeta?.compact
                       const wrapHeader = cellMeta?.wrapHeader
                       const raw = cell.getValue()
-                      const title = !isSelect && typeof raw === 'string' && raw ? raw : undefined
+                      // Only the default (non-compact/wrap/select) branch truncates — those cells get
+                      // a styled Tooltip showing the full value when the text is clipped.
+                      const isDefault = !isSelect && !compact && !wrapHeader
+                      const title = isDefault && typeof raw === 'string' && raw ? raw : undefined
+                      const rendered = flexRender(cell.column.columnDef.cell, cell.getContext())
                       return (
                         <td
                           key={cell.id}
-                          title={title}
-                          style={{ width: cell.column.getSize(), left }}
-                          className={`border-b border-zinc-100 py-3.5 ${isSelect ? 'px-3 text-center' : compact ? 'px-1' : wrapHeader ? 'px-2 text-center' : 'truncate px-6'} ${pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''} ${isLastPinned ? 'border-r border-zinc-200' : ''}`}
+                          style={{ width: cell.column.getSize(), left, right }}
+                          className={`border-b border-zinc-100 py-3.5 ${isSelect ? 'px-3 text-center' : compact ? 'px-1' : wrapHeader ? 'px-2 text-center' : 'px-6'} ${pinned ? 'sticky z-10 bg-white group-hover:bg-zinc-50' : ''} ${isLastPinnedLeft ? 'border-r border-zinc-200' : ''} ${isFirstPinnedRight ? 'border-l border-zinc-200' : ''}`}
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          {title ? <Tooltip content={title} truncate>{rendered}</Tooltip> : rendered}
                         </td>
                       )
                     })}

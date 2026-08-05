@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest) {
     console.error('Unable to validate Supabase session', error)
   }
 
-  const protectedPrefixes = ['/dashboard', '/learners', '/admissions', '/users', '/placements', '/learner', '/learner-view', '/settings', '/ask-pulse', '/alumni', '/learning', '/candidate', '/tools']
+  const protectedPrefixes = ['/dashboard', '/learners', '/admissions', '/users', '/placements', '/learner', '/learner-view', '/settings', '/ask-pulse', '/alumni', '/learning', '/candidate', '/tools', '/tickets']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
 
   if (!isAuthenticated && isProtected) {
@@ -72,6 +72,7 @@ export const config = {
     '/learning/:path*',
     '/candidate/:path*',
     '/tools/:path*',
+    '/tickets/:path*',
     '/login',
   ],
 }
