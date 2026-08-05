@@ -107,6 +107,16 @@ describe('evaluateCandidate', () => {
     expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 40, totalQuestions: 100 }), 'attempted_questions').status).toBe('pass')
     // Value shows the % and the raw fraction (of questions).
     expect(get(evaluateCandidate({ ...passing, attemptedQuestions: 40, totalQuestions: 100 }), 'attempted_questions').value).toBe('40% (40/100)')
+
+    const almostComplete = evaluateCandidate(
+      { ...passing, attemptedQuestions: 262, totalQuestions: 263 },
+      { ...DEFAULT_THRESHOLDS, minQuestionsAttemptedPct: 100 },
+    )
+    expect(get(almostComplete, 'attempted_questions')).toMatchObject({
+      status: 'fail',
+      value: '99.62% (262/263)',
+      sortValue: 99.62,
+    })
   })
 
   it('treats active days as strictly greater than the threshold', () => {

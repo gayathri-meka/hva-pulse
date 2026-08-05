@@ -291,17 +291,6 @@ export default function ChallengeReviewTable({
           return <span className="text-zinc-300">—</span>
         },
       }),
-      col.accessor((r) => r.decidedByName ?? '', {
-        id: 'decided_by',
-        header: 'Decided by',
-        size: 130,
-        enableColumnFilter: false,
-        cell: (info) => <span className="text-xs text-zinc-500">{info.getValue() || '—'}</span>,
-      }),
-      col.accessor((r) => r.releasedAt ?? '', {
-        id: 'released_date', header: 'Released Date', size: 120, enableColumnFilter: false,
-        cell: (info) => <span className="text-xs tabular-nums text-zinc-500">{info.getValue() ? new Date(info.getValue()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>,
-      }),
       col.display({
         id: 'review',
         header: '',
@@ -317,6 +306,17 @@ export default function ChallengeReviewTable({
             </button>
           </div>
         ),
+      }),
+      col.accessor((r) => r.decidedByName ?? '', {
+        id: 'decided_by',
+        header: 'Decided by',
+        size: 130,
+        enableColumnFilter: false,
+        cell: (info) => <span className="text-xs text-zinc-500">{info.getValue() || '—'}</span>,
+      }),
+      col.accessor((r) => r.releasedAt ?? '', {
+        id: 'released_date', header: 'Released Date', size: 120, enableColumnFilter: false,
+        cell: (info) => <span className="text-xs tabular-nums text-zinc-500">{info.getValue() ? new Date(info.getValue()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>,
       }),
       ...CRITERIA_COLS.filter((cc) => cc.key !== 'attempted_questions').map((cc) =>
         col.accessor((r) => statusWord(criterion(r, cc.key)?.status), {
