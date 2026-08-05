@@ -28,12 +28,13 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
+  const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) return NextResponse.redirect(`${origin}/login`)
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // exchangeCodeForSession already returns the verified session user. Calling
+  // getUser() immediately afterwards made a redundant second auth-network
+  // request and introduced another point for a transient fetch failure.
+  const user = sessionData.session?.user
   if (!user?.email) return NextResponse.redirect(`${origin}/login`)
 
   const email = user.email.toLowerCase()

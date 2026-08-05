@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   // Expose the current path to server components (layouts read it via headers()).
   const requestHeaders = new Headers(request.headers)
@@ -30,12 +30,33 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
   const protectedPrefixes = ['/dashboard', '/learners', '/admissions', '/users', '/placements', '/learner', '/learner-view', '/settings', '/ask-pulse', '/alumni', '/learning', '/candidate', '/tools']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
+
+  // getUser() validates the JWT with Supabase and therefore makes a network
+  // request. A transient DNS/socket failure used to escape from middleware and
+  // turn an otherwise successful OAuth callback into Next's "fetch failed"
+  // error page. Retry once, then fail closed with a useful login URL.
+  let user = null
+  let authUnavailable = false
+  try {
+    ;({ data: { user } } = await supabase.auth.getUser())
+  } catch {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      ;({ data: { user } } = await supabase.auth.getUser())
+    } catch (error) {
+      authUnavailable = true
+      console.error('[auth] Supabase user validation unavailable after retry', error)
+    }
+  }
+
+  if (authUnavailable && isProtected) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('error', 'auth_unavailable')
+    loginUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
+    return NextResponse.redirect(loginUrl)
+  }
 
   if (!user && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))
