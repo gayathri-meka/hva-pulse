@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Modal from '@/components/placements/Modal'
 import { spocName, type TicketCategory, type SpocUser } from '@/lib/tickets'
-import { saveCategory, deleteCategory } from './settings-actions'
+import { saveCategory, deleteCategory, moveCategory } from './settings-actions'
 
 export default function CategoriesManager({ categories, spocs }: {
   categories: TicketCategory[]
@@ -52,9 +52,17 @@ export default function CategoriesManager({ categories, spocs }: {
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {categories.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-zinc-400">No categories.</td></tr>}
-              {categories.map((c) => (
+              {categories.map((c, i) => (
                 <tr key={c.id}>
-                  <td className="px-4 py-2 text-zinc-400">{c.sort_order}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-1.5 text-zinc-400">
+                      <span className="w-4 tabular-nums">{c.sort_order}</span>
+                      <span className="flex flex-col leading-none">
+                        <button disabled={saving || i === 0} onClick={() => run(() => moveCategory(c.id, 'up'))} title="Move up" className="text-[10px] text-zinc-400 hover:text-zinc-700 disabled:opacity-30">▲</button>
+                        <button disabled={saving || i === categories.length - 1} onClick={() => run(() => moveCategory(c.id, 'down'))} title="Move down" className="text-[10px] text-zinc-400 hover:text-zinc-700 disabled:opacity-30">▼</button>
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-4 py-2 font-medium text-zinc-800">{c.name}</td>
                   <td className="px-4 py-2 text-zinc-600">{(c.spoc_emails || []).map((e) => spocName(e, spocs)).join(', ') || '—'}</td>
                   <td className="px-4 py-2">{c.active ? <span className="text-emerald-600">Yes</span> : <span className="text-zinc-400">No</span>}</td>
@@ -78,8 +86,6 @@ export default function CategoriesManager({ categories, spocs }: {
         <CategoryModal
           category={editCat === 'new' ? null : editCat}
           spocs={spocs}
-          nextSortOrder={categories.reduce((m, c) => Math.max(m, c.sort_order), 0) + 1}
-          takenSortOrders={categories.filter((c) => editCat === 'new' || c.id !== editCat.id).map((c) => c.sort_order)}
           pending={saving}
           onClose={() => setEditCat(null)}
           onSave={(input) => run(() => saveCategory(input), () => setEditCat(null))}
@@ -104,26 +110,19 @@ export default function CategoriesManager({ categories, spocs }: {
   )
 }
 
-function CategoryModal({ category, spocs, nextSortOrder, takenSortOrders, pending, onClose, onSave }: {
+function CategoryModal({ category, spocs, pending, onClose, onSave }: {
   category: TicketCategory | null
   spocs: SpocUser[]
-  nextSortOrder: number
-  takenSortOrders: number[]
   pending: boolean
   onClose: () => void
-  onSave: (input: { id?: string; name: string; spoc_emails: string[]; sort_order: number; active: boolean }) => void
+  onSave: (input: { id?: string; name: string; spoc_emails: string[]; active: boolean }) => void
 }) {
   const [name, setName] = useState(category?.name ?? '')
-  // New categories default to the next slot (max existing + 1), not 0, so they land at the end.
-  const [sortOrder, setSortOrder] = useState(category?.sort_order ?? nextSortOrder)
   const [active, setActive] = useState(category?.active ?? true)
   const [spocEmails, setSpocEmails] = useState<string[]>(category?.spoc_emails ?? [])
 
   const has = (email: string) => spocEmails.some((e) => e.toLowerCase() === email.toLowerCase())
   const toggle = (email: string) => setSpocEmails((cur) => (has(email) ? cur.filter((e) => e.toLowerCase() !== email.toLowerCase()) : [...cur, email]))
-
-  const duplicateOrder = takenSortOrders.includes(sortOrder)
-  const canSave = !!name.trim() && !duplicateOrder
 
   return (
     <Modal title={category ? `Edit · ${category.name}` : 'Add category'} onClose={onClose}>
@@ -131,17 +130,7 @@ function CategoryModal({ category, spocs, nextSortOrder, takenSortOrders, pendin
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-zinc-500">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} autoFocus className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-zinc-500">Sort order</span>
-          {/* type=number for numeric-only input; spinners hidden (number only, type to change). */}
-          <input
-            type="number"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(Number(e.target.value))}
-            className={`w-28 rounded-lg border px-3 py-2 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${duplicateOrder ? 'border-red-300 focus:border-red-400' : 'border-zinc-200'}`}
-          />
-          {duplicateOrder && <span className="mt-1 block text-xs text-red-600">Sort order {sortOrder} is already used by another category. Pick a different number.</span>}
+          {!category && <span className="mt-1 block text-xs text-zinc-400">New categories are added at the end — reorder with the ▲▼ arrows in the list.</span>}
         </label>
         <div>
           <span className="mb-1.5 block text-xs font-medium text-zinc-500">SPOCs (admin/staff users)</span>
@@ -161,7 +150,7 @@ function CategoryModal({ category, spocs, nextSortOrder, takenSortOrders, pendin
         </label>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
-          <button disabled={pending || !canSave} onClick={() => onSave({ id: category?.id, name, spoc_emails: spocEmails, sort_order: sortOrder, active })}
+          <button disabled={pending || !name.trim()} onClick={() => onSave({ id: category?.id, name, spoc_emails: spocEmails, active })}
             className="rounded-lg bg-[#5BAE5B] px-3 py-1.5 text-sm font-medium text-white hover:brightness-95 disabled:opacity-50">
             {pending ? 'Saving…' : 'Save'}
           </button>

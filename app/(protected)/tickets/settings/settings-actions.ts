@@ -24,11 +24,12 @@ function revalidate() {
 }
 
 // ── Categories ──────────────────────────────────────────────────────────────────
+// Sort order is NOT hand-entered — a new category is appended at the end, and order is changed via
+// moveCategory (↑/↓), which keeps it a clean contiguous 1..N. So this only handles name/SPOCs/active.
 export async function saveCategory(input: {
   id?: string
   name: string
   spoc_emails: string[]
-  sort_order: number
   active: boolean
 }): Promise<Result> {
   await requireAdmin()
@@ -36,20 +37,54 @@ export async function saveCategory(input: {
   if (!name) return { ok: false, error: 'Name is required.' }
 
   const supabase = await createServerSupabaseClient()
-
-  // Reject a duplicate sort_order (defence in depth — the modal validates this client-side too).
-  const dupeQuery = supabase.from('ticket_categories').select('id').eq('sort_order', input.sort_order)
-  const { data: dupe } = await (input.id ? dupeQuery.neq('id', input.id) : dupeQuery).maybeSingle()
-  if (dupe) return { ok: false, error: `Sort order ${input.sort_order} is already used by another category.` }
-
   const spoc_emails = input.spoc_emails.map((e) => e.trim().toLowerCase()).filter(Boolean)
-  const row = { name, spoc_emails, sort_order: input.sort_order, active: input.active, updated_at: new Date().toISOString() }
 
-  const { error } = input.id
-    ? await supabase.from('ticket_categories').update(row).eq('id', input.id)
-    : await supabase.from('ticket_categories').insert(row)
+  if (input.id) {
+    const { error } = await supabase
+      .from('ticket_categories')
+      .update({ name, spoc_emails, active: input.active, updated_at: new Date().toISOString() })
+      .eq('id', input.id)
+    if (error) return { ok: false, error: error.message }
+  } else {
+    const { data: last } = await supabase
+      .from('ticket_categories')
+      .select('sort_order')
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const nextOrder = (last?.sort_order ?? 0) + 1
+    const { error } = await supabase
+      .from('ticket_categories')
+      .insert({ name, spoc_emails, active: input.active, sort_order: nextOrder })
+    if (error) return { ok: false, error: error.message }
+  }
+  revalidate()
+  return { ok: true }
+}
 
-  if (error) return { ok: false, error: error.message }
+// Moves a category up/down and renumbers ALL categories to a clean, gap-free 1..N.
+export async function moveCategory(id: string, direction: 'up' | 'down'): Promise<Result> {
+  await requireAdmin()
+  const supabase = await createServerSupabaseClient()
+  const { data: cats } = await supabase.from('ticket_categories').select('id').order('sort_order', { ascending: true })
+  if (!cats) return { ok: false, error: 'Could not load categories.' }
+
+  const idx = cats.findIndex((c) => c.id === id)
+  if (idx < 0) return { ok: false, error: 'Category not found.' }
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= cats.length) return { ok: true } // already at the edge — no-op
+
+  const order = cats.map((c) => c.id)
+  ;[order[idx], order[swapIdx]] = [order[swapIdx], order[idx]]
+
+  // Renumber 1..N (normalises any pre-existing gaps).
+  for (let i = 0; i < order.length; i++) {
+    const { error } = await supabase
+      .from('ticket_categories')
+      .update({ sort_order: i + 1, updated_at: new Date().toISOString() })
+      .eq('id', order[i])
+    if (error) return { ok: false, error: error.message }
+  }
   revalidate()
   return { ok: true }
 }
