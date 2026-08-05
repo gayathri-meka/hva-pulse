@@ -8,8 +8,17 @@ import type { AnalyticsRow } from './page'
 
 export type InterviewFunnel = {
   selectedForInterviews: number // challenge-selected + released → eligible to interview
-  clearedRound1: number // team released 'advance' after Round 1
-  selectedForProgram: number // final 'selected' after Round 2
+  totalAvailableSlots: number
+  scheduledInterviews: number
+  advanced: number
+  borderline: number
+  doNotAdvance: number
+}
+
+export type CodingInterviewFunnel = {
+  shortlisted: number
+  selected: number
+  rejected: number
 }
 
 const norm = (e: string | null) => (e ?? '').trim().toLowerCase()
@@ -112,12 +121,14 @@ export default function AnalyticsClient({
   challenge,
   challengeDates,
   interviews,
+  coding,
 }: {
   hits:           AnalyticsRow[]
   signups:        AnalyticsRow[]
   challenge:      ChallengeFunnel
   challengeDates: ChallengeEventDates
   interviews:     InterviewFunnel
+  coding:         CodingInterviewFunnel
 }) {
   const m = useMemo(() => {
     const index = buildProspectIndex(signups)
@@ -255,26 +266,74 @@ export default function AnalyticsClient({
         </div>
       </section>
 
-      {/* Interviews funnel */}
+      {/* Motivation / Personal Interview metrics */}
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-          Interviews <span className="font-normal normal-case tracking-normal text-zinc-300">· current</span>
+          Personal Interview
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="flex flex-nowrap gap-3 overflow-x-auto pb-1">
           <StatCard
             label="Selected for interviews"
             value={interviews.selectedForInterviews}
             sublabel="cleared the challenge"
+            className="min-w-[180px] flex-1"
           />
           <StatCard
-            label="Cleared Round 1"
-            value={interviews.clearedRound1}
-            sublabel={`advanced to Coding · ${interviews.selectedForInterviews > 0 ? Math.round((interviews.clearedRound1 / interviews.selectedForInterviews) * 100) : 0}% of selected`}
+            label="Total Available Slots"
+            value={interviews.totalAvailableSlots}
+            sublabel="upcoming LF slots · includes booked"
+            className="min-w-[180px] flex-1"
           />
           <StatCard
-            label="Selected for the program"
-            value={interviews.selectedForProgram}
-            sublabel={`cleared both rounds · ${interviews.selectedForInterviews > 0 ? Math.round((interviews.selectedForProgram / interviews.selectedForInterviews) * 100) : 0}% of selected`}
+            label="Scheduled Interviews"
+            value={interviews.scheduledInterviews}
+            sublabel="unique candidates with confirmed upcoming bookings"
+            className="min-w-[180px] flex-1"
+          />
+          <StatCard
+            label="Selected"
+            value={interviews.advanced}
+            sublabel="Advanced in Personal Interview"
+            className="min-w-[180px] flex-1"
+          />
+          <StatCard
+            label="Decision Pending"
+            value={interviews.borderline}
+            sublabel="Borderline in Personal Interview"
+            className="min-w-[180px] flex-1"
+          />
+          <StatCard
+            label="Rejected"
+            value={interviews.doNotAdvance}
+            sublabel="Do not Advanced in Personal Interview"
+            className="min-w-[180px] flex-1"
+          />
+        </div>
+      </section>
+
+      {/* Coding Interview outcome metrics */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
+          Coding Interview
+        </h2>
+        <div className="flex flex-nowrap gap-3 overflow-x-auto pb-1">
+          <StatCard
+            label="Shortlisted"
+            value={coding.shortlisted}
+            sublabel="Advanced in Personal Interview"
+            className="min-w-[180px] flex-1"
+          />
+          <StatCard
+            label="Selected"
+            value={coding.selected}
+            sublabel="selected after Coding Interview"
+            className="min-w-[180px] flex-1"
+          />
+          <StatCard
+            label="Rejected"
+            value={coding.rejected}
+            sublabel="rejected after Coding Interview"
+            className="min-w-[180px] flex-1"
           />
         </div>
       </section>
@@ -309,18 +368,20 @@ function StatCard({
   sublabel,
   series,
   unit = 'per week',
+  className = '',
 }: {
   label: string
   value: number
   sublabel: string
   series?: { week: string; value: number }[]
   unit?: string
+  className?: string
 }) {
   const [showChart, setShowChart] = useState(false)
   const hasChart = !!series && series.length > 0
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+    <div className={`rounded-xl border border-zinc-200 bg-white p-4 ${className}`}>
       <div className="flex items-start justify-between">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{label}</p>
         {hasChart && (

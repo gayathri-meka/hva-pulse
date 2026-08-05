@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { challengeFunnel, challengeEventDates, CHALLENGE_VIEW } from '@/lib/challengeFunnel'
 import AdmissionsSummary from '@/components/admissions/AdmissionsSummary'
 import AnalyticsClient from './AnalyticsClient'
+import { computeCodingInterviewAnalytics, computeMotivationInterviewAnalytics } from '@/lib/interviewAnalytics'
+import { fetchAllSupabaseRows } from '@/lib/fetchAllSupabaseRows'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,13 +73,65 @@ export default async function AdmissionsAnalyticsPage() {
   const challenge = challengeFunnel(challengeRows)
   const challengeDates = challengeEventDates(challengeRows)
 
-  // Interviews funnel — challenge-selected+released (eligible), cleared Round 1
-  // (released 'advance'), and finally selected for the programme.
-  const [{ count: selectedForInterviews }, { count: clearedRound1 }, { count: selectedForProgram }] = await Promise.all([
+  // Personal Interview analytics. Slot deletion is physical in the current
+  // schema, so deleted slots never reach this calculation.
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const [{ count: selectedForInterviews }, interviewSlots, motivationInterviews, interviewDecisions] = await Promise.all([
     supabase.from('challenge_decisions').select('email', { count: 'exact', head: true }).eq('final_decision', 'selected').not('published_at', 'is', null),
-    supabase.from('interview_decisions').select('candidate_email', { count: 'exact', head: true }).eq('stage1', 'advance'),
-    supabase.from('interview_decisions').select('candidate_email', { count: 'exact', head: true }).eq('final', 'selected'),
+    fetchAllSupabaseRows<{ id: string; round: number | null; starts_at: string; status: 'open' | 'booked' | 'blocked' }>(
+      supabase.from('interview_slots')
+        .select('id, round, starts_at, status')
+        .eq('round', 1)
+        .neq('status', 'blocked')
+        .gte('starts_at', nowIso)
+        .order('id') as never,
+    ),
+    fetchAllSupabaseRows<{
+      candidate_email: string
+      round: number
+      slot_id: string | null
+      scheduled_at: string
+      status: 'booked' | 'confirmed' | 'completed' | 'no_show' | 'cancelled'
+      recommendation: 'advance' | 'borderline' | 'no' | null
+      assessed_at: string | null
+    }>(
+      supabase.from('interviews')
+        .select('candidate_email, round, slot_id, scheduled_at, status, recommendation, assessed_at')
+        .eq('round', 1)
+        .order('id') as never,
+    ),
+    fetchAllSupabaseRows<{ candidate_email: string; final: 'selected' | 'rejected' | null }>(
+      supabase.from('interview_decisions')
+        .select('candidate_email, final')
+        .order('candidate_email') as never,
+    ),
   ])
+  const motivationMetrics = computeMotivationInterviewAnalytics(
+    interviewSlots.map((slot) => ({
+      id: slot.id,
+      round: slot.round,
+      startsAt: slot.starts_at,
+      status: slot.status,
+    })),
+    motivationInterviews.map((interview) => ({
+      candidateEmail: interview.candidate_email,
+      round: interview.round,
+      slotId: interview.slot_id,
+      scheduledAt: interview.scheduled_at,
+      status: interview.status,
+      recommendation: interview.recommendation,
+      assessedAt: interview.assessed_at,
+    })),
+    now,
+  )
+  const codingMetrics = computeCodingInterviewAnalytics(
+    interviewDecisions.map((decision) => ({
+      candidateEmail: decision.candidate_email,
+      final: decision.final,
+    })),
+    motivationMetrics.advanced,
+  )
 
   return (
     <div>
@@ -89,9 +143,9 @@ export default async function AdmissionsAnalyticsPage() {
         challengeDates={challengeDates}
         interviews={{
           selectedForInterviews: selectedForInterviews ?? 0,
-          clearedRound1: clearedRound1 ?? 0,
-          selectedForProgram: selectedForProgram ?? 0,
+          ...motivationMetrics,
         }}
+        coding={codingMetrics}
       />
     </div>
   )

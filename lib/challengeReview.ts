@@ -341,8 +341,9 @@ export function evaluateCandidate(
         : 'pass'
 
   // Share of the quiz QUESTIONS this candidate attempted (of the total, ~263).
-  const questionsAttemptedPct =
-    signals.totalQuestions > 0 ? Math.round((signals.attemptedQuestions / signals.totalQuestions) * 100) : 0
+  const questionsAttemptedPctRaw =
+    signals.totalQuestions > 0 ? (signals.attemptedQuestions / signals.totalQuestions) * 100 : 0
+  const questionsAttemptedPct = Math.round(questionsAttemptedPctRaw * 100) / 100
 
   // Consistency: idle days between first and last activity.
   const gapDays = Math.max(0, signals.spanDays - signals.activeDays)
@@ -463,7 +464,7 @@ export function evaluateCandidate(
       label: 'Questions attempted',
       group: 'engagement',
       placeholder: false,
-      status: questionsAttemptedPct >= thresholds.minQuestionsAttemptedPct ? 'pass' : 'fail',
+      status: questionsAttemptedPctRaw >= thresholds.minQuestionsAttemptedPct ? 'pass' : 'fail',
       value: `${questionsAttemptedPct}% (${signals.attemptedQuestions}/${signals.totalQuestions})`,
       threshold: `At least ${thresholds.minQuestionsAttemptedPct}% of all quiz questions attempted`,
       failFeedback: `You attempted ${questionsAttemptedPct}% of the challenge questions; we look for at least ${thresholds.minQuestionsAttemptedPct}%.`,

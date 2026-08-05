@@ -120,15 +120,15 @@ function fmtDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
 }
 
-const STATE_TEXT: Record<TaskState, string> = {
-  completed: 'text-[#5BAE5B]',
-  attempted: 'text-amber-600',
-  not_started: 'text-zinc-400',
+export function taskProgressLabel(task: Pick<TaskItem, 'totalQuestions' | 'attemptedQuestions'>) {
+  if (task.attemptedQuestions === 0) return 'Not Started'
+  return task.totalQuestions > 0 && task.attemptedQuestions >= task.totalQuestions
+    ? 'Completed'
+    : 'Not Completed'
 }
-const STATE_LABEL: Record<TaskState, string> = {
-  completed: 'Done',
-  attempted: 'In progress',
-  not_started: 'Not started',
+
+export function taskHasMistakes(task: Pick<TaskItem, 'attemptedQuestions' | 'passedQuestions'>) {
+  return task.attemptedQuestions > task.passedQuestions
 }
 
 export default function ChallengeClient({
@@ -542,7 +542,12 @@ function DetailView({
                         <div className="flex-1">
                           <Bar value={pct(d.questionsAttempted, d.questionsTotal)} />
                         </div>
-                        <span className="w-24 shrink-0 text-right text-xs text-zinc-500">{d.questionsAttempted}/{d.questionsTotal} questions</span>
+                        <span className="w-28 shrink-0 text-right text-xs text-zinc-500">
+                          <span className="block">{d.questionsAttempted}/{d.questionsTotal} questions</span>
+                          {d.questionsAttempted > d.questionsPassed && (
+                            <span className="mt-0.5 block font-medium text-amber-600">Have Mistakes</span>
+                          )}
+                        </span>
                       </button>
 
                       {dayOpen && (
@@ -552,6 +557,8 @@ function DetailView({
                             const isQuiz = t.type === 'quiz'
                             const taskKey = `${m.email}:${t.taskId}`
                             const taskOpen = isQuiz && openTask === taskKey
+                            const progressLabel = taskProgressLabel(t)
+                            const hasMistakes = taskHasMistakes(t)
                             return (
                               <div key={t.taskId}>
                                 <button
@@ -571,7 +578,14 @@ function DetailView({
                                   {isQuiz && (
                                     <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-400">quiz</span>
                                   )}
-                                  <span className={`w-20 shrink-0 text-right text-[11px] font-medium ${STATE_TEXT[t.state]}`}>{STATE_LABEL[t.state]}</span>
+                                  <span className="w-44 shrink-0 text-right text-[11px] font-medium">
+                                    <span className={progressLabel === 'Completed' ? 'text-[#5BAE5B]' : progressLabel === 'Not Completed' ? 'text-amber-600' : 'text-zinc-400'}>
+                                      {progressLabel}
+                                    </span>
+                                    {hasMistakes && (
+                                      <span className="text-amber-600">, Have Mistakes</span>
+                                    )}
+                                  </span>
                                 </button>
 
                                 {taskOpen && (
