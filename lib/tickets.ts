@@ -1,7 +1,7 @@
 // Tech Support tickets — shared types + pure helpers.
 //
 // Tickets are raised via the /tech-support Slack flow (handled by the hva-automation edge
-// function) and stored in Postgres (migration 086). This app reads them and routes reply/close/
+// function) and stored in Postgres (migration 088). This app reads them and routes reply/close/
 // reopen/edit actions back through the edge. Permission gating and display styling live here so
 // they're unit-testable and shared between the list, detail, and table.
 
@@ -54,7 +54,7 @@ export type TicketEvent = {
   created_at: string
 }
 
-// Categories are DB-driven (ticket_categories, migration 086/088) so admins can edit them from
+// Categories are DB-driven (ticket_categories, migration 088) so admins can edit them from
 // Pulse and the Slack modal picks up the change with no redeploy. A category's SPOCs are the app's
 // admin/staff USERS, referenced by email (migration 088).
 export type TicketCategory = {

@@ -1,4 +1,4 @@
--- 086: Tech Support tickets in Postgres (shared with the hva-automation Slack edge).
+-- 088: Tech Support tickets in Postgres (shared with the hva-automation Slack edge).
 --
 -- Background: Tech Support tickets are raised via the /tech-support Slack flow, handled by the
 -- `hva-slack-router` edge function in the hva-automation repo. That edge function and this app

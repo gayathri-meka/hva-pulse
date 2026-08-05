@@ -1,4 +1,4 @@
--- 087: Tech Support cron jobs — daily reminders + weekly Monday summary.
+-- 089: Tech Support cron jobs — daily reminders + weekly Monday summary.
 --
 -- Replaces the old Google Apps Script triggers. pg_cron jobs POST to the shared edge function
 -- (hva-automation `hva-slack-router`) with { source:'cron', kind, secret }:
