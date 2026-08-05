@@ -27,7 +27,7 @@ export default async function TicketSettingsPage() {
       <div className="mt-3 mb-6">
         <h1 className="text-2xl font-bold text-zinc-900">Ticket categories &amp; SPOCs</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Edits here take effect immediately - the <code className="rounded bg-zinc-100 px-1">/tech-support</code> Slack form and SPOC assignment read from these tables at request time (no redeploy).
+          Edits here take effect immediately in the <code className="rounded bg-gray-100 px-1">/tech-support</code> Slack form and SPOC assignment read from these tables at request time.
         </p>
       </div>
 

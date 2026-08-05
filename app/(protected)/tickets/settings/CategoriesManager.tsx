@@ -173,7 +173,12 @@ function CategoryCells({ category, position, spocs, onEdit, onDelete, handle }: 
         <span className="tabular-nums">{position}</span>
       </div>
       <div className="truncate px-4 py-2 font-medium text-zinc-800">{category.name}</div>
-      <div className="truncate px-4 py-2 text-zinc-600">{(category.spoc_emails || []).map((e) => spocName(e, spocs)).join(', ') || '—'}</div>
+      <div className="min-w-0 px-4 py-2 text-zinc-600">
+        {(() => {
+          const list = (category.spoc_emails || []).map((e) => spocName(e, spocs)).join(', ') || '—'
+          return <Tooltip content={list} truncate>{list}</Tooltip>
+        })()}
+      </div>
       <div className="px-4 py-2">{category.active ? <span className="text-emerald-600">Yes</span> : <span className="text-zinc-400">No</span>}</div>
       <div className="flex items-center justify-end gap-1 px-4 py-2">
         <Tooltip content="Edit">
