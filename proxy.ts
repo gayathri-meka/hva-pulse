@@ -30,39 +30,27 @@ export async function proxy(request: NextRequest) {
     }
   )
 
+  // Validate the session JWT locally when possible. Calling getUser() here
+  // makes a network request for every matched page request, which can exhaust
+  // Supabase Auth's request-rate limit during local development/HMR.
+  let isAuthenticated = false
+  try {
+    const { data } = await supabase.auth.getClaims()
+    isAuthenticated = Boolean(data?.claims?.sub)
+  } catch (error) {
+    // A transient Auth/network failure should behave like a missing session,
+    // not crash the middleware and flood the dev console with rejected calls.
+    console.error('Unable to validate Supabase session', error)
+  }
+
   const protectedPrefixes = ['/dashboard', '/learners', '/admissions', '/users', '/placements', '/learner', '/learner-view', '/settings', '/ask-pulse', '/alumni', '/learning', '/candidate', '/tools']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
 
-  // getUser() validates the JWT with Supabase and therefore makes a network
-  // request. A transient DNS/socket failure used to escape from middleware and
-  // turn an otherwise successful OAuth callback into Next's "fetch failed"
-  // error page. Retry once, then fail closed with a useful login URL.
-  let user = null
-  let authUnavailable = false
-  try {
-    ;({ data: { user } } = await supabase.auth.getUser())
-  } catch {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      ;({ data: { user } } = await supabase.auth.getUser())
-    } catch (error) {
-      authUnavailable = true
-      console.error('[auth] Supabase user validation unavailable after retry', error)
-    }
-  }
-
-  if (authUnavailable && isProtected) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('error', 'auth_unavailable')
-    loginUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  if (!user && isProtected) {
+  if (!isAuthenticated && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && pathname === '/login') {
+  if (isAuthenticated && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

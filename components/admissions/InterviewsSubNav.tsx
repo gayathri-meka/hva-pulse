@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useRememberedNavRoutes } from '@/hooks/useRememberedNavRoutes'
 
 const TABS = [
-  { key: 'overview',  fallback: '/admissions/interviews',           label: 'Overview', exact: true },
+  { key: 'overview',  fallback: '/admissions/interviews',           label: 'Panel', exact: true },
   { key: 'calendar',  fallback: '/admissions/interviews/calendar',  label: 'My calendar', exact: false },
   { key: 'list',      fallback: '/admissions/interviews/list',      label: 'Interviews', exact: false },
   { key: 'notes',     fallback: '/admissions/interviews/notes',     label: 'Notes', exact: false },

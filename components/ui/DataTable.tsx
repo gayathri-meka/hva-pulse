@@ -55,7 +55,10 @@ export type DataTableProps<T> = {
   toolbarLeft?: Slot<T>
   toolbarRight?: Slot<T>
   emptyMessage?: string
+  /** Keep the column headings visible above the empty-state message. */
+  showHeadersWhenEmpty?: boolean
   rowClassName?: (row: T) => string
+  onRowClick?: (row: T) => void
 }
 
 function useIsDesktop(): boolean {
@@ -93,7 +96,9 @@ export default function DataTable<T>({
   toolbarLeft,
   toolbarRight,
   emptyMessage = 'No rows.',
+  showHeadersWhenEmpty = false,
   rowClassName,
+  onRowClick,
 }: DataTableProps<T>) {
   const SIZING_KEY = `dt:${storageKey}:sizing`
   const VIS_KEY = `dt:${storageKey}:visibility`
@@ -290,7 +295,7 @@ export default function DataTable<T>({
         </div>
       </div>
 
-      {total === 0 ? (
+      {total === 0 && !showHeadersWhenEmpty ? (
         <div className="rounded-xl border border-zinc-200 bg-white py-16 text-center shadow-sm">
           <p className="text-sm text-zinc-400">{emptyMessage}</p>
         </div>
@@ -347,8 +352,19 @@ export default function DataTable<T>({
                 </tr>
               </thead>
               <tbody>
+                {table.getRowModel().rows.length === 0 && (
+                  <tr>
+                    <td colSpan={table.getVisibleLeafColumns().length} className="px-6 py-16 text-center text-sm text-zinc-400">
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                )}
                 {table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className={`group hover:bg-zinc-50 ${rowClassName?.(row.original) ?? ''}`}>
+                  <tr
+                    key={row.id}
+                    onClick={() => onRowClick?.(row.original)}
+                    className={`group hover:bg-zinc-50 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row.original) ?? ''}`}
+                  >
                     {row.getVisibleCells().map((cell) => {
                       const pinned = cell.column.getIsPinned() === 'left'
                       const isLastPinned = pinned && cell.column.getIsLastColumn('left')

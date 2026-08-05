@@ -13,7 +13,7 @@ export default async function ConductPage({ params }: { params: Promise<{ id: st
       <div className="mx-auto max-w-lg py-16 text-center">
         <p className="text-sm text-zinc-500">{res.error}</p>
         <Link href="/admissions/interviews/notes" className="mt-3 inline-block text-sm font-medium text-[#5BAE5B] hover:underline">
-          ← Back to interview notes
+          ← Back
         </Link>
       </div>
     )
