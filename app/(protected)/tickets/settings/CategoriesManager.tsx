@@ -1,10 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove, useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import Modal from '@/components/placements/Modal'
 import { spocName, type TicketCategory, type SpocUser } from '@/lib/tickets'
-import { saveCategory, deleteCategory, moveCategory } from './settings-actions'
+import { saveCategory, deleteCategory, reorderCategories } from './settings-actions'
 
 export default function CategoriesManager({ categories, spocs }: {
   categories: TicketCategory[]
@@ -15,6 +23,14 @@ export default function CategoriesManager({ categories, spocs }: {
   const [error, setError] = useState<string | null>(null)
   const [editCat, setEditCat] = useState<TicketCategory | 'new' | null>(null)
   const [deleteCat, setDeleteCat] = useState<TicketCategory | null>(null)
+  // Local order for optimistic drag-and-drop; re-synced when the server data changes.
+  const [items, setItems] = useState<TicketCategory[]>(categories)
+  useEffect(() => { setItems(categories) }, [categories])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>, onDone?: () => void) {
     setError(null)
@@ -27,6 +43,17 @@ export default function CategoriesManager({ categories, spocs }: {
     } finally {
       setSaving(false)
     }
+  }
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const oldIndex = items.findIndex((c) => c.id === active.id)
+    const newIndex = items.findIndex((c) => c.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const reordered = arrayMove(items, oldIndex, newIndex)
+    setItems(reordered) // optimistic
+    run(() => reorderCategories(reordered.map((c) => c.id)))
   }
 
   return (
@@ -50,29 +77,17 @@ export default function CategoriesManager({ categories, spocs }: {
                 <th className="px-4 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {categories.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-zinc-400">No categories.</td></tr>}
-              {categories.map((c, i) => (
-                <tr key={c.id}>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-1.5 text-zinc-400">
-                      <span className="w-4 tabular-nums">{c.sort_order}</span>
-                      <span className="flex flex-col leading-none">
-                        <button disabled={saving || i === 0} onClick={() => run(() => moveCategory(c.id, 'up'))} title="Move up" className="text-[10px] text-zinc-400 hover:text-zinc-700 disabled:opacity-30">▲</button>
-                        <button disabled={saving || i === categories.length - 1} onClick={() => run(() => moveCategory(c.id, 'down'))} title="Move down" className="text-[10px] text-zinc-400 hover:text-zinc-700 disabled:opacity-30">▼</button>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 font-medium text-zinc-800">{c.name}</td>
-                  <td className="px-4 py-2 text-zinc-600">{(c.spoc_emails || []).map((e) => spocName(e, spocs)).join(', ') || '—'}</td>
-                  <td className="px-4 py-2">{c.active ? <span className="text-emerald-600">Yes</span> : <span className="text-zinc-400">No</span>}</td>
-                  <td className="px-4 py-2 text-right">
-                    <button onClick={() => setEditCat(c)} className="mr-2 text-xs text-zinc-500 hover:text-zinc-800">Edit</button>
-                    <button onClick={() => setDeleteCat(c)} className="text-xs text-red-500 hover:text-red-700">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={items.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                <tbody className="divide-y divide-zinc-100">
+                  {items.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-zinc-400">No categories.</td></tr>}
+                  {items.map((c, i) => (
+                    <SortableCategoryRow key={c.id} category={c} position={i + 1} spocs={spocs}
+                      onEdit={() => setEditCat(c)} onDelete={() => setDeleteCat(c)} />
+                  ))}
+                </tbody>
+              </SortableContext>
+            </DndContext>
           </table>
         </div>
       </section>
@@ -107,6 +122,39 @@ export default function CategoriesManager({ categories, spocs }: {
         </Modal>
       )}
     </div>
+  )
+}
+
+function SortableCategoryRow({ category, position, spocs, onEdit, onDelete }: {
+  category: TicketCategory
+  position: number
+  spocs: SpocUser[]
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id })
+  return (
+    <tr ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }} className={isDragging ? 'bg-zinc-50' : ''}>
+      <td className="px-4 py-2">
+        <div className="flex items-center gap-2 text-zinc-400">
+          <button {...attributes} {...listeners} title="Drag to reorder" className="cursor-grab touch-none rounded p-0.5 text-zinc-300 hover:text-zinc-500 active:cursor-grabbing">
+            <svg width="12" height="16" viewBox="0 0 14 20" fill="currentColor">
+              <circle cx="4" cy="4" r="1.5" /><circle cx="10" cy="4" r="1.5" />
+              <circle cx="4" cy="10" r="1.5" /><circle cx="10" cy="10" r="1.5" />
+              <circle cx="4" cy="16" r="1.5" /><circle cx="10" cy="16" r="1.5" />
+            </svg>
+          </button>
+          <span className="tabular-nums">{position}</span>
+        </div>
+      </td>
+      <td className="px-4 py-2 font-medium text-zinc-800">{category.name}</td>
+      <td className="px-4 py-2 text-zinc-600">{(category.spoc_emails || []).map((e) => spocName(e, spocs)).join(', ') || '—'}</td>
+      <td className="px-4 py-2">{category.active ? <span className="text-emerald-600">Yes</span> : <span className="text-zinc-400">No</span>}</td>
+      <td className="px-4 py-2 text-right">
+        <button onClick={onEdit} className="mr-2 text-xs text-zinc-500 hover:text-zinc-800">Edit</button>
+        <button onClick={onDelete} className="text-xs text-red-500 hover:text-red-700">Delete</button>
+      </td>
+    </tr>
   )
 }
 

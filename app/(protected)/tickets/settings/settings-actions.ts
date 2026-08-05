@@ -62,27 +62,16 @@ export async function saveCategory(input: {
   return { ok: true }
 }
 
-// Moves a category up/down and renumbers ALL categories to a clean, gap-free 1..N.
-export async function moveCategory(id: string, direction: 'up' | 'down'): Promise<Result> {
+// Persists a drag-and-drop reorder: assigns sort_order = 1..N in the given id order (gap-free).
+export async function reorderCategories(orderedIds: string[]): Promise<Result> {
   await requireAdmin()
+  if (!orderedIds.length) return { ok: true }
   const supabase = await createServerSupabaseClient()
-  const { data: cats } = await supabase.from('ticket_categories').select('id').order('sort_order', { ascending: true })
-  if (!cats) return { ok: false, error: 'Could not load categories.' }
-
-  const idx = cats.findIndex((c) => c.id === id)
-  if (idx < 0) return { ok: false, error: 'Category not found.' }
-  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-  if (swapIdx < 0 || swapIdx >= cats.length) return { ok: true } // already at the edge — no-op
-
-  const order = cats.map((c) => c.id)
-  ;[order[idx], order[swapIdx]] = [order[swapIdx], order[idx]]
-
-  // Renumber 1..N (normalises any pre-existing gaps).
-  for (let i = 0; i < order.length; i++) {
+  for (let i = 0; i < orderedIds.length; i++) {
     const { error } = await supabase
       .from('ticket_categories')
       .update({ sort_order: i + 1, updated_at: new Date().toISOString() })
-      .eq('id', order[i])
+      .eq('id', orderedIds[i])
     if (error) return { ok: false, error: error.message }
   }
   revalidate()
