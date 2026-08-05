@@ -30,18 +30,27 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Validate the session JWT locally when possible. Calling getUser() here
+  // makes a network request for every matched page request, which can exhaust
+  // Supabase Auth's request-rate limit during local development/HMR.
+  let isAuthenticated = false
+  try {
+    const { data } = await supabase.auth.getClaims()
+    isAuthenticated = Boolean(data?.claims?.sub)
+  } catch (error) {
+    // A transient Auth/network failure should behave like a missing session,
+    // not crash the middleware and flood the dev console with rejected calls.
+    console.error('Unable to validate Supabase session', error)
+  }
 
   const protectedPrefixes = ['/dashboard', '/learners', '/admissions', '/users', '/placements', '/learner', '/learner-view', '/settings', '/ask-pulse', '/alumni', '/learning', '/candidate', '/tools']
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
 
-  if (!user && isProtected) {
+  if (!isAuthenticated && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && pathname === '/login') {
+  if (isAuthenticated && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
